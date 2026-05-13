@@ -1,0 +1,27 @@
+services:
+  vaultecho:
+    build: .
+    image: vaultecho:latest
+    ports:
+      - "${PORT:-8787}:8787"
+    env_file:
+      - .env
+    volumes:
+      - ./vault:/vault
+      - ./data:/data
+    restart: unless-stopped
+
+  obsidian-headless:
+    image: node:22-alpine
+    profiles:
+      - sync
+    working_dir: /vault
+    environment:
+      OBSIDIAN_AUTH_TOKEN: ${OBSIDIAN_AUTH_TOKEN:-}
+    volumes:
+      - ./vault:/vault
+      - ./obsidian-config:/root/.config
+    command: >
+      sh -lc "npm install -g obsidian-headless &&
+      ob sync --path /vault --continuous"
+    restart: unless-stopped

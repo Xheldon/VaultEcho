@@ -39,6 +39,11 @@ const DEFAULT_EMBEDDING = {
   autoScanIntervalMinutes: 0
 };
 
+const DEFAULT_ATTACHMENTS = {
+  imageDir: "Attachments/Images",
+  audioDir: "Attachments/Audio"
+};
+
 export function loadServerConfig(env = process.env, cwd = process.cwd()) {
   const isContainerDefault = cwd === "/app";
   const defaultDataDir = isContainerDefault ? "/data" : path.join(cwd, "data");
@@ -88,6 +93,7 @@ export function normalizeRuntimeConfig(input = {}, serverConfig, previous = {}) 
     dataDir: path.resolve(input.dataDir || serverConfig.defaultDataDir),
     allowedDirs: normalizeAllowedDirs(input.allowedDirs),
     maxJsonBodyBytes: normalizePositiveInteger(input.maxJsonBodyBytes, 1024 * 1024),
+    attachments: normalizeAttachmentConfig(input.attachments),
     embedding: normalizeEmbeddingConfig(input.embedding, previous.embedding, serverConfig),
     dailyNote: {
       pathTemplate: normalizeString(dailyNote.pathTemplate, DEFAULT_DAILY_NOTE.pathTemplate),
@@ -117,6 +123,7 @@ export function publicRuntimeConfig(config) {
     dataDir: config.dataDir,
     allowedDirs: config.allowedDirs,
     maxJsonBodyBytes: config.maxJsonBodyBytes,
+    attachments: config.attachments,
     embedding: {
       ...embedding,
       apiKeySet
@@ -159,6 +166,14 @@ function normalizeSlots(value) {
     .filter((slot) => slot.heading && isTime(slot.start) && isTime(slot.end));
 
   return normalized.length > 0 ? normalized : DEFAULT_DAILY_NOTE.slots;
+}
+
+function normalizeAttachmentConfig(input = {}) {
+  const source = isPlainObject(input) ? input : {};
+  return {
+    imageDir: normalizeVaultRelativeDir(source.imageDir, DEFAULT_ATTACHMENTS.imageDir),
+    audioDir: normalizeVaultRelativeDir(source.audioDir, DEFAULT_ATTACHMENTS.audioDir)
+  };
 }
 
 function normalizeEmbeddingConfig(input = {}, previous = {}, serverConfig) {
@@ -214,6 +229,18 @@ function normalizeString(value, fallback) {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
   return trimmed || fallback;
+}
+
+function normalizeVaultRelativeDir(value, fallback) {
+  const raw = normalizeString(value, fallback).replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+  if (!raw || path.isAbsolute(raw)) {
+    throw new Error("Attachment directory must be a vault-relative path");
+  }
+  const normalized = path.posix.normalize(raw);
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../")) {
+    throw new Error("Attachment directory cannot escape the vault root");
+  }
+  return normalized;
 }
 
 function isTime(value) {

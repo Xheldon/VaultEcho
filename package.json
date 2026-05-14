@@ -8,6 +8,7 @@
   },
   "scripts": {
     "docs:api": "node scripts/generate-api-docs.js",
+    "docs:postman": "node scripts/generate-postman-collection.js",
     "start": "node --env-file=.env src/server.js",
     "test": "node --test"
   }

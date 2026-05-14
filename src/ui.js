@@ -54,6 +54,40 @@ export function renderAdminPage() {
       padding: 20px;
       margin-top: 16px;
     }
+    details {
+      margin-top: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0;
+    }
+    summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      cursor: pointer;
+      list-style: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary h2 {
+      margin: 0;
+    }
+    summary::after {
+      content: "+";
+      color: var(--muted);
+      font-weight: 800;
+      font-size: 18px;
+      line-height: 1;
+    }
+    details[open] summary {
+      border-bottom: 1px solid var(--border);
+    }
+    details[open] summary::after { content: "-"; }
+    .details-body {
+      padding: 20px;
+    }
     h2 {
       margin: 0 0 16px;
       font-size: 17px;
@@ -208,6 +242,16 @@ export function renderAdminPage() {
           Max JSON Body Bytes
           <input id="maxJsonBodyBytes" type="number" min="1024" step="1024" />
         </label>
+        <label>
+          Image Attachment Dir
+          <input id="imageAttachmentDir" placeholder="Attachments/Images" />
+          <span class="hint">Vault 相对目录。后续图片附件写入会默认使用这里。</span>
+        </label>
+        <label>
+          Audio Attachment Dir
+          <input id="audioAttachmentDir" placeholder="Attachments/Audio" />
+          <span class="hint">Vault 相对目录。后续音频附件写入会默认使用这里。</span>
+        </label>
       </div>
     </section>
 
@@ -269,48 +313,52 @@ export function renderAdminPage() {
       </div>
     </section>
 
-    <section>
-      <h2>Daily Note 自动插入</h2>
-      <div class="grid">
-        <label>
-          Path Template
-          <input id="dailyPathTemplate" placeholder="Daily/{{yyyy-MM-dd}}.md" />
-        </label>
-        <label>
-          Time Zone
-          <input id="dailyTimeZone" placeholder="Asia/Shanghai" />
-        </label>
-        <label>
-          Heading Level
-          <input id="dailyHeadingLevel" type="number" min="1" max="6" />
-        </label>
-        <label>
-          Line Pattern
-          <input id="dailyLinePattern" placeholder="^\\[\\d{2}:\\d{2}\\]" />
-        </label>
-        <label>
-          Line Format
-          <input id="dailyLineFormat" placeholder="[{{HH:mm}}] {{content}}" />
-        </label>
-      </div>
+    <details>
+      <summary>
+        <h2>日记时间戳插入位置设置</h2>
+      </summary>
+      <div class="details-body">
+        <div class="grid">
+          <label>
+            Path Template
+            <input id="dailyPathTemplate" placeholder="Daily/{{yyyy-MM-dd}}.md" />
+          </label>
+          <label>
+            Time Zone
+            <input id="dailyTimeZone" placeholder="Asia/Shanghai" />
+          </label>
+          <label>
+            Heading Level
+            <input id="dailyHeadingLevel" type="number" min="1" max="6" />
+          </label>
+          <label>
+            Line Pattern
+            <input id="dailyLinePattern" placeholder="^\\[\\d{2}:\\d{2}\\]" />
+          </label>
+          <label>
+            Line Format
+            <input id="dailyLineFormat" placeholder="[{{HH:mm}}] {{content}}" />
+          </label>
+        </div>
 
-      <div style="margin-top: 18px;">
-        <table>
-          <thead>
-            <tr>
-              <th>Heading</th>
-              <th>Start</th>
-              <th>End</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="slotsBody"></tbody>
-        </table>
-        <div class="actions">
-          <button id="addSlotButton" type="button">新增时段</button>
+        <div style="margin-top: 18px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Heading</th>
+                <th>Start</th>
+                <th>End</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="slotsBody"></tbody>
+          </table>
+          <div class="actions">
+            <button id="addSlotButton" type="button">新增时段</button>
+          </div>
         </div>
       </div>
-    </section>
+    </details>
 
     <div class="actions">
       <button id="saveButton" class="primary">保存配置</button>
@@ -377,6 +425,8 @@ export function renderAdminPage() {
       $("dataDir").value = config.dataDir || "";
       $("allowedDirs").value = (config.allowedDirs || []).join(",");
       $("maxJsonBodyBytes").value = config.maxJsonBodyBytes || 1048576;
+      $("imageAttachmentDir").value = config.attachments?.imageDir || "Attachments/Images";
+      $("audioAttachmentDir").value = config.attachments?.audioDir || "Attachments/Audio";
       $("embeddingEnabled").checked = Boolean(config.embedding?.enabled);
       $("embeddingProvider").value = config.embedding?.provider || "openai-compatible";
       $("embeddingBaseUrl").value = config.embedding?.baseUrl || "https://api.openai.com/v1";
@@ -408,6 +458,10 @@ export function renderAdminPage() {
         dataDir: $("dataDir").value.trim(),
         allowedDirs: $("allowedDirs").value.split(",").map((item) => item.trim()).filter(Boolean),
         maxJsonBodyBytes: Number($("maxJsonBodyBytes").value),
+        attachments: {
+          imageDir: $("imageAttachmentDir").value.trim(),
+          audioDir: $("audioAttachmentDir").value.trim()
+        },
         embedding: {
           enabled: $("embeddingEnabled").checked,
           provider: $("embeddingProvider").value.trim(),

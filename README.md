@@ -63,11 +63,9 @@ BIND_HOST=127.0.0.1
 - `Data Dir`: 幂等记录和运行配置目录。本机默认是项目下的 `data/`，Docker 默认是 `/data`。
 - `Allowed Top-Level Dirs`: 路径白名单，例如 `Inbox,Notes,Ideas,Projects,Daily,Templates,Attachments,Archive`。
 - `Max JSON Body Bytes`: 请求体大小限制。
-- `Daily Note Path Template`: 默认 `Daily/{{yyyy-MM-dd}}.md`。
-- `Daily Note Time Zone`: 默认 `Asia/Shanghai`。
-- `Daily Note Slots`: 默认 `上午 05:00-11:59`、`下午 12:00-17:59`、`晚上 18:00-04:59`。
-- `Line Format`: 默认 `[{{HH:mm}}] {{content}}`。
-- `Line Pattern`: 默认 `^\\[\\d{2}:\\d{2}\\]`，用来找 heading 下最后一条时间行。
+- `Image Attachment Dir`: 图片附件默认目录，默认 `Attachments/Images`。
+- `Audio Attachment Dir`: 音频附件默认目录，默认 `Attachments/Audio`。
+- `日记时间戳插入位置设置`: 默认折叠。包含 Daily Path Template、Time Zone、Slots、Line Format 和 Line Pattern，用于 `daily/append-by-time` 这类按时间戳写入日记 heading 的接口。
 - `Embedding`: 可配置 OpenAI-compatible embedding API 的 Base URL、Model、API Key、切块大小、批量大小和自动扫描间隔。
 
 Embedding 第一版使用远程 API 生成向量，并把索引保存到 `data/index/embeddings.json`。这让 1C2G VPS 可以运行，不需要本地大模型、Qdrant、Elasticsearch 或数据库扩展。写入 API 修改文件后会按配置自动更新该文件索引；Headless Sync 从远端拉下来的变化可通过“重建索引”按钮或自动扫描间隔补偿。
@@ -110,6 +108,12 @@ Authorization: Bearer <API_TOKEN>
 
 ```bash
 npm run docs:api
+```
+
+Postman 集合见 [docs/postman/VaultEcho.postman_collection.json](docs/postman/VaultEcho.postman_collection.json)。修改集合生成逻辑后运行：
+
+```bash
+npm run docs:postman
 ```
 
 测试会校验实现路由和文档路由一致，并检查生成文档是否最新。

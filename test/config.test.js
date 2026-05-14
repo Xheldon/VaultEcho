@@ -37,6 +37,10 @@ test("runtime config encrypts embedding api key and public config only exposes a
   assert.equal(Boolean(loaded.embedding.apiKeyEncrypted), true);
   assert.equal(publicConfig.embedding.apiKeyEncrypted, undefined);
   assert.equal(publicConfig.embedding.apiKeySet, true);
+  assert.deepEqual(publicConfig.attachments, {
+    imageDir: "Attachments/Images",
+    audioDir: "Attachments/Audio"
+  });
 
   await saveRuntimeConfig(serverConfig, {
     ...publicConfig,
@@ -48,4 +52,37 @@ test("runtime config encrypts embedding api key and public config only exposes a
 
   const preserved = await loadRuntimeConfig(serverConfig);
   assert.equal(preserved.embedding.apiKeyEncrypted, loaded.embedding.apiKeyEncrypted);
+});
+
+test("runtime config normalizes attachment directories", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
+  const serverConfig = loadServerConfig(
+    {
+      CONFIG_PATH: path.join(root, "data", "config.json")
+    },
+    root
+  );
+
+  await saveRuntimeConfig(serverConfig, {
+    attachments: {
+      imageDir: "/Attachments/Images/",
+      audioDir: "Attachments\\Audio"
+    }
+  });
+
+  const loaded = await loadRuntimeConfig(serverConfig);
+  assert.deepEqual(loaded.attachments, {
+    imageDir: "Attachments/Images",
+    audioDir: "Attachments/Audio"
+  });
+
+  await assert.rejects(
+    saveRuntimeConfig(serverConfig, {
+      attachments: {
+        imageDir: "../outside",
+        audioDir: "Attachments/Audio"
+      }
+    }),
+    /cannot escape/
+  );
 });

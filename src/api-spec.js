@@ -46,7 +46,7 @@ export const API_ENDPOINTS = [
       "工作流需要在文件重名时自动追加后缀，避免覆盖。"
     ],
     params: [
-      ["path | filename | file | name", "Vault 相对路径。如果没有包含允许的顶级目录，会自动放到 Inbox/ 下。"],
+      ["path | filename | file | name", "Vault 相对路径。`files/create` 只创建 Markdown；没有扩展名会自动补 `.md`。如果没有包含允许的顶级目录，会自动放到 Inbox/ 下。"],
       ["content | text", "Markdown 正文。"],
       ["templatePath | template", "可选的 Vault 内模板相对路径。先读取并应用模板，再合并 content。模板支持 `{{content}}`、`{{title}}`、`{{yyyy-MM-dd}}`、`{{HH:mm}}` 等变量。"],
       ["yaml | frontmatter", "可选对象。最后应用到 frontmatter，因此会覆盖模板中同名 YAML 属性。"],

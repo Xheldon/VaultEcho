@@ -1,0 +1,1032 @@
+{
+  "info": {
+    "name": "VaultEcho API",
+    "description": "VaultEcho Postman collection.\n\nImport this file into Postman, then update collection variables:\n- baseUrl: http://127.0.0.1:8787 or https://vault.example.com\n- apiToken: API_TOKEN from .env\n- adminUsername/adminPassword: Basic Auth credentials for the admin UI\n\nMost API requests use Bearer auth inherited from the collection. Admin requests override auth with Basic auth.\nBodies containing strings such as {{title}}, {{content}}, or {{HH:mm}} are VaultEcho template variables. Leave them unresolved in Postman.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('response has a status code', function () {",
+          "  pm.expect(pm.response.code).to.be.a('number');",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8787",
+      "type": "string"
+    },
+    {
+      "key": "apiToken",
+      "value": "change-me",
+      "type": "string"
+    },
+    {
+      "key": "adminUsername",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "change-me-admin",
+      "type": "string"
+    },
+    {
+      "key": "dailyAt",
+      "value": "2026-05-14T16:21:00+08:00",
+      "type": "string"
+    },
+    {
+      "key": "dailyDate",
+      "value": "2026-05-14",
+      "type": "string"
+    },
+    {
+      "key": "testNote",
+      "value": "Ideas/postman-demo.md",
+      "type": "string"
+    },
+    {
+      "key": "projectNote",
+      "value": "Projects/postman-project.md",
+      "type": "string"
+    },
+    {
+      "key": "dailyNote",
+      "value": "Daily/2026-05-14.md",
+      "type": "string"
+    },
+    {
+      "key": "templatePath",
+      "value": "Templates/postman-template.md",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Admin And Config",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Basic Auth protected health check. Shows config path, vault root, and allowed dirs.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{adminUsername}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Runtime Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/config",
+            "description": "Read public runtime config. Secrets are not returned.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{adminUsername}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save Runtime Config - Basic Example",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/config",
+            "description": "Save runtime config. Keep vaultRoot/dataDir as /vault and /data in Docker.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{adminUsername}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vaultRoot\": \"/vault\",\n  \"dataDir\": \"/data\",\n  \"allowedDirs\": [\n    \"Inbox\",\n    \"Notes\",\n    \"Ideas\",\n    \"Projects\",\n    \"Daily\",\n    \"Templates\",\n    \"Attachments\",\n    \"Archive\"\n  ],\n  \"maxJsonBodyBytes\": 1048576,\n  \"attachments\": {\n    \"imageDir\": \"Attachments/Images\",\n    \"audioDir\": \"Attachments/Audio\"\n  },\n  \"embedding\": {\n    \"enabled\": false,\n    \"provider\": \"openai-compatible\",\n    \"baseUrl\": \"https://api.openai.com/v1\",\n    \"model\": \"\",\n    \"dimensions\": 0,\n    \"batchSize\": 16,\n    \"maxChunkChars\": 1600,\n    \"searchLimit\": 8,\n    \"autoIndexAfterWrite\": true,\n    \"autoScanIntervalMinutes\": 0\n  },\n  \"dailyNote\": {\n    \"pathTemplate\": \"Daily/{{yyyy-MM-dd}}.md\",\n    \"headingLevel\": 2,\n    \"linePattern\": \"^\\\\[\\\\d{2}:\\\\d{2}\\\\]\",\n    \"lineFormat\": \"[{{HH:mm}}] {{content}}\",\n    \"timeZone\": \"Asia/Shanghai\",\n    \"slots\": [\n      {\n        \"heading\": \"上午\",\n        \"start\": \"05:00\",\n        \"end\": \"11:59\"\n      },\n      {\n        \"heading\": \"下午\",\n        \"start\": \"12:00\",\n        \"end\": \"17:59\"\n      },\n      {\n        \"heading\": \"晚上\",\n        \"start\": \"18:00\",\n        \"end\": \"04:59\"\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Setup Fixtures",
+      "item": [
+        {
+          "name": "Create Template File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/write",
+            "description": "Creates a template used by files/create template examples.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{templatePath}}\",\n  \"content\": \"---\\nstatus: template\\nsource: postman\\n---\\n\\n# {{title}}\\n\\n{{content}}\\n\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Demo Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/write",
+            "description": "Creates a reusable demo note for heading/frontmatter examples.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\",\n  \"content\": \"## Log\\nInitial item\\n\\n## Status\\nPending\\n\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Daily Note Skeleton",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/write",
+            "description": "Creates a daily note skeleton with morning/afternoon/evening headings.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{dailyNote}}\",\n  \"content\": \"## 上午\\n\\n## 下午\\n[16:18] Existing line\\n\\n## 晚上\\n\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Files",
+      "item": [
+        {
+          "name": "Create - Simple Markdown",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/create",
+            "description": "Creates a Markdown note. If the path has no extension, .md is added.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"Ideas/postman-created\",\n  \"content\": \"Hello from Postman.\",\n  \"ifExists\": \"append_suffix\",\n  \"idempotencyKey\": \"postman-create-simple-{{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create - With Template And YAML",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/create",
+            "description": "Applies template first, then request yaml/frontmatter overrides template fields.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"Ideas/postman-from-template.md\",\n  \"title\": \"Postman Template Demo\",\n  \"templatePath\": \"{{templatePath}}\",\n  \"content\": \"Body generated by Postman.\",\n  \"yaml\": {\n    \"status\": \"done\",\n    \"tags\": [\n      \"postman\",\n      \"vaultecho\"\n    ]\n  },\n  \"ifExists\": \"overwrite\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Read - GET Query",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/files/read?path={{testNote}}",
+            "description": "Reads a Markdown file using query params."
+          }
+        },
+        {
+          "name": "Read - POST JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/read",
+            "description": "Reads a Markdown file using JSON body.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Write - Replace Full File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/write",
+            "description": "Replaces the full file content.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{projectNote}}\",\n  \"content\": \"## Log\\nCreated by files/write\\n\\n## Next\\n\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Append - File End",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/append",
+            "description": "Appends content to the end of a Markdown file.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{projectNote}}\",\n  \"content\": \"\\n- Appended at {{$isoTimestamp}}\",\n  \"idempotencyKey\": \"postman-append-{{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Prepend - File Start",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/prepend",
+            "description": "Prepends content to the beginning of a Markdown file.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{projectNote}}\",\n  \"content\": \"> Prepended summary from Postman\\n\\n\",\n  \"idempotencyKey\": \"postman-prepend-{{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete - Soft Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/files/delete?path=Inbox/postman-delete-me.md",
+            "description": "Moves a file to Archive/Deleted. Safe to call even if the file does not exist."
+          }
+        },
+        {
+          "name": "List - Top Level Allowed Dirs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/files/list",
+            "description": "Lists existing configured top-level directories."
+          }
+        },
+        {
+          "name": "List - Directory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/files/list?path=Ideas",
+            "description": "Lists files under a specific Vault directory."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Headings",
+      "item": [
+        {
+          "name": "Heading Read - GET",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/headings/read?path={{testNote}}&heading=Log",
+            "description": "Reads content under a heading."
+          }
+        },
+        {
+          "name": "Heading Append",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/headings/append",
+            "description": "Appends content to the end of a heading block.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\",\n  \"heading\": \"Log\",\n  \"headingLevel\": 2,\n  \"content\": \"- Appended heading item {{$isoTimestamp}}\",\n  \"ifHeadingMissing\": \"create\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Heading Prepend",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/headings/prepend",
+            "description": "Inserts content directly below the heading.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\",\n  \"heading\": \"Log\",\n  \"content\": \"- Prepended heading item\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Heading Replace",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/headings/replace",
+            "description": "Replaces the whole heading block content while keeping the heading.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\",\n  \"heading\": \"Status\",\n  \"content\": \"Updated by Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Heading Insert After Last Timestamp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/headings/insert-after-last-matching-line",
+            "description": "Uses configured dailyNote.linePattern. Request-level linePattern is intentionally ignored.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{dailyNote}}\",\n  \"heading\": \"下午\",\n  \"content\": \"[16:21] Inserted after the final timestamp line\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Frontmatter",
+      "item": [
+        {
+          "name": "Frontmatter Set - String",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/frontmatter/set",
+            "description": "Sets a single frontmatter field.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\",\n  \"key\": \"status\",\n  \"value\": \"draft\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Frontmatter Set - JSON Array",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/frontmatter/set",
+            "description": "String values that look like JSON are parsed before writing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\",\n  \"key\": \"tags\",\n  \"value\": \"[\\\"postman\\\",\\\"capture\\\"]\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Frontmatter Get - GET",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/frontmatter/get?path={{testNote}}&key=status",
+            "description": "Reads a frontmatter field using query params."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Daily",
+      "item": [
+        {
+          "name": "Daily Append By Time - Body Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/daily/append-by-time",
+            "description": "Chooses heading by configured time slots and formats line using configured lineFormat.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"at\": \"{{dailyAt}}\",\n  \"content\": \"Postman daily capture\",\n  \"idempotencyKey\": \"postman-daily-{{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Daily Append By Time - Text Alias",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/daily/append-by-time",
+            "description": "Uses text as an alias for content.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"at\": \"{{dailyAt}}\",\n  \"text\": \"Postman daily capture via text alias\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Daily Read - Specific Date",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/daily/read?at={{dailyAt}}",
+            "description": "Reads the daily note resolved from dailyNote.pathTemplate and the provided at time."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Search Tags And Index",
+      "item": [
+        {
+          "name": "Search Simple - Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/search/simple",
+            "description": "Simple substring search over allowed Markdown files.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Postman\",\n  \"limit\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Search Simple - List Markdown Files",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/search/simple",
+            "description": "Omit query to list Markdown files up to limit.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Search Semantic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/search/semantic",
+            "description": "Requires embedding config to be enabled and index to be built.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"最近我在思考的 Obsidian 自动化方案\",\n  \"limit\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Tags List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/tags/list",
+            "description": "Lists hashtag counts under allowed dirs."
+          }
+        },
+        {
+          "name": "Index Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/index/status",
+            "description": "Shows embedding readiness and index stats."
+          }
+        },
+        {
+          "name": "Index Rebuild - Incremental",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/index/rebuild",
+            "description": "Rebuilds or updates the embedding index. Requires embedding config.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Index Rebuild - Force",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/index/rebuild",
+            "description": "Forces all files to be embedded again. Use carefully because it consumes remote embedding quota.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Index File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/index/file",
+            "description": "Indexes one Markdown file or removes it from the index if it no longer exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{testNote}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Index Errors Clear",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/index/errors/clear",
+            "description": "Clears recently saved embedding indexing errors.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Batch And Script",
+      "item": [
+        {
+          "name": "Batch - Write Then Append Heading",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/batch",
+            "description": "Executes multiple API operations in one request.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operations\": [\n    {\n      \"route\": \"files/write\",\n      \"path\": \"Ideas/postman-batch.md\",\n      \"content\": \"## Log\\n\"\n    },\n    {\n      \"route\": \"headings/append\",\n      \"path\": \"Ideas/postman-batch.md\",\n      \"heading\": \"Log\",\n      \"content\": \"- Batch item\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create With Vault Script",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/files/create",
+            "description": "Runs safe JSON Vault Script after the primary create operation.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"Ideas/postman-script-note.md\",\n  \"content\": \"Created with script.\",\n  \"ifExists\": \"overwrite\",\n  \"script\": {\n    \"operations\": [\n      {\n        \"op\": \"append\",\n        \"path\": \"{{dailyNote}}\",\n        \"content\": \"\\n- Created postman-script-note.md from Postman script\\n\"\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Obsidian URI Compatibility",
+      "item": [
+        {
+          "name": "URI New",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/uri/execute",
+            "description": "Executes a supported obsidian://new URI.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uri\": \"obsidian://new?file=Ideas%2Fpostman-uri-demo&content=Hello%20from%20URI\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "URI Daily Append By Time Extension",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/uri/execute",
+            "description": "VaultEcho extension for daily append-by-time through URI compatibility layer.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"daily\",\n  \"appendByTime\": true,\n  \"at\": \"{{dailyAt}}\",\n  \"content\": \"Daily entry from URI compatibility layer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "URI Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/uri/execute",
+            "description": "Executes supported search action through URI compatibility layer.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"search\",\n  \"query\": \"Postman\",\n  \"limit\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Aliases And Unsupported",
+      "item": [
+        {
+          "name": "Alias - new",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/new",
+            "description": "Short alias for files/create.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"Ideas/postman-alias-new.md\",\n  \"content\": \"Created through /v1/api/new\",\n  \"ifExists\": \"overwrite\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Alias - daily",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/daily",
+            "description": "Short alias for daily/append-by-time.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"at\": \"{{dailyAt}}\",\n  \"content\": \"Created through /v1/api/daily alias\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Unsupported - Active File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/active",
+            "description": "Expected to return unsupported because active file is a desktop Obsidian concept."
+          }
+        },
+        {
+          "name": "Unsupported - Commands",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/commands",
+            "description": "Expected to return unsupported because command execution requires desktop Obsidian."
+          }
+        }
+      ]
+    }
+  ]
+}

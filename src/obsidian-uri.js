@@ -2,9 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { executeOperation, resolveVaultPath } from "./vault.js";
 import { getDateTimeParts, renderTemplate } from "./time.js";
+import { MAX_MARKDOWN_READ_BYTES, MAX_MARKDOWN_SCAN_BYTES } from "./limits.js";
 
 const DEFAULT_NEW_NOTE_DIR = "Inbox";
-const MAX_MARKDOWN_SCAN_BYTES = 2 * 1024 * 1024;
 
 export async function executeObsidianUri(config, input) {
   const request = normalizeUriRequest(input);
@@ -354,12 +354,12 @@ function compactParams(params) {
 }
 
 async function readTextIfExists(filePath) {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") return null;
-    throw error;
+  const stat = await statIfExists(filePath);
+  if (!stat) return null;
+  if (stat.isFile() && stat.size > MAX_MARKDOWN_READ_BYTES) {
+    throw new Error(`Markdown file is too large to read: max ${MAX_MARKDOWN_READ_BYTES} bytes`);
   }
+  return fs.readFile(filePath, "utf8");
 }
 
 async function exists(filePath) {

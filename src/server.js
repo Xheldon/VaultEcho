@@ -2,11 +2,18 @@ import http from "node:http";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { executeApiAction } from "./api.js";
-import { loadRuntimeConfig, loadServerConfig, publicRuntimeConfig, saveRuntimeConfig } from "./config.js";
+import {
+  loadRuntimeConfig,
+  loadServerConfig,
+  normalizeRuntimeConfig,
+  publicRuntimeConfig,
+  saveRuntimeConfig
+} from "./config.js";
 import { startEmbeddingAutoScan } from "./embedding-index.js";
 import { startIdempotencyCleanup } from "./vault.js";
 import { renderAdminPage } from "./ui.js";
 
+const ADMIN_INDEX_MUTATIONS = new Set(["index/errors/clear", "index/rebuild"]);
 const serverConfig = loadServerConfig();
 let runtimeConfigCache = await loadRuntimeConfig(serverConfig);
 await ensureRuntimeDirs(runtimeConfigCache);
@@ -37,19 +44,25 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "PUT" && url.pathname === "/v1/config") {
       requireAdminAuth(serverConfig, request);
+      requireAdminMutationProtection(request);
       const body = await readJsonBody(request, runtimeConfigCache.maxJsonBodyBytes);
-      const runtimeConfig = await saveRuntimeConfig(serverConfig, body);
+      const runtimeConfig = normalizeRuntimeConfig(body, serverConfig, runtimeConfigCache);
       await ensureRuntimeDirs(runtimeConfig);
+      await saveRuntimeConfig(serverConfig, runtimeConfig);
       runtimeConfigCache = runtimeConfig;
       return sendJson(response, 200, publicRuntimeConfig(runtimeConfig));
     }
 
     if (url.pathname.startsWith("/v1/api/")) {
       const action = decodeURIComponent(url.pathname.slice("/v1/api/".length));
+      let authScheme;
       if (action.startsWith("index/")) {
-        requireApiOrAdminAuth(serverConfig, request);
+        authScheme = requireApiOrAdminAuth(serverConfig, request);
       } else {
-        requireApiAuth(serverConfig, request);
+        authScheme = requireApiAuth(serverConfig, request);
+      }
+      if (authScheme === "basic" && ADMIN_INDEX_MUTATIONS.has(action)) {
+        requireAdminMutationProtection(request);
       }
       const body = ["GET", "DELETE"].includes(request.method)
         ? { json: {}, text: "" }
@@ -112,6 +125,8 @@ function requireApiAuth(config, request) {
     };
     throw error;
   }
+
+  return "bearer";
 }
 
 function requireAdminAuth(config, request) {
@@ -123,19 +138,19 @@ function requireAdminAuth(config, request) {
     };
     throw error;
   }
+
+  return "basic";
 }
 
 function requireApiOrAdminAuth(config, request) {
   const authorization = request.headers.authorization || "";
   if (authorization.startsWith("Basic ")) {
-    requireAdminAuth(config, request);
-    return;
+    return requireAdminAuth(config, request);
   }
   if (authorization.startsWith("Bearer ")) {
-    requireApiAuth(config, request);
-    return;
+    return requireApiAuth(config, request);
   }
-  requireAdminAuth(config, request);
+  return requireAdminAuth(config, request);
 }
 
 function isAdminAuthorized(config, request) {
@@ -169,6 +184,53 @@ function constantTimeEqual(left, right) {
   const leftDigest = crypto.createHash("sha256").update(String(left)).digest();
   const rightDigest = crypto.createHash("sha256").update(String(right)).digest();
   return crypto.timingSafeEqual(leftDigest, rightDigest);
+}
+
+function requireAdminMutationProtection(request) {
+  requireJsonContentType(request);
+  requireTrustedBrowserOrigin(request);
+}
+
+function requireJsonContentType(request) {
+  const contentType = request.headers["content-type"] || "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    const error = new Error("Admin write requests require application/json");
+    error.statusCode = 415;
+    throw error;
+  }
+}
+
+function requireTrustedBrowserOrigin(request) {
+  const origin = request.headers.origin;
+  const referer = request.headers.referer;
+
+  if (origin && !matchesRequestHost(request, origin)) {
+    const error = new Error("Cross-origin admin request rejected");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (!origin && referer && !matchesRequestHost(request, referer)) {
+    const error = new Error("Cross-origin admin request rejected");
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function matchesRequestHost(request, value) {
+  const host = requestHost(request);
+  if (!host) return false;
+  try {
+    return new URL(value).host === host;
+  } catch {
+    return false;
+  }
+}
+
+function requestHost(request) {
+  const forwardedHost = request.headers["x-forwarded-host"];
+  const host = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost || request.headers.host || "";
+  return String(host).split(",")[0].trim();
 }
 
 async function readAnyBody(request, maxBytes) {
@@ -228,7 +290,8 @@ function sendJson(response, statusCode, payload, headers = {}) {
 function sendHtml(response, statusCode, html) {
   response.writeHead(statusCode, {
     "content-type": "text/html; charset=utf-8",
-    "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
+    "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+    "x-frame-options": "DENY"
   });
   response.end(html);
 }

@@ -14,6 +14,11 @@ import {
 import { executeObsidianUri } from "./obsidian-uri.js";
 import { executeVaultScript } from "./vault-script.js";
 import {
+  MAX_MARKDOWN_PATCH_BYTES,
+  MAX_MARKDOWN_READ_BYTES,
+  MAX_MARKDOWN_SCAN_BYTES
+} from "./limits.js";
+import {
   clearEmbeddingIndexErrors,
   enqueueEmbeddingIndex,
   getEmbeddingIndexStatus,
@@ -26,8 +31,6 @@ import { executeOperation, resolveVaultPath } from "./vault.js";
 
 const DEFAULT_FILE_DIR = "Inbox";
 const MAX_BATCH_OPERATIONS = 50;
-const MAX_MARKDOWN_SCAN_BYTES = 2 * 1024 * 1024;
-const MAX_MARKDOWN_PATCH_BYTES = 10 * 1024 * 1024;
 export const API_HANDLER_ROUTES = [
   "files/create",
   "files/read",
@@ -176,7 +179,7 @@ async function createFile(config, params) {
 
 async function readFile(config, params) {
   const target = resolveVaultPath(config, normalizeApiPath(config, params, { requireFile: true }));
-  const content = await readTextIfExists(target.absolutePath);
+  const content = await readTextIfExists(target.absolutePath, MAX_MARKDOWN_READ_BYTES);
   if (content === null) {
     return { ok: false, operation: "files/read", path: target.relativePath, error: "File not found" };
   }
@@ -256,7 +259,7 @@ async function listFiles(config, params) {
 
 async function readHeading(config, params) {
   const target = resolveVaultPath(config, normalizeApiFilePath(config, params));
-  const content = await readTextIfExists(target.absolutePath);
+  const content = await readTextIfExists(target.absolutePath, MAX_MARKDOWN_READ_BYTES);
   if (content === null) {
     return { ok: false, operation: "headings/read", path: target.relativePath, error: "File not found" };
   }
@@ -299,7 +302,7 @@ async function patchHeading(config, params, operation) {
 
 async function getFrontmatter(config, params) {
   const target = resolveVaultPath(config, normalizeApiFilePath(config, params));
-  const content = await readTextIfExists(target.absolutePath);
+  const content = await readTextIfExists(target.absolutePath, MAX_MARKDOWN_READ_BYTES);
   if (content === null) {
     return { ok: false, operation: "frontmatter/get", path: target.relativePath, error: "File not found" };
   }
@@ -567,13 +570,13 @@ function parseMaybeJson(value) {
   }
 }
 
-async function readTextIfExists(filePath) {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") return null;
-    throw error;
+async function readTextIfExists(filePath, maxBytes = 0) {
+  const stat = await statIfExists(filePath);
+  if (!stat) return null;
+  if (stat.isFile() && maxBytes > 0 && stat.size > maxBytes) {
+    throw new Error(`Markdown file is too large to read: max ${maxBytes} bytes`);
   }
+  return fs.readFile(filePath, "utf8");
 }
 
 async function statIfExists(filePath) {

@@ -72,7 +72,7 @@ export const API_ENDPOINTS = [
     route: "files/read",
     method: "GET or POST",
     title: "读取文件",
-    summary: "从 Vault 中读取一个 Markdown 文件。",
+    summary: "从 Vault 中读取一个 Markdown 文件。为保护 1C2G 这类小 VPS，超大文件会被拒绝读取。",
     scenarios: [
       "工作流需要先读取现有笔记，再决定如何更新。",
       "调试时确认网关实际写入了什么内容。"
@@ -105,7 +105,7 @@ export const API_ENDPOINTS = [
     route: "files/append",
     method: "POST",
     title: "追加到文件末尾",
-    summary: "把内容追加到文件末尾。",
+    summary: "把内容追加到文件末尾。追加后文件超过服务端上限时会拒绝写入，避免后续整文件 patch 失效。",
     scenarios: [
       "把原始 capture 追加到 Inbox 日志。",
       "把生成的参考资料列表追加到已有笔记。"

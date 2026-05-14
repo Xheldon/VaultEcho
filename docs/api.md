@@ -15,9 +15,9 @@ Authorization: Bearer <API_TOKEN>
 |---|---|---|
 | `index/errors/clear` | POST | 清空自动索引失败时保存在本地的最近错误记录。 |
 | `files/create` | POST | 在 Vault 中创建一个新的 Markdown 文件。 |
-| `files/read` | GET or POST | 从 Vault 中读取一个 Markdown 文件。 |
+| `files/read` | GET or POST | 从 Vault 中读取一个 Markdown 文件。为保护 1C2G 这类小 VPS，超大文件会被拒绝读取。 |
 | `files/write` | POST | 用新内容覆盖一个 Markdown 文件。 |
-| `files/append` | POST | 把内容追加到文件末尾。 |
+| `files/append` | POST | 把内容追加到文件末尾。追加后文件超过服务端上限时会拒绝写入，避免后续整文件 patch 失效。 |
 | `files/prepend` | POST | 把内容插入到文件开头。 |
 | `files/delete` | DELETE or POST | 把文件移动到 Archive/Deleted，而不是永久删除。 |
 | `files/list` | GET or POST | 列出 Vault 目录下的文件和子目录。 |
@@ -134,7 +134,7 @@ curl -X POST http://localhost:8787/v1/api/files/create \
 
 **读取文件**
 
-从 Vault 中读取一个 Markdown 文件。
+从 Vault 中读取一个 Markdown 文件。为保护 1C2G 这类小 VPS，超大文件会被拒绝读取。
 
 方法：`GET or POST`
 
@@ -189,7 +189,7 @@ curl -X POST http://localhost:8787/v1/api/files/write \
 
 **追加到文件末尾**
 
-把内容追加到文件末尾。
+把内容追加到文件末尾。追加后文件超过服务端上限时会拒绝写入，避免后续整文件 patch 失效。
 
 方法：`POST`
 

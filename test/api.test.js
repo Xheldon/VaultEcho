@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { executeApiAction } from "../src/api.js";
+import { MAX_MARKDOWN_APPEND_BYTES, MAX_MARKDOWN_READ_BYTES } from "../src/limits.js";
 
 test("v1 api new creates a note from filename and can run a safe vault script", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
@@ -198,6 +199,37 @@ test("heading patch rejects oversized markdown files", async () => {
       content: "item"
     }),
     /too large to patch/
+  );
+});
+
+test("files/read rejects oversized markdown files", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+  const notePath = path.join(root, "vault", "Inbox", "too-large-read.md");
+  await fs.mkdir(path.dirname(notePath), { recursive: true });
+  await fs.writeFile(notePath, "a".repeat(MAX_MARKDOWN_READ_BYTES + 1), "utf8");
+
+  await assert.rejects(
+    executeApiAction(config, "files/read", {
+      path: "Inbox/too-large-read.md"
+    }),
+    /too large to read/
+  );
+});
+
+test("files/append rejects writes that would exceed the append limit", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+  const notePath = path.join(root, "vault", "Inbox", "too-large-append.md");
+  await fs.mkdir(path.dirname(notePath), { recursive: true });
+  await fs.writeFile(notePath, "a".repeat(MAX_MARKDOWN_APPEND_BYTES), "utf8");
+
+  await assert.rejects(
+    executeApiAction(config, "files/append", {
+      path: "Inbox/too-large-append.md",
+      content: "b"
+    }),
+    /too large to append/
   );
 });
 

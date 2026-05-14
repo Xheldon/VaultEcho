@@ -2,12 +2,12 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { decryptSecret } from "./secrets.js";
+import { MAX_MARKDOWN_SCAN_BYTES } from "./limits.js";
 
 const INDEX_VERSION = 1;
 const INDEX_FILE = "embeddings.json";
 const DEFAULT_BATCH_SIZE = 16;
 const DEFAULT_MAX_CHUNK_CHARS = 1600;
-const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_SEARCH_LIMIT = 8;
 const MAX_SEARCH_LIMIT = 50;
 const queuedFiles = new Map();
@@ -577,7 +577,7 @@ async function fileExists(filePath) {
 
 async function canReadMarkdownForIndex(filePath) {
   const stat = await statIfExists(filePath);
-  return Boolean(stat?.isFile() && stat.size <= DEFAULT_MAX_FILE_BYTES);
+  return Boolean(stat?.isFile() && stat.size <= MAX_MARKDOWN_SCAN_BYTES);
 }
 
 async function statIfExists(filePath) {

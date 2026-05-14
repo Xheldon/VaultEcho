@@ -3,10 +3,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { appendToHeading, insertAfterLastMatchingLine } from "./markdown.js";
 import { buildDailyWrite } from "./time.js";
+import { MAX_MARKDOWN_APPEND_BYTES, MAX_MARKDOWN_PATCH_BYTES } from "./limits.js";
 
 const fileQueues = new Map();
 const IDEMPOTENCY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const MAX_MARKDOWN_PATCH_BYTES = 10 * 1024 * 1024;
 let lastIdempotencyCleanupAt = 0;
 
 export async function executeOperation(config, operation) {
@@ -138,6 +138,7 @@ async function createMarkdown(targetPath, operation) {
 
 async function appendFile(targetPath, operation) {
   const content = normalizeString(operation.content);
+  await ensureAppendableFile(targetPath.absolutePath, content);
   await fs.mkdir(path.dirname(targetPath.absolutePath), { recursive: true });
   await fs.appendFile(targetPath.absolutePath, content, "utf8");
   return { ok: true, operation: operation.operation, path: targetPath.relativePath };
@@ -339,6 +340,15 @@ async function ensurePatchableMarkdownFile(filePath) {
   const stat = await statIfExists(filePath);
   if (stat?.isFile() && stat.size > MAX_MARKDOWN_PATCH_BYTES) {
     throw new Error(`Markdown file is too large to patch: max ${MAX_MARKDOWN_PATCH_BYTES} bytes`);
+  }
+}
+
+async function ensureAppendableFile(filePath, content) {
+  const stat = await statIfExists(filePath);
+  const currentSize = stat?.isFile() ? stat.size : 0;
+  const nextSize = currentSize + Buffer.byteLength(content, "utf8");
+  if (nextSize > MAX_MARKDOWN_APPEND_BYTES) {
+    throw new Error(`File is too large to append: max ${MAX_MARKDOWN_APPEND_BYTES} bytes`);
   }
 }
 

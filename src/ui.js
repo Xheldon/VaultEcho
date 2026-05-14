@@ -1,6 +1,6 @@
 export function renderAdminPage() {
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -212,14 +212,14 @@ export function renderAdminPage() {
     <header>
       <div>
         <h1>VaultEcho</h1>
-        <p>Capture anything. Let your vault answer back. 管理页使用 Basic Auth，外部 API 继续使用 Bearer Token。</p>
+        <p>Capture anything. Let your vault answer back. Admin pages use Basic Auth; external API calls use Bearer tokens.</p>
       </div>
-      <button id="loadButton">载入配置</button>
+      <button id="loadButton">Load Config</button>
     </header>
 
     <section>
-      <h2>访问</h2>
-      <p>本页面由 <code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD</code> 保护。<code>API_TOKEN</code> 只用于 Coze、快捷指令等外部系统调用 <code>/v1/api/...</code>，不会写入或存入浏览器。</p>
+      <h2>Access</h2>
+      <p>This page is protected by <code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD</code>. <code>API_TOKEN</code> is only for external systems such as Coze or Shortcuts calling <code>/v1/api/...</code>; it is never entered here or stored in the browser.</p>
     </section>
 
     <section>
@@ -236,7 +236,7 @@ export function renderAdminPage() {
         <label>
           Allowed Top-Level Dirs
           <textarea id="allowedDirs" placeholder="Inbox,Notes,Ideas,Projects,Daily,Attachments,Archive"></textarea>
-          <span class="hint">逗号分隔，所有写入路径必须落在这些顶级目录内。</span>
+          <span class="hint">Comma-separated. Every write path must stay inside one of these top-level directories.</span>
         </label>
         <label>
           Max JSON Body Bytes
@@ -245,21 +245,21 @@ export function renderAdminPage() {
         <label>
           Image Attachment Dir
           <input id="imageAttachmentDir" placeholder="Attachments/Images" />
-          <span class="hint">Vault 相对目录。后续图片附件写入会默认使用这里。</span>
+          <span class="hint">Vault-relative directory. Future image attachment writes use this by default.</span>
         </label>
         <label>
           Audio Attachment Dir
           <input id="audioAttachmentDir" placeholder="Attachments/Audio" />
-          <span class="hint">Vault 相对目录。后续音频附件写入会默认使用这里。</span>
+          <span class="hint">Vault-relative directory. Future audio attachment writes use this by default.</span>
         </label>
       </div>
     </section>
 
     <section>
-      <h2>Embedding 语义索引</h2>
+      <h2>Semantic Index</h2>
       <label class="checkbox">
         <input id="embeddingEnabled" type="checkbox" />
-        启用远程 embedding
+        Enable remote embeddings
       </label>
       <div class="grid" style="margin-top: 16px;">
         <label>
@@ -276,13 +276,13 @@ export function renderAdminPage() {
         </label>
         <label>
           API Key
-          <input id="embeddingApiKey" type="password" autocomplete="off" placeholder="留空表示不修改已保存的 Key" />
-          <span id="embeddingApiKeyHint" class="hint">API Key 会使用 <code>APP_ENCRYPTION_KEY</code> 加密后保存。</span>
+          <input id="embeddingApiKey" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key" />
+          <span id="embeddingApiKeyHint" class="hint">The API key is encrypted with <code>APP_ENCRYPTION_KEY</code> before it is saved.</span>
         </label>
         <label>
           Dimensions
           <input id="embeddingDimensions" type="number" min="0" step="1" />
-          <span class="hint">可选。模型不支持时保持 0。</span>
+          <span class="hint">Optional. Keep 0 when the model does not support explicit dimensions.</span>
         </label>
         <label>
           Batch Size
@@ -299,23 +299,23 @@ export function renderAdminPage() {
         <label>
           Auto Scan Interval Minutes
           <input id="embeddingAutoScanIntervalMinutes" type="number" min="0" step="1" />
-          <span class="hint">0 表示关闭。用于补偿 Headless Sync 拉下来的外部变更。</span>
+          <span class="hint">0 disables scanning. Use this to pick up changes pulled by Headless Sync.</span>
         </label>
         <label class="checkbox">
           <input id="embeddingAutoIndexAfterWrite" type="checkbox" />
-          API 写入后自动索引该文件
+          Index files automatically after API writes
         </label>
       </div>
       <div class="actions">
-        <button id="indexStatusButton" type="button">查看索引状态</button>
-        <button id="clearIndexErrorsButton" type="button">清空索引错误</button>
-        <button id="rebuildIndexButton" type="button">重建索引</button>
+        <button id="indexStatusButton" type="button">Index Status</button>
+        <button id="clearIndexErrorsButton" type="button">Clear Index Errors</button>
+        <button id="rebuildIndexButton" type="button">Rebuild Index</button>
       </div>
     </section>
 
     <details>
       <summary>
-        <h2>日记时间戳插入位置设置</h2>
+        <h2>Daily Timestamp Insertion Rules</h2>
       </summary>
       <div class="details-body">
         <div class="grid">
@@ -354,14 +354,14 @@ export function renderAdminPage() {
             <tbody id="slotsBody"></tbody>
           </table>
           <div class="actions">
-            <button id="addSlotButton" type="button">新增时段</button>
+            <button id="addSlotButton" type="button">Add Slot</button>
           </div>
         </div>
       </div>
     </details>
 
     <div class="actions">
-      <button id="saveButton" class="primary">保存配置</button>
+      <button id="saveButton" class="primary">Save Config</button>
     </div>
     <div id="status" class="status"></div>
   </main>
@@ -396,10 +396,10 @@ export function renderAdminPage() {
 
     async function loadConfig() {
       try {
-        setStatus("正在载入配置...");
+        setStatus("Loading config...");
         const config = await request("/v1/config");
         fillForm(config);
-        setStatus("配置已载入", "ok");
+        setStatus("Config loaded", "ok");
       } catch (error) {
         setStatus(error.message, "error");
       }
@@ -407,14 +407,14 @@ export function renderAdminPage() {
 
     async function saveConfig() {
       try {
-        setStatus("正在保存配置...");
+        setStatus("Saving config...");
         const config = readForm();
         const saved = await request("/v1/config", {
           method: "PUT",
           body: JSON.stringify(config)
         });
         fillForm(saved);
-        setStatus("配置已保存", "ok");
+        setStatus("Config saved", "ok");
       } catch (error) {
         setStatus(error.message, "error");
       }
@@ -433,8 +433,8 @@ export function renderAdminPage() {
       $("embeddingModel").value = config.embedding?.model || "";
       $("embeddingApiKey").value = "";
       $("embeddingApiKeyHint").textContent = config.embedding?.apiKeySet
-        ? "已保存 API Key；留空表示不修改。"
-        : "尚未保存 API Key。保存新 Key 时会使用 APP_ENCRYPTION_KEY 加密。";
+        ? "API key is saved; leave blank to keep it unchanged."
+        : "No API key is saved. New keys are encrypted with APP_ENCRYPTION_KEY.";
       $("embeddingDimensions").value = config.embedding?.dimensions || 0;
       $("embeddingBatchSize").value = config.embedding?.batchSize || 16;
       $("embeddingMaxChunkChars").value = config.embedding?.maxChunkChars || 1600;
@@ -492,9 +492,9 @@ export function renderAdminPage() {
 
     async function loadIndexStatus() {
       try {
-        setStatus("正在读取索引状态...");
+        setStatus("Loading index status...");
         const payload = await request("/v1/api/index/status", { method: "POST", body: "{}" });
-        setStatus(\`索引状态：\${payload.result.files} 个文件，\${payload.result.chunks} 个块，ready=\${payload.result.ready}\`, "ok");
+        setStatus(\`Index status: \${payload.result.files} files, \${payload.result.chunks} chunks, ready=\${payload.result.ready}\`, "ok");
       } catch (error) {
         setStatus(error.message, "error");
       }
@@ -502,12 +502,12 @@ export function renderAdminPage() {
 
     async function rebuildIndex() {
       try {
-        setStatus("正在重建索引，可能需要等待远程 embedding API...");
+        setStatus("Rebuilding index. This may take a while depending on the remote embedding API...");
         const payload = await request("/v1/api/index/rebuild", {
           method: "POST",
           body: JSON.stringify({ force: false })
         });
-        setStatus(\`索引已更新：\${payload.result.files} 个文件，\${payload.result.chunks} 个块\`, "ok");
+        setStatus(\`Index updated: \${payload.result.files} files, \${payload.result.chunks} chunks\`, "ok");
       } catch (error) {
         setStatus(error.message, "error");
       }
@@ -515,12 +515,12 @@ export function renderAdminPage() {
 
     async function clearIndexErrors() {
       try {
-        setStatus("正在清空索引错误...");
+        setStatus("Clearing index errors...");
         await request("/v1/api/index/errors/clear", {
           method: "POST",
           body: "{}"
         });
-        setStatus("索引错误已清空", "ok");
+        setStatus("Index errors cleared", "ok");
       } catch (error) {
         setStatus(error.message, "error");
       }
@@ -529,10 +529,10 @@ export function renderAdminPage() {
     function addSlot(slot) {
       const row = document.createElement("tr");
       row.innerHTML = \`
-        <td><input data-field="heading" value="\${escapeHtml(slot.heading || "")}" placeholder="下午" /></td>
+        <td><input data-field="heading" value="\${escapeHtml(slot.heading || "")}" placeholder="Afternoon" /></td>
         <td><input data-field="start" type="time" value="\${escapeHtml(slot.start || "12:00")}" /></td>
         <td><input data-field="end" type="time" value="\${escapeHtml(slot.end || "17:59")}" /></td>
-        <td><button class="danger" type="button">删除</button></td>
+        <td><button class="danger" type="button">Delete</button></td>
       \`;
       row.querySelector("button").addEventListener("click", () => row.remove());
       slotsBody.appendChild(row);

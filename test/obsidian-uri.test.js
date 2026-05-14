@@ -49,7 +49,7 @@ test("daily URI can use the gateway time-slot extension", async () => {
   const config = testConfig(root);
   const dailyPath = path.join(root, "vault", "Daily", "2026-05-13.md");
   await fs.mkdir(path.dirname(dailyPath), { recursive: true });
-  await fs.writeFile(dailyPath, "## 上午\n\n## 下午\n[16:18] A\n\n## 晚上\n", "utf8");
+  await fs.writeFile(dailyPath, "## Morning\n\n## Afternoon\n[16:18] A\n\n## Evening\n", "utf8");
 
   const result = await executeObsidianUri(config, {
     action: "daily",
@@ -58,10 +58,10 @@ test("daily URI can use the gateway time-slot extension", async () => {
     content: "B"
   });
 
-  assert.equal(result.heading, "下午");
+  assert.equal(result.heading, "Afternoon");
   assert.equal(
     await fs.readFile(dailyPath, "utf8"),
-    "## 上午\n\n## 下午\n[16:18] A\n[16:21] B\n\n## 晚上\n"
+    "## Morning\n\n## Afternoon\n[16:18] A\n[16:21] B\n\n## Evening\n"
   );
 });
 
@@ -92,9 +92,9 @@ function testConfig(root) {
       lineFormat: "[{{HH:mm}}] {{content}}",
       timeZone: "Asia/Shanghai",
       slots: [
-        { heading: "上午", start: "05:00", end: "11:59" },
-        { heading: "下午", start: "12:00", end: "17:59" },
-        { heading: "晚上", start: "18:00", end: "04:59" }
+        { heading: "Morning", start: "05:00", end: "11:59" },
+        { heading: "Afternoon", start: "12:00", end: "17:59" },
+        { heading: "Evening", start: "18:00", end: "04:59" }
       ]
     }
   };

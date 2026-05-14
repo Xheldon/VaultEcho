@@ -78,9 +78,9 @@ test("files/create applies template first and request yaml last", async () => {
 
   const result = await executeApiAction(config, "files/create", {
     path: "Ideas/from-template.md",
-    title: "模板测试",
+    title: "Template Test",
     templatePath: "Templates/idea.md",
-    content: "正文内容",
+    content: "Body content",
     yaml: {
       status: "done",
       tags: ["idea", "capture"]
@@ -90,7 +90,7 @@ test("files/create applies template first and request yaml last", async () => {
   assert.equal(result.result.path, "Ideas/from-template.md");
   assert.equal(
     await fs.readFile(path.join(root, "vault", "Ideas", "from-template.md"), "utf8"),
-    "---\nstatus: done\nsource: template\ntags: [\"idea\",\"capture\"]\n---\n\n# 模板测试\n\n正文内容\n"
+    "---\nstatus: done\nsource: template\ntags: [\"idea\",\"capture\"]\n---\n\n# Template Test\n\nBody content\n"
   );
 });
 
@@ -245,9 +245,9 @@ function testConfig(root) {
       lineFormat: "[{{HH:mm}}] {{content}}",
       timeZone: "Asia/Shanghai",
       slots: [
-        { heading: "上午", start: "05:00", end: "11:59" },
-        { heading: "下午", start: "12:00", end: "17:59" },
-        { heading: "晚上", start: "18:00", end: "04:59" }
+        { heading: "Morning", start: "05:00", end: "11:59" },
+        { heading: "Afternoon", start: "12:00", end: "17:59" },
+        { heading: "Evening", start: "18:00", end: "04:59" }
       ]
     }
   };

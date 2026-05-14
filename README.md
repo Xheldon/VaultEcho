@@ -2,19 +2,21 @@
 
 Capture anything. Let your vault answer back.
 
-VaultEcho 是一个最小化的个人 Vault 写入与反馈网关：Coze、n8n、快捷指令或其他自动化平台把内容处理成结构化 JSON 后，调用这里的 API 写入本地 Obsidian Vault；VaultEcho 再负责索引、语义召回和后续 AI 反馈任务，最终由 Obsidian Headless Sync 同步到 Obsidian Sync。
+Chinese version: [README_cn.md](README_cn.md).
 
-## 目标链路
+VaultEcho is a minimal personal Vault write and feedback gateway. Coze, n8n, Shortcuts, or other automation platforms process arbitrary input into structured JSON, call VaultEcho's API, and write the result into a local Obsidian Vault. VaultEcho also provides indexing, semantic recall, and the foundation for later AI feedback tasks. Obsidian Headless Sync can then sync the local Vault to Obsidian Sync.
+
+## Target Flow
 
 ```text
-输入端 -> Coze 工作流 -> VaultEcho API -> 本地 Vault -> Obsidian Headless Sync -> Obsidian
+Input sources -> Coze workflow -> VaultEcho API -> local Vault -> Obsidian Headless Sync -> Obsidian
 ```
 
-第一版刻意不做 AI 工作流编辑器。Coze 负责转写、清洗、分流和生成写入意图；本服务只负责安全、可审计地写文件。
+The first version intentionally does not build an AI workflow editor. Coze handles transcription, cleanup, routing, and write-intent generation. VaultEcho focuses on safe, auditable file writes.
 
-项目边界、embedding 设计和后续 AI Task 路线见 [docs/architecture-roadmap.md](docs/architecture-roadmap.md)。
+For project boundaries, embedding design, and the AI task roadmap, see [docs/architecture-roadmap.md](docs/architecture-roadmap.md).
 
-## 快速开始
+## Quick Start
 
 ```bash
 cp .env.example .env
@@ -22,13 +24,13 @@ npm test
 npm start
 ```
 
-打开配置页：
+Open the config UI:
 
 ```text
 http://localhost:8787/
 ```
 
-`.env` 只保留必须由部署环境提供的秘密：
+`.env` only stores secrets that must come from the deployment environment:
 
 ```env
 API_TOKEN=change-me
@@ -38,43 +40,45 @@ APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
 BIND_HOST=127.0.0.1
 ```
 
-`API_TOKEN` 用于 Coze、快捷指令等外部系统的 Bearer 鉴权。`ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 用于 Web 管理页、`/v1/config` 和 `/health` 的 Basic Auth。`APP_ENCRYPTION_KEY` 用于加密 Web UI 中保存的 embedding API Key，生成后要保持稳定，不能每次重启都换。Vault Root、Data Dir、Daily Note、Embedding 模型等运行配置在 Web UI 中修改，会保存到 `data/config.json`。本机 `npm start` 会通过 Node 22 的 `--env-file=.env` 自动读取 `.env`。
+`API_TOKEN` is used as the Bearer token for external systems such as Coze and Shortcuts. `ADMIN_USERNAME` and `ADMIN_PASSWORD` protect the Web admin UI, `/v1/config`, and `/health` with Basic Auth. `APP_ENCRYPTION_KEY` encrypts embedding API keys saved through the Web UI. Generate it once and keep it stable; do not change it on every restart.
 
-`BIND_HOST` 默认是 `127.0.0.1`，直接在 VPS 上 `npm start` 时不会裸露到公网。Docker Compose 会在容器内覆盖为 `0.0.0.0`，但宿主机端口仍只绑定到 `127.0.0.1:8787`。
+Runtime settings such as Vault Root, Data Dir, Daily Note rules, and embedding model settings are edited in the Web UI and saved to `data/config.json`. Local `npm start` reads `.env` through Node 22's `--env-file=.env`.
 
-如果你已有一个桌面 Obsidian 正在使用的 Vault，建议 Headless 测试使用另一个本地目录：
+`BIND_HOST` defaults to `127.0.0.1`, so direct `npm start` on a VPS does not expose the service publicly. Docker Compose overrides it to `0.0.0.0` inside the container, but the host port is still bound only to `127.0.0.1:8787`.
+
+If you already have a desktop Obsidian Vault, use a separate local directory for Headless testing:
 
 ```text
-目录 A: /Users/x/Obsidian/Xheldon
-  桌面 Obsidian 使用
+Directory A: /Users/x/Obsidian/Xheldon
+  Used by desktop Obsidian
 
-目录 B: /Users/x/Developer/VaultEcho/vault
-  Headless Sync 和本服务使用
+Directory B: /Users/x/Developer/VaultEcho/vault
+  Used by Headless Sync and VaultEcho
 ```
 
-目录 B 可以对应一个全新的测试 Sync Vault。不要让桌面 Obsidian 同时打开并同步目录 B。
+Directory B can be a brand-new test Sync Vault. Do not let desktop Obsidian open and sync directory B at the same time.
 
-## Web 配置
+## Web Configuration
 
-配置页支持修改：
+The config UI supports:
 
-- 管理页访问：浏览器 Basic Auth，来自 `.env` 中的 `ADMIN_USERNAME` / `ADMIN_PASSWORD`。
-- `Vault Root`: 要写入的本地 Vault 目录。本机默认是项目下的 `vault/`，Docker 默认是 `/vault`。
-- `Data Dir`: 幂等记录和运行配置目录。本机默认是项目下的 `data/`，Docker 默认是 `/data`。
-- `Allowed Top-Level Dirs`: 路径白名单，例如 `Inbox,Notes,Ideas,Projects,Daily,Templates,Attachments,Archive`。
-- `Max JSON Body Bytes`: 请求体大小限制。
-- `Image Attachment Dir`: 图片附件默认目录，默认 `Attachments/Images`。
-- `Audio Attachment Dir`: 音频附件默认目录，默认 `Attachments/Audio`。
-- `日记时间戳插入位置设置`: 默认折叠。包含 Daily Path Template、Time Zone、Slots、Line Format 和 Line Pattern，用于 `daily/append-by-time` 这类按时间戳写入日记 heading 的接口。
-- `Embedding`: 可配置 OpenAI-compatible embedding API 的 Base URL、Model、API Key、切块大小、批量大小和自动扫描间隔。
+- Admin access: browser Basic Auth from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`.
+- `Vault Root`: local Vault directory to write. Local default: `vault/` under the project. Docker default: `/vault`.
+- `Data Dir`: idempotency records and runtime config. Local default: `data/` under the project. Docker default: `/data`.
+- `Allowed Top-Level Dirs`: path allowlist, for example `Inbox,Notes,Ideas,Projects,Daily,Templates,Attachments,Archive`.
+- `Max JSON Body Bytes`: request body size limit.
+- `Image Attachment Dir`: default image attachment directory, default `Attachments/Images`.
+- `Audio Attachment Dir`: default audio attachment directory, default `Attachments/Audio`.
+- `Daily Timestamp Insertion Rules`: folded by default. Includes Daily Path Template, Time Zone, Slots, Line Format, and Line Pattern for endpoints such as `daily/append-by-time`.
+- `Embedding`: OpenAI-compatible embedding API base URL, model, API key, chunk size, batch size, and auto-scan interval.
 
-Embedding 第一版使用远程 API 生成向量，并把索引保存到 `data/index/embeddings.json`。这让 1C2G VPS 可以运行，不需要本地大模型、Qdrant、Elasticsearch 或数据库扩展。写入 API 修改文件后会按配置自动更新该文件索引；Headless Sync 从远端拉下来的变化可通过“重建索引”按钮或自动扫描间隔补偿。
+The first embedding version uses a remote API to generate vectors and stores the index at `data/index/embeddings.json`. This lets a 1C2G VPS run VaultEcho without a local model, Qdrant, Elasticsearch, or database extension. After API writes change a file, VaultEcho can automatically update that file's index. Changes pulled by Headless Sync can be compensated by the Rebuild Index button or by an auto-scan interval.
 
 ## Docker
 
-详见 [docs/docker-deploy.md](docs/docker-deploy.md)。
+See [docs/docker-deploy.md](docs/docker-deploy.md).
 
-最小启动：
+Minimal start:
 
 ```bash
 cp .env.example .env
@@ -82,41 +86,41 @@ mkdir -p vault data obsidian-config
 docker compose up -d --build vaultecho
 ```
 
-Docker Compose 默认只把 VaultEcho 绑定到 `127.0.0.1:8787`。公网访问应通过 Nginx/Caddy/Cloudflare Tunnel 反代进来，不要直接开放 `8787` 到公网。
+Docker Compose binds VaultEcho only to `127.0.0.1:8787` on the host. Public access should go through Nginx, Caddy, or Cloudflare Tunnel. Do not expose `8787` directly to the public internet.
 
-启用 Obsidian Headless Sync：
+Enable Obsidian Headless Sync:
 
 ```bash
 export OBSIDIAN_AUTH_TOKEN="your-token"
 docker compose --profile sync up -d --build
 ```
 
-首次使用 Obsidian Headless 前，需要先完成远端 Vault 配置，例如在容器内执行 `ob sync-list-remote` 和 `ob sync-setup --vault "Your Vault" --path /vault`。官方 Headless Sync 目前是 open beta，使用前先备份 Vault，并避免在同一设备上同时使用桌面端 Sync 和 Headless Sync 同步同一个 Vault。
+Before first use, complete remote Vault setup for Obsidian Headless, for example by running `ob sync-list-remote` and `ob sync-setup --vault "Your Vault" --path /vault` inside the container. Headless Sync is currently an open beta. Back up your Vault before using it, and avoid using desktop Sync and Headless Sync for the same local Vault directory on the same device.
 
 ## API
 
-公开接口统一收敛到一个命名空间：
+All public endpoints are under one namespace:
 
 ```http
 /v1/api/<resource>/<action>
 Authorization: Bearer <API_TOKEN>
 ```
 
-不再暴露单独的 `/v1/uri`、`/v1/restful`、`/v1/operations`。Obsidian URI 和 Local REST API 的能力被拆成 `/v1/api` 下的具体资源动作，避免不同路径之间能力割裂。
+VaultEcho no longer exposes separate `/v1/uri`, `/v1/restful`, or `/v1/operations` namespaces. Obsidian URI and Local REST API capabilities are decomposed into concrete resource actions under `/v1/api`, avoiding fragmented capability across multiple paths.
 
-完整接口说明、用例和适用场景见 [docs/api.md](docs/api.md)。该文件由 [src/api-spec.js](src/api-spec.js) 生成，不要手改。修改接口时更新 `api-spec.js` 后运行：
+The full API reference, examples, and use cases are in [docs/api.md](docs/api.md). That file is generated from [src/api-spec.js](src/api-spec.js); do not edit it by hand. After changing API docs in `api-spec.js`, run:
 
 ```bash
 npm run docs:api
 ```
 
-Postman 集合见 [docs/postman/VaultEcho.postman_collection.json](docs/postman/VaultEcho.postman_collection.json)。修改集合生成逻辑后运行：
+The Postman collection is at [docs/postman/VaultEcho.postman_collection.json](docs/postman/VaultEcho.postman_collection.json). After changing collection generation logic, run:
 
 ```bash
 npm run docs:postman
 ```
 
-测试会校验实现路由和文档路由一致，并检查生成文档是否最新。
+Tests verify that implementation routes and documented routes match, and that generated docs are up to date.
 
 ### Files
 
@@ -131,17 +135,17 @@ curl -X POST http://localhost:8787/v1/api/files/create \
   }'
 ```
 
-支持：
+Supported:
 
-- `files/create`: 新建 Markdown，`ifExists` 支持 `fail`、`overwrite`、`append_suffix`。
-- `files/read`: 读取文件。
-- `files/write`: 覆盖写入文件。
-- `files/append`: 追加到文件尾部。
-- `files/prepend`: 插入到文件头部。
-- `files/delete`: 软删除到 `Archive/Deleted/`。
-- `files/list`: 列目录。
+- `files/create`: create Markdown. `ifExists` supports `fail`, `overwrite`, and `append_suffix`.
+- `files/read`: read a file.
+- `files/write`: overwrite a file.
+- `files/append`: append to the end of a file.
+- `files/prepend`: insert at the beginning of a file.
+- `files/delete`: soft-delete to `Archive/Deleted/`.
+- `files/list`: list a directory.
 
-兼容短别名仍可用，例如 `/v1/api/new`、`/v1/api/read`、`/v1/api/append`，但推荐新接入使用资源化路径。
+Compatibility short aliases remain available, such as `/v1/api/new`, `/v1/api/read`, and `/v1/api/append`, but new integrations should use resource-style paths.
 
 ### Headings
 
@@ -151,12 +155,12 @@ curl -X POST http://localhost:8787/v1/api/headings/append \
   -H "Content-Type: application/json" \
   -d '{
     "path": "Daily/2026-05-13.md",
-    "heading": "下午",
-    "content": "[16:21] 继续验证自动插入逻辑"
+    "heading": "Afternoon",
+    "content": "[16:21] Continue testing automatic insertion"
   }'
 ```
 
-支持：
+Supported:
 
 - `headings/read`
 - `headings/append`
@@ -164,7 +168,7 @@ curl -X POST http://localhost:8787/v1/api/headings/append \
 - `headings/replace`
 - `headings/insert-after-last-matching-line`
 
-`insert-after-last-matching-line` 使用 Web 配置里的 Daily Note `Line Pattern`，不接受请求体覆盖：
+`insert-after-last-matching-line` uses the Daily Note `Line Pattern` from Web configuration and does not accept request-body overrides:
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/headings/insert-after-last-matching-line \
@@ -172,14 +176,14 @@ curl -X POST http://localhost:8787/v1/api/headings/insert-after-last-matching-li
   -H "Content-Type: application/json" \
   -d '{
     "path": "Daily/2026-05-13.md",
-    "heading": "下午",
-    "content": "[16:21] 在折腾 Obsidian 自动化"
+    "heading": "Afternoon",
+    "content": "[16:21] Working on Obsidian automation"
   }'
 ```
 
 ### Daily
 
-这是 Coze 写日记最推荐的接口。Coze 只传处理后的正文，本服务根据配置里的时区和时段决定写入哪个 heading。
+This is the recommended endpoint for Coze journal writes. Coze only sends processed text; VaultEcho chooses the target heading from the configured timezone and slots.
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/daily/append-by-time \
@@ -187,12 +191,12 @@ curl -X POST http://localhost:8787/v1/api/daily/append-by-time \
   -H "Content-Type: application/json" \
   -d '{
     "at": "2026-05-13T16:21:00+08:00",
-    "content": "在折腾 Obsidian 的多人日记录云端处理自动化方案，嘿嘿",
+    "content": "Working on Obsidian automation",
     "idempotencyKey": "daily-20260513-1621"
   }'
 ```
 
-如果 `16:21` 命中 `下午`，会插到 `## 下午` 下最后一条 `[HH:mm]` 行之后。
+If `16:21` matches `Afternoon`, the entry is inserted below the final `[HH:mm]` line under `## Afternoon`.
 
 ### Frontmatter
 
@@ -207,7 +211,7 @@ curl -X POST http://localhost:8787/v1/api/frontmatter/set \
   }'
 ```
 
-支持：
+Supported:
 
 - `frontmatter/get`
 - `frontmatter/set`
@@ -224,7 +228,7 @@ curl http://localhost:8787/v1/api/tags/list \
   -H "Authorization: Bearer change-me"
 ```
 
-语义搜索需要先在 Web UI 配置 embedding，并重建索引：
+Semantic search requires embedding configuration in the Web UI and a rebuilt index:
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/index/rebuild \
@@ -235,12 +239,12 @@ curl -X POST http://localhost:8787/v1/api/index/rebuild \
 curl -X POST http://localhost:8787/v1/api/search/semantic \
   -H "Authorization: Bearer change-me" \
   -H "Content-Type: application/json" \
-  -d '{ "query": "最近我在思考的 Obsidian 自动化方案", "limit": 5 }'
+  -d '{ "query": "Obsidian automation ideas I have been exploring recently", "limit": 5 }'
 ```
 
 ### Batch
 
-需要一次请求做多步操作时，用 `batch`，不要传可执行脚本。
+Use `batch` when one request needs multiple operations. Do not pass executable scripts.
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/batch \
@@ -265,7 +269,7 @@ curl -X POST http://localhost:8787/v1/api/batch \
 
 ### Post Script
 
-`script` 参数保留为受限 JSON DSL，只能调用白名单 operation，不能执行任意 JavaScript。
+The `script` parameter is a restricted JSON DSL. It can only call allowlisted operations and cannot execute arbitrary JavaScript.
 
 ```bash
 SCRIPT=$(node -e 'process.stdout.write(encodeURIComponent(JSON.stringify({
@@ -277,14 +281,14 @@ SCRIPT=$(node -e 'process.stdout.write(encodeURIComponent(JSON.stringify({
 curl -X POST "http://localhost:8787/v1/api/files/create?path=Ideas/script-demo.md&script=$SCRIPT" \
   -H "Authorization: Bearer change-me" \
   -H "Content-Type: text/plain" \
-  --data "主请求正文"
+  --data "Primary request body"
 ```
 
-`script=fs.rmSync(...)` 这类可执行代码会被拒绝。原因是它会变成远程代码执行，不能靠“cwd 限在 Vault”保证安全。
+Executable payloads such as `script=fs.rmSync(...)` are rejected. Allowing them would create remote code execution, and restricting `cwd` to the Vault would not make that safe.
 
 ### URI Compatibility
 
-需要消费 Obsidian URI 时，走统一命名空间里的 `uri/execute`：
+To consume Obsidian URI input, use `uri/execute` under the unified namespace:
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/uri/execute \
@@ -297,17 +301,17 @@ curl -X POST http://localhost:8787/v1/api/uri/execute \
 
 ### Unsupported Desktop Features
 
-`obsidian-local-rest-api` 可以调用桌面 Obsidian 的 `workspace`、`commands`、`metadataCache` 和插件运行时。Headless 服务没有这些对象，所以这些能力不会伪装成功：
+`obsidian-local-rest-api` can call desktop Obsidian's `workspace`, `commands`, `metadataCache`, and plugin runtime. A Headless filesystem service does not have those objects, so these features are not faked as successful:
 
 - active file
 - command palette / execute command
 - open file in Obsidian UI
 - Dataview DQL / JsonLogic
 
-## 安全边界
+## Security Boundary
 
-- 路径只能是 Vault 内的相对路径，拒绝绝对路径和 `../`。
-- 默认只允许写入 `Inbox`、`Notes`、`Ideas`、`Projects`、`Daily`、`Attachments`、`Archive`。
-- 每个写入请求必须带 Bearer Token。
-- 支持 `idempotencyKey`，避免 Coze 或 webhook 重试导致重复写入。
-- 同一进程内按目标文件串行写入，避免并发修改同一篇日记。
+- Paths must be Vault-relative. Absolute paths and `../` are rejected.
+- By default, writes are only allowed under `Inbox`, `Notes`, `Ideas`, `Projects`, `Daily`, `Attachments`, and `Archive`.
+- Every write request must include a Bearer token.
+- `idempotencyKey` is supported to avoid duplicate writes when Coze or webhooks retry.
+- Writes to the same target file are serialized within one process, reducing concurrent daily-note conflicts.

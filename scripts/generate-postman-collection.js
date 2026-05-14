@@ -83,9 +83,9 @@ const collection = {
             lineFormat: "[{{HH:mm}}] {{content}}",
             timeZone: "Asia/Shanghai",
             slots: [
-              { heading: "上午", start: "05:00", end: "11:59" },
-              { heading: "下午", start: "12:00", end: "17:59" },
-              { heading: "晚上", start: "18:00", end: "04:59" }
+              { heading: "Morning", start: "05:00", end: "11:59" },
+              { heading: "Afternoon", start: "12:00", end: "17:59" },
+              { heading: "Evening", start: "18:00", end: "04:59" }
             ]
           }
         }
@@ -111,7 +111,7 @@ const collection = {
         description: "Creates a daily note skeleton with morning/afternoon/evening headings.",
         body: {
           path: "{{dailyNote}}",
-          content: "## 上午\n\n## 下午\n[16:18] Existing line\n\n## 晚上\n"
+          content: "## Morning\n\n## Afternoon\n[16:18] Existing line\n\n## Evening\n"
         }
       })
     ]),
@@ -215,7 +215,7 @@ const collection = {
         description: "Uses configured dailyNote.linePattern. Request-level linePattern is intentionally ignored.",
         body: {
           path: "{{dailyNote}}",
-          heading: "下午",
+          heading: "Afternoon",
           content: "[16:21] Inserted after the final timestamp line"
         }
       })
@@ -281,7 +281,7 @@ const collection = {
       apiRequest("Search Semantic", "POST", "/v1/api/search/semantic", {
         description: "Requires embedding config to be enabled and index to be built.",
         body: {
-          query: "最近我在思考的 Obsidian 自动化方案",
+          query: "Obsidian automation ideas I have been exploring recently",
           limit: 5
         }
       }),

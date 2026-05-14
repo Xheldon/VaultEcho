@@ -1,7 +1,7 @@
 export function buildDailyWrite(operation, dailyNote) {
   const parts = getDateTimeParts(operation.at || new Date(), dailyNote.timeZone);
   const slot = pickTimeSlot(dailyNote.slots, parts.minutesOfDay) || {
-    heading: dailyNote.fallbackHeading || "未分组"
+    heading: dailyNote.fallbackHeading || "Unsorted"
   };
   const content = normalizeContent(operation.content);
   const templateVars = { ...parts, content };

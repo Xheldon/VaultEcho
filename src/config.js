@@ -20,9 +20,9 @@ const DEFAULT_DAILY_NOTE = {
   lineFormat: "[{{HH:mm}}] {{content}}",
   timeZone: "Asia/Shanghai",
   slots: [
-    { heading: "上午", start: "05:00", end: "11:59" },
-    { heading: "下午", start: "12:00", end: "17:59" },
-    { heading: "晚上", start: "18:00", end: "04:59" }
+    { heading: "Morning", start: "05:00", end: "11:59" },
+    { heading: "Afternoon", start: "12:00", end: "17:59" },
+    { heading: "Evening", start: "18:00", end: "04:59" }
   ]
 };
 

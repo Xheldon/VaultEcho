@@ -160,7 +160,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vaultRoot\": \"/vault\",\n  \"dataDir\": \"/data\",\n  \"allowedDirs\": [\n    \"Inbox\",\n    \"Notes\",\n    \"Ideas\",\n    \"Projects\",\n    \"Daily\",\n    \"Templates\",\n    \"Attachments\",\n    \"Archive\"\n  ],\n  \"maxJsonBodyBytes\": 1048576,\n  \"attachments\": {\n    \"imageDir\": \"Attachments/Images\",\n    \"audioDir\": \"Attachments/Audio\"\n  },\n  \"embedding\": {\n    \"enabled\": false,\n    \"provider\": \"openai-compatible\",\n    \"baseUrl\": \"https://api.openai.com/v1\",\n    \"model\": \"\",\n    \"dimensions\": 0,\n    \"batchSize\": 16,\n    \"maxChunkChars\": 1600,\n    \"searchLimit\": 8,\n    \"autoIndexAfterWrite\": true,\n    \"autoScanIntervalMinutes\": 0\n  },\n  \"dailyNote\": {\n    \"pathTemplate\": \"Daily/{{yyyy-MM-dd}}.md\",\n    \"headingLevel\": 2,\n    \"linePattern\": \"^\\\\[\\\\d{2}:\\\\d{2}\\\\]\",\n    \"lineFormat\": \"[{{HH:mm}}] {{content}}\",\n    \"timeZone\": \"Asia/Shanghai\",\n    \"slots\": [\n      {\n        \"heading\": \"Morning\",\n        \"start\": \"05:00\",\n        \"end\": \"11:59\"\n      },\n      {\n        \"heading\": \"Afternoon\",\n        \"start\": \"12:00\",\n        \"end\": \"17:59\"\n      },\n      {\n        \"heading\": \"Evening\",\n        \"start\": \"18:00\",\n        \"end\": \"04:59\"\n      }\n    ]\n  }\n}",
+              "raw": "{\n  \"vaultRoot\": \"/vault\",\n  \"dataDir\": \"/data\",\n  \"allowedDirs\": [\n    \"Inbox\",\n    \"Notes\",\n    \"Ideas\",\n    \"Projects\",\n    \"Daily\",\n    \"Templates\",\n    \"Attachments\",\n    \"Archive\"\n  ],\n  \"maxJsonBodyBytes\": 1048576,\n  \"attachments\": {\n    \"imageDir\": \"Attachments/Images\",\n    \"audioDir\": \"Attachments/Audio\"\n  },\n  \"embedding\": {\n    \"enabled\": false,\n    \"provider\": \"openai-compatible\",\n    \"baseUrl\": \"https://api.openai.com/v1\",\n    \"model\": \"\",\n    \"dimensions\": 0,\n    \"batchSize\": 16,\n    \"maxChunkChars\": 1600,\n    \"searchLimit\": 8,\n    \"autoIndexAfterWrite\": true,\n    \"autoScanIntervalMinutes\": 0\n  },\n  \"dailyNote\": {\n    \"pathTemplate\": \"Daily/{{yyyy-MM-dd}}.md\",\n    \"headingLevel\": 2,\n    \"linePattern\": \"^\\\\[\\\\d{2}:\\\\d{2}\\\\]\",\n    \"lineFormat\": \"[{{HH:mm}}] {{content}}\",\n    \"timeZone\": \"Asia/Shanghai\",\n    \"slots\": [\n      {\n        \"heading\": \"上午\",\n        \"start\": \"05:00\",\n        \"end\": \"11:59\"\n      },\n      {\n        \"heading\": \"下午\",\n        \"start\": \"12:00\",\n        \"end\": \"17:59\"\n      },\n      {\n        \"heading\": \"晚上\",\n        \"start\": \"18:00\",\n        \"end\": \"04:59\"\n      }\n    ]\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -234,7 +234,7 @@
             "description": "Creates a daily note skeleton with morning/afternoon/evening headings.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"path\": \"{{dailyNote}}\",\n  \"content\": \"## Morning\\n\\n## Afternoon\\n[16:18] Existing line\\n\\n## Evening\\n\"\n}",
+              "raw": "{\n  \"path\": \"{{dailyNote}}\",\n  \"content\": \"## 上午\\n\\n## 下午\\n[16:18] Existing line\\n\\n## 晚上\\n\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -519,7 +519,7 @@
             "description": "Uses configured dailyNote.linePattern. Request-level linePattern is intentionally ignored.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"path\": \"{{dailyNote}}\",\n  \"heading\": \"Afternoon\",\n  \"content\": \"[16:21] Inserted after the final timestamp line\"\n}",
+              "raw": "{\n  \"path\": \"{{dailyNote}}\",\n  \"heading\": \"下午\",\n  \"content\": \"[16:21] Inserted after the final timestamp line\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -713,7 +713,7 @@
             "description": "Requires embedding config to be enabled and index to be built.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"query\": \"Obsidian automation ideas I have been exploring recently\",\n  \"limit\": 5\n}",
+              "raw": "{\n  \"query\": \"最近我在思考的 Obsidian 自动化方案\",\n  \"limit\": 5\n}",
               "options": {
                 "raw": {
                   "language": "json"

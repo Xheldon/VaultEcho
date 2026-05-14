@@ -5,6 +5,8 @@ import { appendToHeading, insertAfterLastMatchingLine } from "./markdown.js";
 import { buildDailyWrite } from "./time.js";
 
 const fileQueues = new Map();
+const IDEMPOTENCY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+let lastIdempotencyCleanupAt = 0;
 
 export async function executeOperation(config, operation) {
   validateOperation(operation);
@@ -42,6 +44,9 @@ export async function executeOperation(config, operation) {
 
   if (idempotencyKey) {
     await writeIdempotencyRecord(config, idempotencyKey, result);
+    cleanupIdempotencyRecords(config).catch((error) => {
+      console.warn(`Idempotency cleanup failed: ${error.message}`);
+    });
   }
 
   return result;
@@ -281,6 +286,31 @@ async function writeIdempotencyRecord(config, key, result) {
     filePath,
     JSON.stringify({ key, result, createdAt: new Date().toISOString() }, null, 2)
   );
+}
+
+async function cleanupIdempotencyRecords(config) {
+  const now = Date.now();
+  if (now - lastIdempotencyCleanupAt < 60 * 60 * 1000) return;
+  lastIdempotencyCleanupAt = now;
+
+  const dir = path.join(config.dataDir, "idempotency");
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+
+  const cutoff = now - IDEMPOTENCY_TTL_MS;
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const filePath = path.join(dir, entry.name);
+    const stat = await fs.stat(filePath);
+    if (stat.mtimeMs < cutoff) {
+      await fs.unlink(filePath);
+    }
+  }
 }
 
 function idempotencyPath(config, key) {

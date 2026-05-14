@@ -32,10 +32,12 @@ http://localhost:8787/
 
 ```env
 API_TOKEN=change-me
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me-admin
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
 ```
 
-`API_TOKEN` 用于 Coze、快捷指令等外部系统的 Bearer 鉴权。`APP_ENCRYPTION_KEY` 用于加密 Web UI 中保存的 embedding API Key，生成后要保持稳定，不能每次重启都换。Vault Root、Data Dir、Daily Note、Embedding 模型等运行配置在 Web UI 中修改，会保存到 `data/config.json`。本机 `npm start` 会通过 Node 22 的 `--env-file=.env` 自动读取 `.env`。
+`API_TOKEN` 用于 Coze、快捷指令等外部系统的 Bearer 鉴权。`ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 用于 Web 管理页、`/v1/config` 和 `/health` 的 Basic Auth。`APP_ENCRYPTION_KEY` 用于加密 Web UI 中保存的 embedding API Key，生成后要保持稳定，不能每次重启都换。Vault Root、Data Dir、Daily Note、Embedding 模型等运行配置在 Web UI 中修改，会保存到 `data/config.json`。本机 `npm start` 会通过 Node 22 的 `--env-file=.env` 自动读取 `.env`。
 
 如果你已有一个桌面 Obsidian 正在使用的 Vault，建议 Headless 测试使用另一个本地目录：
 
@@ -53,6 +55,7 @@ APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
 
 配置页支持修改：
 
+- 管理页访问：浏览器 Basic Auth，来自 `.env` 中的 `ADMIN_USERNAME` / `ADMIN_PASSWORD`。
 - `Vault Root`: 要写入的本地 Vault 目录。本机默认是项目下的 `vault/`，Docker 默认是 `/vault`。
 - `Data Dir`: 幂等记录和运行配置目录。本机默认是项目下的 `data/`，Docker 默认是 `/data`。
 - `Allowed Top-Level Dirs`: 路径白名单，例如 `Inbox,Notes,Ideas,Projects,Daily,Templates,Attachments,Archive`。
@@ -74,8 +77,11 @@ Embedding 第一版使用远程 API 生成向量，并把索引保存到 `data/i
 
 ```bash
 cp .env.example .env
+mkdir -p vault data obsidian-config
 docker compose up -d --build vaultecho
 ```
+
+Docker Compose 默认只把 VaultEcho 绑定到 `127.0.0.1:8787`。公网访问应通过 Nginx/Caddy/Cloudflare Tunnel 反代进来，不要直接开放 `8787` 到公网。
 
 启用 Obsidian Headless Sync：
 

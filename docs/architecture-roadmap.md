@@ -95,7 +95,7 @@ Context Selector -> Prompt Profile -> Model Provider -> Output Sink
 ## 安全原则
 
 - 外部 VaultEcho API 使用 `Authorization: Bearer <API_TOKEN>`。
-- Web UI 后续应升级为登录页 + HttpOnly session cookie，不和外部 API 调用复用 Bearer Token。
+- Web UI、`/v1/config` 和 `/health` 使用独立 Basic Auth，不和外部 API 调用复用 Bearer Token。
 - AI Provider API Key 必须加密保存。
 - AI 自动写回应保留来源信息，例如 `ai_generated`、`ai_task`、`model`、`source_range`。
 - 高风险输出先写入 `AI/Drafts` 或 `AI/Reports`，低风险输出才自动写回原笔记。

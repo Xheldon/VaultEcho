@@ -1,6 +1,8 @@
 export function buildDailyWrite(operation, dailyNote) {
   const parts = getDateTimeParts(operation.at || new Date(), dailyNote.timeZone);
-  const slot = pickTimeSlot(dailyNote.slots, parts.minutesOfDay);
+  const slot = pickTimeSlot(dailyNote.slots, parts.minutesOfDay) || {
+    heading: dailyNote.fallbackHeading || "未分组"
+  };
   const content = normalizeContent(operation.content);
   const templateVars = { ...parts, content };
 
@@ -66,7 +68,7 @@ export function pickTimeSlot(slots, minutesOfDay) {
     }
   }
 
-  throw new Error("No daily note slot matches the current time");
+  return null;
 }
 
 export function renderTemplate(template, values) {

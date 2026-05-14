@@ -1,0 +1,12 @@
+FROM node:22-alpine
+
+ARG OBSIDIAN_HEADLESS_VERSION=0.0.8
+
+RUN npm install -g "obsidian-headless@${OBSIDIAN_HEADLESS_VERSION}"
+
+ENV HOME=/home/node
+WORKDIR /vault
+
+USER node
+
+CMD ["ob", "sync", "--path", "/vault", "--continuous"]

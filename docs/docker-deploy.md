@@ -32,16 +32,26 @@ cp .env.example .env
 
 ```env
 API_TOKEN=replace-with-a-long-random-token
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace-with-another-long-random-password
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
+OBSIDIAN_HEADLESS_VERSION=0.0.8
 ```
 
-`API_TOKEN` 是外部系统调用 `/v1/api/...` 的 Bearer Token。`APP_ENCRYPTION_KEY` 用来加密 Web UI 里保存的 embedding API Key，必须稳定保存；如果丢失或更换，旧的加密 Key 无法解密。可以用下面的命令生成：
+`API_TOKEN` 是外部系统调用 `/v1/api/...` 的 Bearer Token。`ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 用于 Web 管理页、`/v1/config` 和 `/health` 的 Basic Auth。`APP_ENCRYPTION_KEY` 用来加密 Web UI 里保存的 embedding API Key，必须稳定保存；如果丢失或更换，旧的加密 Key 无法解密。可以用下面的命令生成：
 
 ```bash
 openssl rand -base64 32
 ```
 
 Vault Root、Data Dir、Daily Note 时段规则、Embedding 模型等运行配置不放在 `.env`，启动后进入 Web UI 修改。
+
+在 Linux VPS 上先创建挂载目录；因为容器不再以 root 运行，建议让当前部署用户拥有这些目录：
+
+```bash
+mkdir -p vault data obsidian-config
+sudo chown -R "$(id -u):$(id -g)" vault data obsidian-config
+```
 
 ## 3. 启动写入 API
 
@@ -55,7 +65,7 @@ docker compose up -d --build vaultecho
 http://your-vps-ip:8787/
 ```
 
-在页面中填入 `.env` 里的 `API_TOKEN`，然后检查默认配置：
+浏览器会弹出 Basic Auth 登录框，使用 `.env` 里的 `ADMIN_USERNAME` / `ADMIN_PASSWORD`。登录后检查默认配置：
 
 ```text
 Vault Root: /vault
@@ -125,6 +135,8 @@ docker compose logs -f vaultecho
 docker compose logs -f obsidian-headless
 ```
 
+`obsidian-headless` 不再在容器启动时执行 `npm install -g obsidian-headless`，而是在镜像构建阶段按 `.env` 里的 `OBSIDIAN_HEADLESS_VERSION` 固定安装。升级时先改版本号，再重新 build。
+
 ## 6. 暴露到公网
 
 生产环境至少要满足：
@@ -132,13 +144,55 @@ docker compose logs -f obsidian-headless
 - HTTPS。
 - 强随机 `API_TOKEN`。
 - 不要直接开放 Docker daemon。
+- 不要把 `8787` 直接暴露到公网。
 - 建议通过 Nginx/Caddy/Cloudflare Tunnel 暴露 `vaultecho`。
 - 只允许 Coze 或你自己的自动化服务调用 `/v1/api/...`。
 
-反代只需要转发到：
+`docker-compose.yml` 已经把端口绑定到本机：
 
 ```text
 http://127.0.0.1:8787
+```
+
+Nginx 保持最小配置即可，使用独立域名，不设置 `default_server`，也不要改 `stream` 配置，这样不会影响 VPS 上的 sing-box：
+
+```nginx
+limit_req_zone $binary_remote_addr zone=vaultecho_api:10m rate=5r/s;
+
+server {
+    listen 443 ssl http2;
+    server_name vault.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/vault.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/vault.example.com/privkey.pem;
+
+    client_max_body_size 10m;
+
+    location /v1/api/ {
+        limit_req zone=vaultecho_api burst=20 nodelay;
+        proxy_pass http://127.0.0.1:8787;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+如果 sing-box 已经占用 `443`，不要让 Nginx 抢端口。可以让 Nginx 监听另一个端口，或用 Cloudflare Tunnel 指向 `http://127.0.0.1:8787`。无论哪种方式，安全边界都保持为：公网只进反代或 Tunnel，源站 `8787` 只允许本机访问。
+
+如果你用 `ufw`，可以额外明确拒绝公网访问源站端口：
+
+```bash
+sudo ufw deny 8787/tcp
 ```
 
 ## 7. 备份和恢复
@@ -155,5 +209,6 @@ http://127.0.0.1:8787
 
 - `vault` 是本地 Obsidian Vault。
 - `data/config.json` 是 Web UI 保存的运行配置。
-- `data/idempotency` 是防重复写入记录。
+- `data/idempotency` 是防重复写入记录，服务会清理 30 天前的记录。
 - `data/index` 是本地 embedding 索引，可删除后重建，但会重新消耗远程 embedding API 调用。
+- `.env` 是服务密钥。它和 `data/config.json` 同机保存时，`APP_ENCRYPTION_KEY` 的主要作用是防止 API Key 被配置文件或日志意外明文泄露，不是防主机入侵。生产上不要把 `.env` 提交到 Git。

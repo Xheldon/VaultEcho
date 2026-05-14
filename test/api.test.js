@@ -139,6 +139,34 @@ test("v1 api rejects non-json executable-looking script", async () => {
   );
 });
 
+test("files/list rejects path traversal even when the first segment is allowed", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+  await fs.mkdir(path.join(root, "vault", "Inbox"), { recursive: true });
+
+  await assert.rejects(
+    executeApiAction(config, "files/list", {
+      path: "Inbox/../../etc"
+    }),
+    /Path traversal is not allowed/
+  );
+});
+
+test("search/simple skips oversized markdown files", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+  const inbox = path.join(root, "vault", "Inbox");
+  await fs.mkdir(inbox, { recursive: true });
+  await fs.writeFile(path.join(inbox, "small.md"), "needle\n", "utf8");
+  await fs.writeFile(path.join(inbox, "large.md"), `${"a".repeat(2 * 1024 * 1024 + 1)}needle\n`, "utf8");
+
+  const result = await executeApiAction(config, "search/simple", {
+    query: "needle"
+  });
+
+  assert.deepEqual(result.result.results.map((item) => item.path), ["Inbox/small.md"]);
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

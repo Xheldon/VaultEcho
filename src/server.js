@@ -1,4 +1,5 @@
 import http from "node:http";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { executeApiAction } from "./api.js";
 import { loadRuntimeConfig, loadServerConfig, publicRuntimeConfig, saveRuntimeConfig } from "./config.js";
@@ -14,10 +15,12 @@ const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
 
     if (request.method === "GET" && ["/", "/admin"].includes(url.pathname)) {
+      requireAdminAuth(serverConfig, request);
       return sendHtml(response, 200, renderAdminPage());
     }
 
     if (request.method === "GET" && url.pathname === "/health") {
+      requireAdminAuth(serverConfig, request);
       const runtimeConfig = await loadRuntimeConfig(serverConfig);
       return sendJson(response, 200, {
         ok: true,
@@ -28,13 +31,13 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/v1/config") {
-      requireAuth(serverConfig, request);
+      requireAdminAuth(serverConfig, request);
       const runtimeConfig = await loadRuntimeConfig(serverConfig);
       return sendJson(response, 200, publicRuntimeConfig(runtimeConfig));
     }
 
     if (request.method === "PUT" && url.pathname === "/v1/config") {
-      requireAuth(serverConfig, request);
+      requireAdminAuth(serverConfig, request);
       const currentConfig = await loadRuntimeConfig(serverConfig);
       const body = await readJsonBody(request, currentConfig.maxJsonBodyBytes);
       const runtimeConfig = await saveRuntimeConfig(serverConfig, body);
@@ -43,9 +46,13 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (url.pathname.startsWith("/v1/api/")) {
-      requireAuth(serverConfig, request);
-      const runtimeConfig = await loadRuntimeConfig(serverConfig);
       const action = decodeURIComponent(url.pathname.slice("/v1/api/".length));
+      if (action.startsWith("index/")) {
+        requireApiOrAdminAuth(serverConfig, request);
+      } else {
+        requireApiAuth(serverConfig, request);
+      }
+      const runtimeConfig = await loadRuntimeConfig(serverConfig);
       const body = ["GET", "DELETE"].includes(request.method)
         ? { json: {}, text: "" }
         : await readAnyBody(request, runtimeConfig.maxJsonBodyBytes);
@@ -64,7 +71,7 @@ const server = http.createServer(async (request, response) => {
     return sendJson(response, 404, { ok: false, error: "Not found" });
   } catch (error) {
     const status = error.statusCode || 400;
-    return sendJson(response, status, { ok: false, error: error.message });
+    return sendJson(response, status, { ok: false, error: error.message }, error.headers);
   }
 });
 
@@ -80,7 +87,7 @@ async function ensureRuntimeDirs(config) {
   await fs.mkdir(config.dataDir, { recursive: true });
 }
 
-function requireAuth(config, request) {
+function requireApiAuth(config, request) {
   if (!config.apiToken) {
     const error = new Error("API_TOKEN is not configured");
     error.statusCode = 500;
@@ -88,11 +95,64 @@ function requireAuth(config, request) {
   }
 
   const expected = `Bearer ${config.apiToken}`;
-  if (request.headers.authorization !== expected) {
+  if (!constantTimeEqual(request.headers.authorization || "", expected)) {
     const error = new Error("Unauthorized");
     error.statusCode = 401;
     throw error;
   }
+}
+
+function requireAdminAuth(config, request) {
+  if (!isAdminAuthorized(config, request)) {
+    const error = new Error("Admin authentication required");
+    error.statusCode = 401;
+    error.headers = {
+      "www-authenticate": 'Basic realm="VaultEcho Admin", charset="UTF-8"'
+    };
+    throw error;
+  }
+}
+
+function requireApiOrAdminAuth(config, request) {
+  try {
+    requireApiAuth(config, request);
+  } catch (apiError) {
+    if (apiError.statusCode !== 401) throw apiError;
+    requireAdminAuth(config, request);
+  }
+}
+
+function isAdminAuthorized(config, request) {
+  if (!config.adminUsername || !config.adminPassword) {
+    const error = new Error("ADMIN_USERNAME and ADMIN_PASSWORD are not configured");
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const authorization = request.headers.authorization || "";
+  if (!authorization.startsWith("Basic ")) return false;
+
+  let decoded = "";
+  try {
+    decoded = Buffer.from(authorization.slice("Basic ".length), "base64").toString("utf8");
+  } catch {
+    return false;
+  }
+
+  const separator = decoded.indexOf(":");
+  if (separator === -1) return false;
+  const username = decoded.slice(0, separator);
+  const password = decoded.slice(separator + 1);
+  return (
+    constantTimeEqual(username, config.adminUsername) &&
+    constantTimeEqual(password, config.adminPassword)
+  );
+}
+
+function constantTimeEqual(left, right) {
+  const leftDigest = crypto.createHash("sha256").update(String(left)).digest();
+  const rightDigest = crypto.createHash("sha256").update(String(right)).digest();
+  return crypto.timingSafeEqual(leftDigest, rightDigest);
 }
 
 async function readAnyBody(request, maxBytes) {
@@ -141,9 +201,10 @@ async function readRawBody(request, maxBytes) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function sendJson(response, statusCode, payload) {
+function sendJson(response, statusCode, payload, headers = {}) {
   response.writeHead(statusCode, {
-    "content-type": "application/json; charset=utf-8"
+    "content-type": "application/json; charset=utf-8",
+    ...headers
   });
   response.end(JSON.stringify(payload, null, 2));
 }

@@ -47,6 +47,8 @@ export function loadServerConfig(env = process.env, cwd = process.cwd()) {
   return {
     port: Number(env.PORT || 8787),
     apiToken: env.API_TOKEN || "",
+    adminUsername: env.ADMIN_USERNAME || "admin",
+    adminPassword: env.ADMIN_PASSWORD || "",
     appEncryptionKey: env.APP_ENCRYPTION_KEY || "",
     configPath: path.resolve(env.CONFIG_PATH || path.join(defaultDataDir, "config.json")),
     defaultDataDir,

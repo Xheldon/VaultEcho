@@ -178,18 +178,14 @@ export function renderAdminPage() {
     <header>
       <div>
         <h1>VaultEcho</h1>
-        <p>Capture anything. Let your vault answer back. API Token 只保存在当前浏览器，用于调用配置接口。</p>
+        <p>Capture anything. Let your vault answer back. 管理页使用 Basic Auth，外部 API 继续使用 Bearer Token。</p>
       </div>
       <button id="loadButton">载入配置</button>
     </header>
 
     <section>
       <h2>访问</h2>
-      <label>
-        API Token
-        <input id="apiToken" type="password" autocomplete="off" placeholder="Bearer Token" />
-        <span class="hint">来自服务端环境变量 <code>API_TOKEN</code>，不会写入配置文件。</span>
-      </label>
+      <p>本页面由 <code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD</code> 保护。<code>API_TOKEN</code> 只用于 Coze、快捷指令等外部系统调用 <code>/v1/api/...</code>，不会写入或存入浏览器。</p>
     </section>
 
     <section>
@@ -324,27 +320,19 @@ export function renderAdminPage() {
   <script>
     const $ = (id) => document.getElementById(id);
     const status = $("status");
-    const tokenInput = $("apiToken");
     const slotsBody = $("slotsBody");
-
-    tokenInput.value = localStorage.getItem("vaultEchoToken") || "";
 
     $("loadButton").addEventListener("click", loadConfig);
     $("saveButton").addEventListener("click", saveConfig);
     $("addSlotButton").addEventListener("click", () => addSlot({ heading: "", start: "09:00", end: "11:59" }));
     $("indexStatusButton").addEventListener("click", loadIndexStatus);
     $("rebuildIndexButton").addEventListener("click", rebuildIndex);
-    tokenInput.addEventListener("change", () => {
-      localStorage.setItem("vaultEchoToken", tokenInput.value.trim());
-    });
 
     async function request(path, options = {}) {
-      const token = tokenInput.value.trim();
-      localStorage.setItem("vaultEchoToken", token);
       const response = await fetch(path, {
         ...options,
+        credentials: "same-origin",
         headers: {
-          "Authorization": "Bearer " + token,
           "Content-Type": "application/json",
           ...(options.headers || {})
         }

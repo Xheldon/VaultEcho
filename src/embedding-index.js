@@ -7,9 +7,11 @@ const INDEX_VERSION = 1;
 const INDEX_FILE = "embeddings.json";
 const DEFAULT_BATCH_SIZE = 16;
 const DEFAULT_MAX_CHUNK_CHARS = 1600;
+const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_SEARCH_LIMIT = 8;
 const MAX_SEARCH_LIMIT = 50;
 const queuedFiles = new Map();
+let rebuildQueue = Promise.resolve();
 
 export function isEmbeddingReady(config) {
   try {
@@ -26,6 +28,7 @@ export function isEmbeddingReady(config) {
 
 export async function getEmbeddingIndexStatus(config) {
   const store = await readIndexStore(config);
+  const errors = await readIndexErrors(config);
   return {
     ok: true,
     operation: "index/status",
@@ -37,11 +40,19 @@ export async function getEmbeddingIndexStatus(config) {
     files: Object.keys(store.files).length,
     chunks: store.chunks.length,
     updatedAt: store.updatedAt || "",
+    lastError: errors[0] || null,
     signatureMatches: store.signature === embeddingSignature(config)
   };
 }
 
 export async function rebuildEmbeddingIndex(config, options = {}) {
+  const previous = rebuildQueue.catch(() => {});
+  const current = previous.then(() => rebuildEmbeddingIndexNow(config, options));
+  rebuildQueue = current.catch(() => {});
+  return current;
+}
+
+async function rebuildEmbeddingIndexNow(config, options = {}) {
   ensureEmbeddingReady(config);
   const existing = await readIndexStore(config);
   const signature = embeddingSignature(config);
@@ -54,6 +65,9 @@ export async function rebuildEmbeddingIndex(config, options = {}) {
 
   for (const filePath of files) {
     const relativePath = toVaultRelativePath(config, filePath);
+    if (!(await canReadMarkdownForIndex(filePath))) {
+      continue;
+    }
     const content = await fs.readFile(filePath, "utf8");
     const hash = sha256(content);
     const previous = existing.files[relativePath];
@@ -125,6 +139,17 @@ export async function indexEmbeddingFile(config, relativePath) {
     }));
     return { ok: true, operation: "index/file", path: normalizedPath, removed: true };
   }
+  if (!(await canReadMarkdownForIndex(absolutePath))) {
+    delete nextFiles[normalizedPath];
+    await writeIndexStore(config, normalizeIndexStore({
+      ...store,
+      signature,
+      updatedAt: new Date().toISOString(),
+      files: nextFiles,
+      chunks: chunksWithoutFile
+    }));
+    return { ok: true, operation: "index/file", path: normalizedPath, skipped: true, reason: "File is too large" };
+  }
 
   const content = await fs.readFile(absolutePath, "utf8");
   const hash = sha256(content);
@@ -163,6 +188,11 @@ export function enqueueEmbeddingIndex(config, relativePath) {
     .then(() => indexEmbeddingFile(config, normalizedPath))
     .catch((error) => {
       console.warn(`Embedding index failed for ${normalizedPath}: ${error.message}`);
+      return writeIndexError(config, {
+        path: normalizedPath,
+        error: error.message,
+        at: new Date().toISOString()
+      });
     });
   queuedFiles.set(normalizedPath, current);
   current.finally(() => {
@@ -470,6 +500,29 @@ function indexStorePath(config) {
   return path.join(config.dataDir, "index", INDEX_FILE);
 }
 
+async function readIndexErrors(config) {
+  try {
+    const payload = JSON.parse(await fs.readFile(indexErrorsPath(config), "utf8"));
+    return Array.isArray(payload.errors) ? payload.errors : [];
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function writeIndexError(config, errorRecord) {
+  const errors = [errorRecord, ...(await readIndexErrors(config))].slice(0, 50);
+  const filePath = indexErrorsPath(config);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tempPath, `${JSON.stringify({ errors }, null, 2)}\n`, "utf8");
+  await fs.rename(tempPath, filePath);
+}
+
+function indexErrorsPath(config) {
+  return path.join(config.dataDir, "index", "embedding-errors.json");
+}
+
 function normalizeVaultRelativePath(inputPath) {
   if (!inputPath || typeof inputPath !== "string") {
     throw new Error("path is required");
@@ -508,6 +561,20 @@ async function fileExists(filePath) {
     return true;
   } catch (error) {
     if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function canReadMarkdownForIndex(filePath) {
+  const stat = await statIfExists(filePath);
+  return Boolean(stat?.isFile() && stat.size <= DEFAULT_MAX_FILE_BYTES);
+}
+
+async function statIfExists(filePath) {
+  try {
+    return await fs.stat(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
     throw error;
   }
 }

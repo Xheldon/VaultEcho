@@ -25,6 +25,7 @@ import { executeOperation, resolveVaultPath } from "./vault.js";
 
 const DEFAULT_FILE_DIR = "Inbox";
 const MAX_BATCH_OPERATIONS = 50;
+const MAX_MARKDOWN_SCAN_BYTES = 2 * 1024 * 1024;
 export const API_HANDLER_ROUTES = [
   "files/create",
   "files/read",
@@ -213,23 +214,36 @@ async function deleteFile(config, params) {
 
 async function listFiles(config, params) {
   const targetPath = normalizeApiPath(config, params, { requireFile: false, defaultPath: "" });
-  const absolutePath = path.join(config.vaultRoot, targetPath);
-  const stat = await statIfExists(absolutePath);
+  if (!targetPath) {
+    const entries = [];
+    for (const dir of config.allowedDirs) {
+      const stat = await statIfExists(path.join(config.vaultRoot, dir));
+      if (stat) {
+        entries.push({ path: dir, type: stat.isDirectory() ? "directory" : "file" });
+      }
+    }
+    return { ok: true, operation: "files/list", path: "", entries };
+  }
+
+  const target = targetPath
+    ? resolveVaultPath(config, targetPath)
+    : { relativePath: "", absolutePath: config.vaultRoot };
+  const stat = await statIfExists(target.absolutePath);
   if (!stat) {
     return { ok: false, operation: "files/list", path: targetPath, error: "Path not found" };
   }
 
   if (stat.isFile()) {
-    return { ok: true, operation: "files/list", path: targetPath, entries: [{ path: targetPath, type: "file" }] };
+    return { ok: true, operation: "files/list", path: target.relativePath, entries: [{ path: target.relativePath, type: "file" }] };
   }
 
-  const entries = await fs.readdir(absolutePath, { withFileTypes: true });
+  const entries = await fs.readdir(target.absolutePath, { withFileTypes: true });
   return {
     ok: true,
     operation: "files/list",
-    path: targetPath,
+    path: target.relativePath,
     entries: entries.map((entry) => ({
-      path: path.posix.join(targetPath, entry.name),
+      path: path.posix.join(target.relativePath, entry.name),
       type: entry.isDirectory() ? "directory" : "file"
     }))
   };
@@ -322,6 +336,9 @@ async function searchSimple(config, params) {
     const root = path.join(config.vaultRoot, dir);
     for await (const filePath of walkMarkdown(root)) {
       const relativePath = path.relative(config.vaultRoot, filePath).replaceAll(path.sep, "/");
+      if (!(await canReadMarkdownForScan(filePath))) {
+        continue;
+      }
       if (!query) {
         results.push({ path: relativePath });
       } else {
@@ -346,6 +363,9 @@ async function listTags(config) {
   for (const dir of config.allowedDirs) {
     const root = path.join(config.vaultRoot, dir);
     for await (const filePath of walkMarkdown(root)) {
+      if (!(await canReadMarkdownForScan(filePath))) {
+        continue;
+      }
       const content = await fs.readFile(filePath, "utf8");
       for (const match of content.matchAll(tagPattern)) {
         const tag = `#${match[2]}`;
@@ -361,6 +381,11 @@ async function listTags(config) {
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([tag, count]) => ({ tag, count }))
   };
+}
+
+async function canReadMarkdownForScan(filePath) {
+  const stat = await statIfExists(filePath);
+  return Boolean(stat?.isFile() && stat.size <= MAX_MARKDOWN_SCAN_BYTES);
 }
 
 async function executeBatch(config, params) {

@@ -4,6 +4,7 @@ import { executeOperation, resolveVaultPath } from "./vault.js";
 import { getDateTimeParts, renderTemplate } from "./time.js";
 
 const DEFAULT_NEW_NOTE_DIR = "Inbox";
+const MAX_MARKDOWN_SCAN_BYTES = 2 * 1024 * 1024;
 
 export async function executeObsidianUri(config, input) {
   const request = normalizeUriRequest(input);
@@ -242,6 +243,9 @@ async function handleSearch(config, params) {
     const root = path.join(config.vaultRoot, dir);
     for await (const filePath of walkMarkdown(root)) {
       const relativePath = path.relative(config.vaultRoot, filePath).replaceAll(path.sep, "/");
+      if (!(await canReadMarkdownForScan(filePath))) {
+        continue;
+      }
       if (!query) {
         results.push({ path: relativePath });
       } else {
@@ -289,12 +293,20 @@ function resolveUriTarget(config, params, options) {
 }
 
 function absolutePathToVaultRelative(config, inputPath) {
-  const absolutePath = path.resolve(inputPath);
+  const normalized = String(inputPath || "").replaceAll("\\", "/");
+  const absolutePath = path.isAbsolute(normalized)
+    ? path.resolve(normalized)
+    : path.resolve(config.vaultRoot, normalized);
   const relativePath = path.relative(config.vaultRoot, absolutePath);
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     throw new Error("URI path must be inside the configured vault root");
   }
   return relativePath.replaceAll(path.sep, "/");
+}
+
+async function canReadMarkdownForScan(filePath) {
+  const stat = await statIfExists(filePath);
+  return Boolean(stat?.isFile() && stat.size <= MAX_MARKDOWN_SCAN_BYTES);
 }
 
 function splitFragment(file) {
@@ -356,6 +368,15 @@ async function exists(filePath) {
     return true;
   } catch (error) {
     if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function statIfExists(filePath) {
+  try {
+    return await fs.stat(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
     throw error;
   }
 }

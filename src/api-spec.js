@@ -245,7 +245,7 @@ export const API_ENDPOINTS = [
     params: [
       ["path | filename | file | name", "目标 Markdown 文件。"],
       ["heading", "不带 # 的 heading 文本。"],
-      ["linePattern", "JavaScript 正则字符串。可默认使用 Daily Note 配置中的正则。"],
+      ["linePattern", "受限 JavaScript 正则字符串。默认使用 Daily Note 配置中的正则；服务会拒绝过长、回溯风险较高的模式。"],
       ["content | text", "要插入的内容。"]
     ],
     curl: `curl -X POST http://localhost:8787/v1/api/headings/insert-after-last-matching-line \\

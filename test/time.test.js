@@ -35,3 +35,20 @@ test("pickTimeSlot supports a slot that crosses midnight", () => {
   const slot = pickTimeSlot(dailyNote.slots, 2 * 60 + 10);
   assert.equal(slot.heading, "晚上");
 });
+
+test("buildDailyWrite falls back when custom slots do not cover the current time", () => {
+  const result = buildDailyWrite(
+    {
+      operation: "append_daily_by_time",
+      at: "2026-05-13T16:21:00+08:00",
+      content: "没有匹配时段"
+    },
+    {
+      ...dailyNote,
+      slots: [{ heading: "上午", start: "05:00", end: "11:59" }]
+    }
+  );
+
+  assert.equal(result.heading, "未分组");
+  assert.equal(result.slot, "未分组");
+});

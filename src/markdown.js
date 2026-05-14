@@ -83,7 +83,7 @@ export function insertAfterLastMatchingLine(markdown, options) {
     content,
     ifHeadingMissing = "create"
   } = options;
-  const regex = new RegExp(linePattern);
+  const regex = createSafeLineRegex(linePattern);
   const lines = splitLines(markdown);
   let section = findHeadingSection(lines, heading, headingLevel);
 
@@ -100,7 +100,7 @@ export function insertAfterLastMatchingLine(markdown, options) {
 
   let insertAt = section.start + 1;
   for (let index = section.start + 1; index < section.end; index += 1) {
-    if (regex.test(lines[index])) {
+    if (regex.test(lines[index].slice(0, 1000))) {
       insertAt = index + 1;
     }
   }
@@ -108,6 +108,27 @@ export function insertAfterLastMatchingLine(markdown, options) {
   const next = [...lines];
   next.splice(insertAt, 0, content);
   return joinLines(next);
+}
+
+export function createSafeLineRegex(pattern) {
+  if (typeof pattern !== "string" || !pattern) {
+    throw new Error("linePattern is required");
+  }
+  if (pattern.length > 120) {
+    throw new Error("linePattern is too long");
+  }
+  if (/\\[1-9]/.test(pattern) || /\(\?<[!=]/.test(pattern)) {
+    throw new Error("linePattern cannot use backreferences or lookbehind");
+  }
+  if (/\([^)]*[+*][^)]*\)\s*(?:[+*]|\{\d+,?\d*\})/.test(pattern)) {
+    throw new Error("linePattern contains nested repetition");
+  }
+
+  try {
+    return new RegExp(pattern);
+  } catch (error) {
+    throw new Error(`Invalid linePattern: ${error.message}`);
+  }
 }
 
 export function getFrontmatterField(markdown, key) {

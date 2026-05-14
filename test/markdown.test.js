@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendToHeading, insertAfterLastMatchingLine } from "../src/markdown.js";
+import { appendToHeading, createSafeLineRegex, insertAfterLastMatchingLine } from "../src/markdown.js";
 
 test("insertAfterLastMatchingLine inserts below the final timestamp in a heading", () => {
   const input = "# Daily\n\n## 中午\n[12:01] A\n[12:20] B\n\n## 晚上\nLater\n";
@@ -32,4 +32,8 @@ test("appendToHeading creates the heading when it is missing", () => {
   });
 
   assert.equal(output, "# Daily\n\n## 中午\n[12:34] New\n");
+});
+
+test("createSafeLineRegex rejects nested repetition patterns", () => {
+  assert.throws(() => createSafeLineRegex("(a+)+$"), /nested repetition/);
 });

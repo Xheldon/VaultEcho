@@ -6,6 +6,7 @@ import { buildDailyWrite } from "./time.js";
 
 const fileQueues = new Map();
 const IDEMPOTENCY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_MARKDOWN_PATCH_BYTES = 10 * 1024 * 1024;
 let lastIdempotencyCleanupAt = 0;
 
 export async function executeOperation(config, operation) {
@@ -53,6 +54,13 @@ export async function executeOperation(config, operation) {
 }
 
 function prepareOperation(config, operation) {
+  if (operation.operation === "insert_after_last_matching_line") {
+    return {
+      ...operation,
+      linePattern: config.dailyNote.linePattern
+    };
+  }
+
   if (operation.operation !== "append_daily_by_time") return operation;
 
   const dailyWrite = buildDailyWrite(operation, config.dailyNote);
@@ -137,6 +145,7 @@ async function appendFile(targetPath, operation) {
 
 async function prependFile(targetPath, operation) {
   const content = normalizeString(operation.content);
+  await ensurePatchableMarkdownFile(targetPath.absolutePath);
   const original = await readTextIfExists(targetPath.absolutePath);
   await fs.mkdir(path.dirname(targetPath.absolutePath), { recursive: true });
   await atomicWrite(targetPath.absolutePath, `${content}${original}`);
@@ -145,6 +154,7 @@ async function prependFile(targetPath, operation) {
 
 async function patchHeading(targetPath, operation, transform) {
   ensureMarkdownPath(targetPath.relativePath);
+  await ensurePatchableMarkdownFile(targetPath.absolutePath);
   const original = await readTextIfExists(targetPath.absolutePath);
   const next = transform(original, {
     heading: operation.heading,
@@ -310,6 +320,34 @@ async function cleanupIdempotencyRecords(config) {
     if (stat.mtimeMs < cutoff) {
       await fs.unlink(filePath);
     }
+  }
+}
+
+export function startIdempotencyCleanup(configProvider) {
+  const run = async () => {
+    try {
+      await cleanupIdempotencyRecords(await configProvider());
+    } catch (error) {
+      console.warn(`Idempotency cleanup failed: ${error.message}`);
+    }
+  };
+  setInterval(run, 60 * 60 * 1000).unref();
+  run();
+}
+
+async function ensurePatchableMarkdownFile(filePath) {
+  const stat = await statIfExists(filePath);
+  if (stat?.isFile() && stat.size > MAX_MARKDOWN_PATCH_BYTES) {
+    throw new Error(`Markdown file is too large to patch: max ${MAX_MARKDOWN_PATCH_BYTES} bytes`);
+  }
+}
+
+async function statIfExists(filePath) {
+  try {
+    return await fs.stat(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
   }
 }
 

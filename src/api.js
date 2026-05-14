@@ -14,6 +14,7 @@ import {
 import { executeObsidianUri } from "./obsidian-uri.js";
 import { executeVaultScript } from "./vault-script.js";
 import {
+  clearEmbeddingIndexErrors,
   enqueueEmbeddingIndex,
   getEmbeddingIndexStatus,
   indexEmbeddingFile,
@@ -26,6 +27,7 @@ import { executeOperation, resolveVaultPath } from "./vault.js";
 const DEFAULT_FILE_DIR = "Inbox";
 const MAX_BATCH_OPERATIONS = 50;
 const MAX_MARKDOWN_SCAN_BYTES = 2 * 1024 * 1024;
+const MAX_MARKDOWN_PATCH_BYTES = 10 * 1024 * 1024;
 export const API_HANDLER_ROUTES = [
   "files/create",
   "files/read",
@@ -47,6 +49,7 @@ export const API_HANDLER_ROUTES = [
   "search/semantic",
   "tags/list",
   "index/status",
+  "index/errors/clear",
   "index/rebuild",
   "index/file",
   "batch",
@@ -126,6 +129,8 @@ async function executePrimary(config, route, params) {
       return listTags(config);
     case "index/status":
       return getEmbeddingIndexStatus(config);
+    case "index/errors/clear":
+      return clearEmbeddingIndexErrors(config);
     case "index/rebuild":
       return rebuildEmbeddingIndex(config, { force: truthy(params.force) });
     case "index/file":
@@ -270,11 +275,12 @@ async function readHeading(config, params) {
 
 async function patchHeading(config, params, operation) {
   const target = resolveVaultPath(config, normalizeApiFilePath(config, params));
+  await ensurePatchableMarkdownFile(target.absolutePath);
   const original = await readTextIfExists(target.absolutePath) ?? "";
   const options = {
     heading: required(params.heading, "heading"),
     headingLevel: Number(params.headingLevel || 2),
-    linePattern: params.linePattern || config.dailyNote.linePattern,
+    linePattern: config.dailyNote.linePattern,
     content: contentOf(params),
     ifHeadingMissing: params.ifHeadingMissing || "create"
   };
@@ -303,6 +309,7 @@ async function getFrontmatter(config, params) {
 
 async function setFrontmatter(config, params) {
   const target = resolveVaultPath(config, normalizeApiFilePath(config, params));
+  await ensurePatchableMarkdownFile(target.absolutePath);
   const original = await readTextIfExists(target.absolutePath) ?? "";
   const key = required(params.key || params.field, "key");
   const value = params.value ?? contentOf(params);
@@ -386,6 +393,13 @@ async function listTags(config) {
 async function canReadMarkdownForScan(filePath) {
   const stat = await statIfExists(filePath);
   return Boolean(stat?.isFile() && stat.size <= MAX_MARKDOWN_SCAN_BYTES);
+}
+
+async function ensurePatchableMarkdownFile(filePath) {
+  const stat = await statIfExists(filePath);
+  if (stat?.isFile() && stat.size > MAX_MARKDOWN_PATCH_BYTES) {
+    throw new Error(`Markdown file is too large to patch: max ${MAX_MARKDOWN_PATCH_BYTES} bytes`);
+  }
 }
 
 async function executeBatch(config, params) {

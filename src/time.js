@@ -10,7 +10,7 @@ export function buildDailyWrite(operation, dailyNote) {
     path: renderTemplate(operation.pathTemplate || dailyNote.pathTemplate, templateVars),
     heading: operation.heading || slot.heading,
     headingLevel: operation.headingLevel || dailyNote.headingLevel,
-    linePattern: operation.linePattern || dailyNote.linePattern,
+    linePattern: dailyNote.linePattern,
     content: renderTemplate(operation.lineFormat || dailyNote.lineFormat, templateVars),
     timestamp: `${parts.HH}:${parts.mm}`,
     slot: slot.heading,

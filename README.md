@@ -35,9 +35,12 @@ API_TOKEN=change-me
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-me-admin
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
+BIND_HOST=127.0.0.1
 ```
 
 `API_TOKEN` 用于 Coze、快捷指令等外部系统的 Bearer 鉴权。`ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 用于 Web 管理页、`/v1/config` 和 `/health` 的 Basic Auth。`APP_ENCRYPTION_KEY` 用于加密 Web UI 中保存的 embedding API Key，生成后要保持稳定，不能每次重启都换。Vault Root、Data Dir、Daily Note、Embedding 模型等运行配置在 Web UI 中修改，会保存到 `data/config.json`。本机 `npm start` 会通过 Node 22 的 `--env-file=.env` 自动读取 `.env`。
+
+`BIND_HOST` 默认是 `127.0.0.1`，直接在 VPS 上 `npm start` 时不会裸露到公网。Docker Compose 会在容器内覆盖为 `0.0.0.0`，但宿主机端口仍只绑定到 `127.0.0.1:8787`。
 
 如果你已有一个桌面 Obsidian 正在使用的 Vault，建议 Headless 测试使用另一个本地目录：
 
@@ -157,7 +160,7 @@ curl -X POST http://localhost:8787/v1/api/headings/append \
 - `headings/replace`
 - `headings/insert-after-last-matching-line`
 
-`insert-after-last-matching-line` 适合你的日记格式：
+`insert-after-last-matching-line` 使用 Web 配置里的 Daily Note `Line Pattern`，不接受请求体覆盖：
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/headings/insert-after-last-matching-line \
@@ -166,7 +169,6 @@ curl -X POST http://localhost:8787/v1/api/headings/insert-after-last-matching-li
   -d '{
     "path": "Daily/2026-05-13.md",
     "heading": "下午",
-    "linePattern": "^\\[\\d{2}:\\d{2}\\]",
     "content": "[16:21] 在折腾 Obsidian 自动化"
   }'
 ```

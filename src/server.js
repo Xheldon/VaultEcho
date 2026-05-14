@@ -4,11 +4,12 @@ import fs from "node:fs/promises";
 import { executeApiAction } from "./api.js";
 import { loadRuntimeConfig, loadServerConfig, publicRuntimeConfig, saveRuntimeConfig } from "./config.js";
 import { startEmbeddingAutoScan } from "./embedding-index.js";
+import { startIdempotencyCleanup } from "./vault.js";
 import { renderAdminPage } from "./ui.js";
 
 const serverConfig = loadServerConfig();
-const initialConfig = await loadRuntimeConfig(serverConfig);
-await ensureRuntimeDirs(initialConfig);
+let runtimeConfigCache = await loadRuntimeConfig(serverConfig);
+await ensureRuntimeDirs(runtimeConfigCache);
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -21,27 +22,25 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/health") {
       requireAdminAuth(serverConfig, request);
-      const runtimeConfig = await loadRuntimeConfig(serverConfig);
       return sendJson(response, 200, {
         ok: true,
         configPath: serverConfig.configPath,
-        vaultRoot: runtimeConfig.vaultRoot,
-        allowedDirs: runtimeConfig.allowedDirs
+        vaultRoot: runtimeConfigCache.vaultRoot,
+        allowedDirs: runtimeConfigCache.allowedDirs
       });
     }
 
     if (request.method === "GET" && url.pathname === "/v1/config") {
       requireAdminAuth(serverConfig, request);
-      const runtimeConfig = await loadRuntimeConfig(serverConfig);
-      return sendJson(response, 200, publicRuntimeConfig(runtimeConfig));
+      return sendJson(response, 200, publicRuntimeConfig(runtimeConfigCache));
     }
 
     if (request.method === "PUT" && url.pathname === "/v1/config") {
       requireAdminAuth(serverConfig, request);
-      const currentConfig = await loadRuntimeConfig(serverConfig);
-      const body = await readJsonBody(request, currentConfig.maxJsonBodyBytes);
+      const body = await readJsonBody(request, runtimeConfigCache.maxJsonBodyBytes);
       const runtimeConfig = await saveRuntimeConfig(serverConfig, body);
       await ensureRuntimeDirs(runtimeConfig);
+      runtimeConfigCache = runtimeConfig;
       return sendJson(response, 200, publicRuntimeConfig(runtimeConfig));
     }
 
@@ -52,10 +51,9 @@ const server = http.createServer(async (request, response) => {
       } else {
         requireApiAuth(serverConfig, request);
       }
-      const runtimeConfig = await loadRuntimeConfig(serverConfig);
       const body = ["GET", "DELETE"].includes(request.method)
         ? { json: {}, text: "" }
-        : await readAnyBody(request, runtimeConfig.maxJsonBodyBytes);
+        : await readAnyBody(request, runtimeConfigCache.maxJsonBodyBytes);
       const input = {
         ...Object.fromEntries(url.searchParams.entries()),
         ...body.json
@@ -63,8 +61,8 @@ const server = http.createServer(async (request, response) => {
       if (body.text && input.content === undefined && input.text === undefined) {
         input.content = body.text;
       }
-      await ensureRuntimeDirs(runtimeConfig);
-      const result = await executeApiAction(runtimeConfig, action, input);
+      await ensureRuntimeDirs(runtimeConfigCache);
+      const result = await executeApiAction(runtimeConfigCache, action, input);
       return sendJson(response, result.ok === false ? 400 : 200, result);
     }
 
@@ -75,12 +73,13 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(serverConfig.port, "0.0.0.0", () => {
-  console.log(`VaultEcho API listening on http://0.0.0.0:${serverConfig.port}`);
-  console.log(`VaultEcho config UI available at http://localhost:${serverConfig.port}/`);
+server.listen(serverConfig.port, serverConfig.bindHost, () => {
+  console.log(`VaultEcho API listening on http://${serverConfig.bindHost}:${serverConfig.port}`);
+  console.log(`VaultEcho config UI available at http://${serverConfig.bindHost}:${serverConfig.port}/`);
 });
 
-startEmbeddingAutoScan(() => loadRuntimeConfig(serverConfig));
+startEmbeddingAutoScan(() => Promise.resolve(runtimeConfigCache));
+startIdempotencyCleanup(() => Promise.resolve(runtimeConfigCache));
 
 async function ensureRuntimeDirs(config) {
   await fs.mkdir(config.vaultRoot, { recursive: true });
@@ -94,10 +93,23 @@ function requireApiAuth(config, request) {
     throw error;
   }
 
-  const expected = `Bearer ${config.apiToken}`;
-  if (!constantTimeEqual(request.headers.authorization || "", expected)) {
-    const error = new Error("Unauthorized");
+  const authorization = request.headers.authorization || "";
+  if (!authorization.startsWith("Bearer ")) {
+    const error = new Error("Bearer token required");
     error.statusCode = 401;
+    error.headers = {
+      "www-authenticate": 'Bearer realm="VaultEcho API"'
+    };
+    throw error;
+  }
+
+  const expected = `Bearer ${config.apiToken}`;
+  if (!constantTimeEqual(authorization, expected)) {
+    const error = new Error("Invalid bearer token");
+    error.statusCode = 401;
+    error.headers = {
+      "www-authenticate": 'Bearer realm="VaultEcho API"'
+    };
     throw error;
   }
 }
@@ -114,12 +126,16 @@ function requireAdminAuth(config, request) {
 }
 
 function requireApiOrAdminAuth(config, request) {
-  try {
-    requireApiAuth(config, request);
-  } catch (apiError) {
-    if (apiError.statusCode !== 401) throw apiError;
+  const authorization = request.headers.authorization || "";
+  if (authorization.startsWith("Basic ")) {
     requireAdminAuth(config, request);
+    return;
   }
+  if (authorization.startsWith("Bearer ")) {
+    requireApiAuth(config, request);
+    return;
+  }
+  requireAdminAuth(config, request);
 }
 
 function isAdminAuthorized(config, request) {
@@ -211,7 +227,8 @@ function sendJson(response, statusCode, payload, headers = {}) {
 
 function sendHtml(response, statusCode, html) {
   response.writeHead(statusCode, {
-    "content-type": "text/html; charset=utf-8"
+    "content-type": "text/html; charset=utf-8",
+    "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
   });
   response.end(html);
 }

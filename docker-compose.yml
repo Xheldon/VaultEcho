@@ -6,6 +6,8 @@ services:
       - "127.0.0.1:${PORT:-8787}:8787"
     env_file:
       - .env
+    environment:
+      BIND_HOST: 0.0.0.0
     volumes:
       - ./vault:/vault
       - ./data:/data

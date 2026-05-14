@@ -45,6 +45,16 @@ export async function getEmbeddingIndexStatus(config) {
   };
 }
 
+export async function clearEmbeddingIndexErrors(config) {
+  try {
+    await fs.unlink(indexErrorsPath(config));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+
+  return { ok: true, operation: "index/errors/clear" };
+}
+
 export async function rebuildEmbeddingIndex(config, options = {}) {
   const previous = rebuildQueue.catch(() => {});
   const current = previous.then(() => rebuildEmbeddingIndexNow(config, options));

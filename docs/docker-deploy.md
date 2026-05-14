@@ -93,7 +93,7 @@ Auto Scan Interval Minutes: 0 或一个大于 0 的间隔
 第一版索引保存在 `/data/index/embeddings.json`。它使用远程 embedding API，不在 VPS 上跑本地模型，适合 1C2G/30G 的小机器。首次配置后可以在 Web UI 点击“重建索引”，或用 curl：
 
 ```bash
-curl -X POST http://your-vps-ip:8787/v1/api/index/rebuild \
+curl -X POST https://vault.example.com/v1/api/index/rebuild \
   -H "Authorization: Bearer replace-with-a-long-random-token" \
   -H "Content-Type: application/json" \
   -d '{ "force": false }'
@@ -101,12 +101,15 @@ curl -X POST http://your-vps-ip:8787/v1/api/index/rebuild \
 
 ## 4. 初始化 Obsidian Headless
 
+这里使用的是 npm 上的社区包 `obsidian-headless`，不是 Obsidian 官方 CLI。固定版本只能避免重启时自动升级到未知 latest，不能替代 Vault 备份。正式使用前建议让 Vault 处在可回滚状态，例如定期把 `./vault` 提交到私有 Git 仓库，或至少保留 VPS 快照/目录备份。
+
 如果你使用交互式登录：
 
 ```bash
-docker compose --profile sync run --rm obsidian-headless sh -lc "npm install -g obsidian-headless && ob login"
-docker compose --profile sync run --rm obsidian-headless sh -lc "npm install -g obsidian-headless && ob sync-list-remote"
-docker compose --profile sync run --rm obsidian-headless sh -lc "npm install -g obsidian-headless && ob sync-setup --vault \"Your Test Vault\" --path /vault"
+docker compose --profile sync build obsidian-headless
+docker compose --profile sync run --rm obsidian-headless ob login
+docker compose --profile sync run --rm obsidian-headless ob sync-list-remote
+docker compose --profile sync run --rm obsidian-headless ob sync-setup --vault "Your Test Vault" --path /vault
 ```
 
 如果你使用非交互 token，先在 shell 里设置：
@@ -118,8 +121,9 @@ export OBSIDIAN_AUTH_TOKEN="your-auth-token"
 再执行：
 
 ```bash
-docker compose --profile sync run --rm obsidian-headless sh -lc "npm install -g obsidian-headless && ob sync-list-remote"
-docker compose --profile sync run --rm obsidian-headless sh -lc "npm install -g obsidian-headless && ob sync-setup --vault \"Your Test Vault\" --path /vault"
+docker compose --profile sync build obsidian-headless
+docker compose --profile sync run --rm obsidian-headless ob sync-list-remote
+docker compose --profile sync run --rm obsidian-headless ob sync-setup --vault "Your Test Vault" --path /vault
 ```
 
 ## 5. 启动连续同步
@@ -158,6 +162,7 @@ Nginx 保持最小配置即可，使用独立域名，不设置 `default_server`
 
 ```nginx
 limit_req_zone $binary_remote_addr zone=vaultecho_api:10m rate=5r/s;
+limit_req_zone $binary_remote_addr zone=vaultecho_admin:10m rate=1r/s;
 
 server {
     listen 443 ssl http2;
@@ -178,6 +183,7 @@ server {
     }
 
     location / {
+        limit_req zone=vaultecho_admin burst=5 nodelay;
         proxy_pass http://127.0.0.1:8787;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -209,6 +215,6 @@ sudo ufw deny 8787/tcp
 
 - `vault` 是本地 Obsidian Vault。
 - `data/config.json` 是 Web UI 保存的运行配置。
-- `data/idempotency` 是防重复写入记录，服务会清理 30 天前的记录。
+- `data/idempotency` 是防重复写入记录，服务会清理 30 天前的记录；它不需要重点备份，丢失的影响主要是旧请求可能无法继续去重。
 - `data/index` 是本地 embedding 索引，可删除后重建，但会重新消耗远程 embedding API 调用。
 - `.env` 是服务密钥。它和 `data/config.json` 同机保存时，`APP_ENCRYPTION_KEY` 的主要作用是防止 API Key 被配置文件或日志意外明文泄露，不是防主机入侵。生产上不要把 `.env` 提交到 Git。

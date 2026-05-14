@@ -167,6 +167,40 @@ test("search/simple skips oversized markdown files", async () => {
   assert.deepEqual(result.result.results.map((item) => item.path), ["Inbox/small.md"]);
 });
 
+test("heading insert ignores request linePattern override", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+  const notePath = path.join(root, "vault", "Daily", "pattern.md");
+  await fs.mkdir(path.dirname(notePath), { recursive: true });
+  await fs.writeFile(notePath, "## Log\nABC\n", "utf8");
+
+  await executeApiAction(config, "headings/insert-after-last-matching-line", {
+    path: "Daily/pattern.md",
+    heading: "Log",
+    linePattern: "^ABC$",
+    content: "[12:34] Safe"
+  });
+
+  assert.equal(await fs.readFile(notePath, "utf8"), "## Log\n[12:34] Safe\nABC\n");
+});
+
+test("heading patch rejects oversized markdown files", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+  const notePath = path.join(root, "vault", "Inbox", "large.md");
+  await fs.mkdir(path.dirname(notePath), { recursive: true });
+  await fs.writeFile(notePath, `## Log\n${"a".repeat(10 * 1024 * 1024 + 1)}`, "utf8");
+
+  await assert.rejects(
+    executeApiAction(config, "headings/append", {
+      path: "Inbox/large.md",
+      heading: "Log",
+      content: "item"
+    }),
+    /too large to patch/
+  );
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

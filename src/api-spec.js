@@ -22,6 +22,19 @@ export const API_ALIASES = {
 
 export const API_ENDPOINTS = [
   {
+    route: "index/errors/clear",
+    method: "POST",
+    title: "清空 embedding 错误记录",
+    summary: "清空自动索引失败时保存在本地的最近错误记录。",
+    scenarios: [
+      "修复 embedding API Key 或 baseUrl 后，清理 Web UI 中显示的旧错误。",
+      "确认自动索引恢复后，重置错误状态。"
+    ],
+    params: [],
+    curl: `curl -X POST http://localhost:8787/v1/api/index/errors/clear \\
+  -H "Authorization: Bearer change-me"`
+  },
+  {
     route: "files/create",
     method: "POST",
     title: "新建 Markdown 文件",
@@ -245,7 +258,6 @@ export const API_ENDPOINTS = [
     params: [
       ["path | filename | file | name", "目标 Markdown 文件。"],
       ["heading", "不带 # 的 heading 文本。"],
-      ["linePattern", "受限 JavaScript 正则字符串。默认使用 Daily Note 配置中的正则；服务会拒绝过长、回溯风险较高的模式。"],
       ["content | text", "要插入的内容。"]
     ],
     curl: `curl -X POST http://localhost:8787/v1/api/headings/insert-after-last-matching-line \\
@@ -254,7 +266,6 @@ export const API_ENDPOINTS = [
   -d '{
     "path": "Daily/2026-05-13.md",
     "heading": "下午",
-    "linePattern": "^\\\\[\\\\d{2}:\\\\d{2}\\\\]",
     "content": "[16:21] 在折腾 Obsidian 自动化"
   }'`
   },

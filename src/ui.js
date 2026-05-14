@@ -264,6 +264,7 @@ export function renderAdminPage() {
       </div>
       <div class="actions">
         <button id="indexStatusButton" type="button">查看索引状态</button>
+        <button id="clearIndexErrorsButton" type="button">清空索引错误</button>
         <button id="rebuildIndexButton" type="button">重建索引</button>
       </div>
     </section>
@@ -326,6 +327,7 @@ export function renderAdminPage() {
     $("saveButton").addEventListener("click", saveConfig);
     $("addSlotButton").addEventListener("click", () => addSlot({ heading: "", start: "09:00", end: "11:59" }));
     $("indexStatusButton").addEventListener("click", loadIndexStatus);
+    $("clearIndexErrorsButton").addEventListener("click", clearIndexErrors);
     $("rebuildIndexButton").addEventListener("click", rebuildIndex);
 
     async function request(path, options = {}) {
@@ -452,6 +454,19 @@ export function renderAdminPage() {
           body: JSON.stringify({ force: false })
         });
         setStatus(\`索引已更新：\${payload.result.files} 个文件，\${payload.result.chunks} 个块\`, "ok");
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    }
+
+    async function clearIndexErrors() {
+      try {
+        setStatus("正在清空索引错误...");
+        await request("/v1/api/index/errors/clear", {
+          method: "POST",
+          body: "{}"
+        });
+        setStatus("索引错误已清空", "ok");
       } catch (error) {
         setStatus(error.message, "error");
       }

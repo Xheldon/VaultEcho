@@ -35,9 +35,11 @@ Authorization: Bearer <API_TOKEN>
 | `index/status` | GET or POST | Shows whether embedding configuration is ready and how many files and chunks are indexed. |
 | `index/rebuild` | POST | Scans Markdown files under allowed directories, calls the remote embedding API, and updates the local index. |
 | `index/file` | POST | Rebuilds the embedding index for one Markdown file; removes it from the index when the file no longer exists. |
+| `reviews/status` | GET or POST | Shows configured review tasks, whether scheduling is enabled, next run times, and last run records. |
+| `reviews/run` | POST | Runs one configured review task immediately, using period sources, semantic recall, the configured AI model, and the task output path. |
 | `tags/list` | GET | Counts Markdown hashtags under allowed directories. |
 | `batch` | POST | Executes multiple API operations in one request. |
-| `uri/execute` | POST | Parses an Obsidian URI and executes the filesystem-mappable parts in Headless mode. |
+| `uri/execute` | POST | Parses an Obsidian URI and executes the parts that can be mapped to Vault filesystem operations. |
 | `unsupported/active` | GET or POST | Returns an explicit unsupported response for desktop-only active-file behavior. |
 | `unsupported/commands` | GET or POST | Returns an explicit unsupported response for desktop Obsidian command execution. |
 
@@ -60,6 +62,8 @@ Authorization: Bearer <API_TOKEN>
 | `tags` | `tags/list` |
 | `reindex` | `index/rebuild` |
 | `index` | `index/status` |
+| `review` | `reviews/run` |
+| `reviews` | `reviews/status` |
 | `script` | `batch` |
 | `uri` | `uri/execute` |
 | `active` | `unsupported/active` |
@@ -528,6 +532,8 @@ Parameters:
 |---|---|
 | `content | text` | Entry body without the `[HH:mm]` prefix. |
 | `at` | Optional ISO timestamp. Defaults to the current time. |
+| `createIfMissing` | Optional boolean override. Defaults to the Daily Note setting. |
+| `templatePath | template` | Optional Vault-relative template path override used when creating a missing daily note. |
 | `idempotencyKey` | Optional key that prevents duplicate writes during upstream retries. |
 
 Example:
@@ -660,7 +666,7 @@ Use cases:
 
 - Build the semantic index for a Vault after first deployment.
 - Regenerate embeddings after changing the embedding model, base URL, or chunk size.
-- Compensate after Headless Sync pulls a large batch of historical notes.
+- Compensate after an external Obsidian Headless Sync process pulls a large batch of historical notes.
 
 Parameters:
 
@@ -703,6 +709,54 @@ curl -X POST http://localhost:8787/v1/api/index/file \
   -H "Authorization: Bearer change-me" \
   -H "Content-Type: application/json" \
   -d '{ "path": "Ideas/api-note.md" }'
+```
+
+## reviews/status
+
+**Get Review Task Status**
+
+Shows configured review tasks, whether scheduling is enabled, next run times, and last run records.
+
+Method: `GET or POST`
+
+Use cases:
+
+- Confirm weekly, monthly, quarterly, and yearly review schedules after changing Web UI config.
+- Check whether a scheduled review already ran for a period.
+
+Example:
+
+```bash
+curl http://localhost:8787/v1/api/reviews/status \
+  -H "Authorization: Bearer change-me"
+```
+
+## reviews/run
+
+**Run Review Task Now**
+
+Runs one configured review task immediately, using period sources, semantic recall, the configured AI model, and the task output path.
+
+Method: `POST`
+
+Use cases:
+
+- Test a review prompt before enabling the scheduled task.
+- Manually regenerate a weekly, monthly, quarterly, or yearly reflection.
+
+Parameters:
+
+| Parameter | Description |
+|---|---|
+| `taskId | id | task` | Review task id, for example weekly-review. |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8787/v1/api/reviews/run \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{ "taskId": "weekly-review" }'
 ```
 
 ## tags/list
@@ -762,7 +816,7 @@ curl -X POST http://localhost:8787/v1/api/batch \
 
 **Execute Obsidian URI Compatible Request**
 
-Parses an Obsidian URI and executes the filesystem-mappable parts in Headless mode.
+Parses an Obsidian URI and executes the parts that can be mapped to Vault filesystem operations.
 
 Method: `POST`
 

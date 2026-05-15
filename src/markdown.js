@@ -81,7 +81,8 @@ export function insertAfterLastMatchingLine(markdown, options) {
     headingLevel = 2,
     linePattern,
     content,
-    ifHeadingMissing = "create"
+    ifHeadingMissing = "create",
+    blankLineBetweenEntries = false
   } = options;
   const regex = createSafeLineRegex(linePattern);
   const lines = splitLines(markdown);
@@ -94,19 +95,25 @@ export function insertAfterLastMatchingLine(markdown, options) {
 
     const next = ensureTrailingBlank(lines);
     next.push(`${"#".repeat(headingLevel)} ${heading}`);
+    if (blankLineBetweenEntries) next.push("");
     next.push(content);
     return joinLines(next);
   }
 
   let insertAt = section.start + 1;
+  let previousEntryAt = section.start;
   for (let index = section.start + 1; index < section.end; index += 1) {
     if (regex.test(lines[index].slice(0, 1000))) {
       insertAt = index + 1;
+      previousEntryAt = index;
     }
   }
 
   const next = [...lines];
-  next.splice(insertAt, 0, content);
+  const insertion = blankLineBetweenEntries && insertAt === previousEntryAt + 1
+    ? ["", content]
+    : [content];
+  next.splice(insertAt, 0, ...insertion);
   return joinLines(next);
 }
 

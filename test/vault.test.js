@@ -69,7 +69,52 @@ test("append_daily_by_time inserts below the last timestamp in the matching time
   assert.equal(result.timestamp, "16:21");
   assert.equal(
     content,
-    "## Morning\n\nMorning content\n\n## Afternoon\n[16:18] Working on Obsidian\n[16:21] Continue testing automatic insertion\n\n## Evening\n"
+    "## Morning\n\nMorning content\n\n## Afternoon\n[16:18] Working on Obsidian\n\n[16:21] Continue testing automatic insertion\n\n## Evening\n"
+  );
+});
+
+test("append_daily_by_time creates a missing daily note from the configured template", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const baseConfig = testConfig(root);
+  const config = {
+    ...baseConfig,
+    dailyNote: {
+      ...baseConfig.dailyNote,
+      pathTemplate: "Daily/{{YYYY}}/{{YYYY}}-{{MM}}-{{DD}}",
+      headingLevel: 3,
+      templatePath: "Templates/daily.md"
+    }
+  };
+  const templatePath = path.join(root, "vault", "Templates", "daily.md");
+  await fs.mkdir(path.dirname(templatePath), { recursive: true });
+  await fs.writeFile(templatePath, "---\ndate: {{YYYY-MM-DD}}\n---\n\n# {{title}}\n", "utf8");
+
+  const result = await executeOperation(config, {
+    operation: "append_daily_by_time",
+    at: "2026-05-13T16:21:00+08:00",
+    content: "Created from template"
+  });
+
+  const dailyPath = path.join(root, "vault", "Daily", "2026", "2026-05-13.md");
+  assert.equal(result.path, "Daily/2026/2026-05-13.md");
+  assert.equal(
+    await fs.readFile(dailyPath, "utf8"),
+    "---\ndate: 2026-05-13\n---\n\n# 2026-05-13\n\n### Afternoon\n\n[16:21] Created from template\n"
+  );
+});
+
+test("append_daily_by_time can reject missing daily notes", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const config = testConfig(root);
+
+  await assert.rejects(
+    executeOperation(config, {
+      operation: "append_daily_by_time",
+      at: "2026-05-13T16:21:00+08:00",
+      content: "Do not create",
+      createIfMissing: false
+    }),
+    /Daily note does not exist/
   );
 });
 
@@ -77,12 +122,15 @@ function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),
     dataDir: path.join(root, "data"),
-    allowedDirs: ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Attachments", "Archive"],
+    allowedDirs: ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Templates", "Attachments", "Archive"],
     dailyNote: {
       pathTemplate: "Daily/{{yyyy-MM-dd}}.md",
+      templatePath: "",
+      createIfMissing: true,
       headingLevel: 2,
       linePattern: "^\\[\\d{2}:\\d{2}\\]",
       lineFormat: "[{{HH:mm}}] {{content}}",
+      blankLineBetweenEntries: true,
       timeZone: "Asia/Shanghai",
       slots: [
         { heading: "Morning", start: "05:00", end: "11:59" },

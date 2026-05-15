@@ -41,6 +41,14 @@ test("runtime config encrypts embedding api key and public config only exposes a
     imageDir: "Attachments/Images",
     audioDir: "Attachments/Audio"
   });
+  assert.equal(publicConfig.timeZone, "Asia/Shanghai");
+  assert.equal(publicConfig.dailyNote.timeZone, "Asia/Shanghai");
+  assert.equal(publicConfig.ai.apiKeySet, false);
+  assert.equal(publicConfig.reviews.enabled, false);
+  assert.equal(publicConfig.reviews.tasks.length, 4);
+  assert.equal(publicConfig.dailyNote.templatePath, "");
+  assert.equal(publicConfig.dailyNote.createIfMissing, true);
+  assert.equal(publicConfig.dailyNote.blankLineBetweenEntries, true);
 
   await saveRuntimeConfig(serverConfig, {
     ...publicConfig,
@@ -84,5 +92,27 @@ test("runtime config normalizes attachment directories", async () => {
       }
     }),
     /cannot escape/
+  );
+});
+
+test("runtime config rejects overlapping daily note time slots", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
+  const serverConfig = loadServerConfig(
+    {
+      CONFIG_PATH: path.join(root, "data", "config.json")
+    },
+    root
+  );
+
+  await assert.rejects(
+    saveRuntimeConfig(serverConfig, {
+      dailyNote: {
+        slots: [
+          { heading: "Work", start: "09:00", end: "12:00" },
+          { heading: "Review", start: "11:30", end: "13:00" }
+        ]
+      }
+    }),
+    /Daily note time slots overlap/
   );
 });

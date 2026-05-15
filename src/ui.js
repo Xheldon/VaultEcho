@@ -234,8 +234,13 @@ export function renderAdminPage() {
           <input id="dataDir" placeholder="/data" />
         </label>
         <label>
+          Time Zone
+          <input id="timeZone" placeholder="Asia/Shanghai" />
+          <span class="hint">Global user time zone. Daily timestamp insertion and review task schedules both use this value.</span>
+        </label>
+        <label>
           Allowed Top-Level Dirs
-          <textarea id="allowedDirs" placeholder="Inbox,Notes,Ideas,Projects,Daily,Attachments,Archive"></textarea>
+          <textarea id="allowedDirs" placeholder="Inbox,Notes,Ideas,Projects,Daily,Reviews,Templates,Attachments,Archive"></textarea>
           <span class="hint">Comma-separated. Every write path must stay inside one of these top-level directories.</span>
         </label>
         <label>
@@ -251,6 +256,37 @@ export function renderAdminPage() {
           Audio Attachment Dir
           <input id="audioAttachmentDir" placeholder="Attachments/Audio" />
           <span class="hint">Vault-relative directory. Future audio attachment writes use this by default.</span>
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <h2>AI Model</h2>
+      <div class="grid">
+        <label>
+          Provider
+          <input id="aiProvider" placeholder="openai-compatible" />
+        </label>
+        <label>
+          Base URL
+          <input id="aiBaseUrl" placeholder="https://api.openai.com/v1" />
+        </label>
+        <label>
+          Model
+          <input id="aiModel" placeholder="gpt-4.1-mini" />
+        </label>
+        <label>
+          API Key
+          <input id="aiApiKey" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key" />
+          <span id="aiApiKeyHint" class="hint">The API key is encrypted with <code>APP_ENCRYPTION_KEY</code> before it is saved.</span>
+        </label>
+        <label>
+          Temperature
+          <input id="aiTemperature" type="number" min="0" max="2" step="0.1" />
+        </label>
+        <label>
+          Max Output Tokens
+          <input id="aiMaxOutputTokens" type="number" min="100" step="100" />
         </label>
       </div>
     </section>
@@ -299,7 +335,7 @@ export function renderAdminPage() {
         <label>
           Auto Scan Interval Minutes
           <input id="embeddingAutoScanIntervalMinutes" type="number" min="0" step="1" />
-          <span class="hint">0 disables scanning. Use this to pick up changes pulled by Headless Sync.</span>
+          <span class="hint">0 disables scanning. Use this to pick up changes pulled by your external Obsidian Headless Sync process.</span>
         </label>
         <label class="checkbox">
           <input id="embeddingAutoIndexAfterWrite" type="checkbox" />
@@ -320,16 +356,23 @@ export function renderAdminPage() {
       <div class="details-body">
         <div class="grid">
           <label>
-            Path Template
-            <input id="dailyPathTemplate" placeholder="Daily/{{yyyy-MM-dd}}.md" />
+            Daily File Path
+            <input id="dailyPathTemplate" placeholder="Daily/{{YYYY}}/{{YYYY}}-{{MM}}-{{DD}}.md" />
+            <span class="hint">Vault-relative path template. The top-level folder must be allowed. Supports variables like <code>{{YYYY}}</code>, <code>{{MM}}</code>, <code>{{DD}}</code>, and <code>{{yyyy-MM-dd}}</code>. <code>.md</code> is added when omitted.</span>
           </label>
           <label>
             Time Zone
-            <input id="dailyTimeZone" placeholder="Asia/Shanghai" />
+            <input id="dailyTimeZone" placeholder="Uses global time zone" disabled />
+            <span class="hint">Daily insertion uses the global Time Zone above.</span>
           </label>
           <label>
             Heading Level
             <input id="dailyHeadingLevel" type="number" min="1" max="6" />
+          </label>
+          <label>
+            Daily Template Path
+            <input id="dailyTemplatePath" placeholder="Templates/daily.md" />
+            <span class="hint">Optional Vault-relative template used only when the daily note is created.</span>
           </label>
           <label>
             Line Pattern
@@ -339,9 +382,19 @@ export function renderAdminPage() {
             Line Format
             <input id="dailyLineFormat" placeholder="[{{HH:mm}}] {{content}}" />
           </label>
+          <label class="checkbox">
+            <input id="dailyCreateIfMissing" type="checkbox" />
+            Create the daily note when it does not exist
+          </label>
+          <label class="checkbox">
+            <input id="dailyBlankLineBetweenEntries" type="checkbox" />
+            Keep a blank line between timestamp entries
+            <span class="hint">Also keeps one blank line between the heading and the first timestamp entry.</span>
+          </label>
         </div>
 
         <div style="margin-top: 18px;">
+          <p class="hint" style="margin-bottom: 10px;">Add any number of non-overlapping time slots. The request time selects the matching heading.</p>
           <table>
             <thead>
               <tr>
@@ -356,6 +409,42 @@ export function renderAdminPage() {
           <div class="actions">
             <button id="addSlotButton" type="button">Add Slot</button>
           </div>
+        </div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <h2>Review Tasks</h2>
+      </summary>
+      <div class="details-body">
+        <label class="checkbox">
+          <input id="reviewsEnabled" type="checkbox" />
+          Enable scheduled review tasks
+        </label>
+        <div class="grid" style="margin-top: 16px;">
+          <label>
+            Max Source Chars
+            <input id="reviewsMaxSourceChars" type="number" min="1000" step="1000" />
+          </label>
+          <label>
+            Max Recall Chars
+            <input id="reviewsMaxRecallChars" type="number" min="1000" step="1000" />
+          </label>
+          <label>
+            Run Task ID
+            <input id="reviewRunTaskId" placeholder="weekly-review" />
+            <span class="hint">Run Now does not mark the scheduled run as complete.</span>
+          </label>
+        </div>
+        <label style="margin-top: 16px;">
+          Tasks JSON
+          <textarea id="reviewTasksJson" style="min-height: 360px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;"></textarea>
+          <span class="hint">Each task supports weekly, monthly, quarterly, or yearly periods, sourceDirs, output path template, prompt, and semanticRecall. Keep Reviews in Allowed Top-Level Dirs when using the default output paths.</span>
+        </label>
+        <div class="actions">
+          <button id="reviewStatusButton" type="button">Review Status</button>
+          <button id="runReviewTaskButton" type="button">Run Now</button>
         </div>
       </div>
     </details>
@@ -377,6 +466,8 @@ export function renderAdminPage() {
     $("indexStatusButton").addEventListener("click", loadIndexStatus);
     $("clearIndexErrorsButton").addEventListener("click", clearIndexErrors);
     $("rebuildIndexButton").addEventListener("click", rebuildIndex);
+    $("reviewStatusButton").addEventListener("click", loadReviewStatus);
+    $("runReviewTaskButton").addEventListener("click", runReviewTask);
 
     async function request(path, options = {}) {
       const response = await fetch(path, {
@@ -423,6 +514,7 @@ export function renderAdminPage() {
     function fillForm(config) {
       $("vaultRoot").value = config.vaultRoot || "";
       $("dataDir").value = config.dataDir || "";
+      $("timeZone").value = config.timeZone || "Asia/Shanghai";
       $("allowedDirs").value = (config.allowedDirs || []).join(",");
       $("maxJsonBodyBytes").value = config.maxJsonBodyBytes || 1048576;
       $("imageAttachmentDir").value = config.attachments?.imageDir || "Attachments/Images";
@@ -441,21 +533,39 @@ export function renderAdminPage() {
       $("embeddingSearchLimit").value = config.embedding?.searchLimit || 8;
       $("embeddingAutoIndexAfterWrite").checked = config.embedding?.autoIndexAfterWrite !== false;
       $("embeddingAutoScanIntervalMinutes").value = config.embedding?.autoScanIntervalMinutes || 0;
+      $("aiProvider").value = config.ai?.provider || "openai-compatible";
+      $("aiBaseUrl").value = config.ai?.baseUrl || "https://api.openai.com/v1";
+      $("aiModel").value = config.ai?.model || "";
+      $("aiApiKey").value = "";
+      $("aiApiKeyHint").textContent = config.ai?.apiKeySet
+        ? "API key is saved; leave blank to keep it unchanged."
+        : "No API key is saved. New keys are encrypted with APP_ENCRYPTION_KEY.";
+      $("aiTemperature").value = config.ai?.temperature ?? 0.2;
+      $("aiMaxOutputTokens").value = config.ai?.maxOutputTokens || 1600;
       $("dailyPathTemplate").value = config.dailyNote?.pathTemplate || "";
-      $("dailyTimeZone").value = config.dailyNote?.timeZone || "";
+      $("dailyTimeZone").value = config.timeZone || config.dailyNote?.timeZone || "";
       $("dailyHeadingLevel").value = config.dailyNote?.headingLevel || 2;
+      $("dailyTemplatePath").value = config.dailyNote?.templatePath || "";
       $("dailyLinePattern").value = config.dailyNote?.linePattern || "";
       $("dailyLineFormat").value = config.dailyNote?.lineFormat || "";
+      $("dailyCreateIfMissing").checked = config.dailyNote?.createIfMissing !== false;
+      $("dailyBlankLineBetweenEntries").checked = config.dailyNote?.blankLineBetweenEntries !== false;
       slotsBody.innerHTML = "";
       for (const slot of config.dailyNote?.slots || []) {
         addSlot(slot);
       }
+      $("reviewsEnabled").checked = Boolean(config.reviews?.enabled);
+      $("reviewsMaxSourceChars").value = config.reviews?.maxSourceChars || 60000;
+      $("reviewsMaxRecallChars").value = config.reviews?.maxRecallChars || 16000;
+      $("reviewTasksJson").value = JSON.stringify(config.reviews?.tasks || [], null, 2);
+      $("reviewRunTaskId").value = config.reviews?.tasks?.[0]?.id || "";
     }
 
     function readForm() {
       return {
         vaultRoot: $("vaultRoot").value.trim(),
         dataDir: $("dataDir").value.trim(),
+        timeZone: $("timeZone").value.trim(),
         allowedDirs: $("allowedDirs").value.split(",").map((item) => item.trim()).filter(Boolean),
         maxJsonBodyBytes: Number($("maxJsonBodyBytes").value),
         attachments: {
@@ -475,12 +585,29 @@ export function renderAdminPage() {
           autoIndexAfterWrite: $("embeddingAutoIndexAfterWrite").checked,
           autoScanIntervalMinutes: Number($("embeddingAutoScanIntervalMinutes").value)
         },
+        ai: {
+          provider: $("aiProvider").value.trim(),
+          baseUrl: $("aiBaseUrl").value.trim(),
+          model: $("aiModel").value.trim(),
+          apiKey: $("aiApiKey").value.trim(),
+          temperature: Number($("aiTemperature").value),
+          maxOutputTokens: Number($("aiMaxOutputTokens").value)
+        },
+        reviews: {
+          enabled: $("reviewsEnabled").checked,
+          maxSourceChars: Number($("reviewsMaxSourceChars").value),
+          maxRecallChars: Number($("reviewsMaxRecallChars").value),
+          tasks: JSON.parse($("reviewTasksJson").value || "[]")
+        },
         dailyNote: {
           pathTemplate: $("dailyPathTemplate").value.trim(),
-          timeZone: $("dailyTimeZone").value.trim(),
+          templatePath: $("dailyTemplatePath").value.trim(),
+          createIfMissing: $("dailyCreateIfMissing").checked,
+          timeZone: $("timeZone").value.trim(),
           headingLevel: Number($("dailyHeadingLevel").value),
           linePattern: $("dailyLinePattern").value,
           lineFormat: $("dailyLineFormat").value,
+          blankLineBetweenEntries: $("dailyBlankLineBetweenEntries").checked,
           slots: Array.from(slotsBody.querySelectorAll("tr")).map((row) => ({
             heading: row.querySelector("[data-field=heading]").value.trim(),
             start: row.querySelector("[data-field=start]").value,
@@ -521,6 +648,33 @@ export function renderAdminPage() {
           body: "{}"
         });
         setStatus("Index errors cleared", "ok");
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    }
+
+    async function loadReviewStatus() {
+      try {
+        setStatus("Loading review status...");
+        const payload = await request("/v1/api/reviews/status", { method: "POST", body: "{}" });
+        const enabled = payload.result.enabled ? "enabled" : "disabled";
+        const next = (payload.result.tasks || []).filter((task) => task.enabled).map((task) => \`\${task.id}: \${task.nextRunAt || "not scheduled"}\`).join("; ");
+        setStatus(\`Review tasks are \${enabled}. \${next || "No enabled tasks."}\`, "ok");
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    }
+
+    async function runReviewTask() {
+      try {
+        const taskId = $("reviewRunTaskId").value.trim();
+        if (!taskId) throw new Error("Run Task ID is required");
+        setStatus(\`Running review task \${taskId}...\`);
+        const payload = await request("/v1/api/reviews/run", {
+          method: "POST",
+          body: JSON.stringify({ taskId })
+        });
+        setStatus(\`Review written to \${payload.result.path}\`, "ok");
       } catch (error) {
         setStatus(error.message, "error");
       }

@@ -1,21 +1,42 @@
+import path from "node:path";
+
 export function buildDailyWrite(operation, dailyNote) {
   const parts = getDateTimeParts(operation.at || new Date(), dailyNote.timeZone);
   const slot = pickTimeSlot(dailyNote.slots, parts.minutesOfDay) || {
     heading: dailyNote.fallbackHeading || "Unsorted"
   };
   const content = normalizeContent(operation.content);
-  const templateVars = { ...parts, content };
+  const pathConfig = operation.pathTemplate ? { ...dailyNote, pathTemplate: operation.pathTemplate } : dailyNote;
+  const dailyPath = buildDailyPath(operation.at || new Date(), pathConfig, content);
+  const parsedPath = path.posix.parse(dailyPath);
+  const lineVars = { ...parts, content };
 
   return {
-    path: renderTemplate(operation.pathTemplate || dailyNote.pathTemplate, templateVars),
+    path: dailyPath,
     heading: operation.heading || slot.heading,
     headingLevel: operation.headingLevel || dailyNote.headingLevel,
     linePattern: dailyNote.linePattern,
-    content: renderTemplate(operation.lineFormat || dailyNote.lineFormat, templateVars),
+    content: renderTemplate(operation.lineFormat || dailyNote.lineFormat, lineVars),
     timestamp: `${parts.HH}:${parts.mm}`,
     slot: slot.heading,
-    at: parts.isoLike
+    at: parts.isoLike,
+    templateVars: {
+      ...parts,
+      content: "",
+      entry: content,
+      path: dailyPath,
+      title: parsedPath.name,
+      name: parsedPath.name,
+      basename: parsedPath.name,
+      dir: parsedPath.dir
+    }
   };
+}
+
+export function buildDailyPath(input, dailyNote, content = "") {
+  const parts = getDateTimeParts(input || new Date(), dailyNote.timeZone);
+  const rendered = renderTemplate(dailyNote.pathTemplate, { ...parts, content });
+  return ensureMarkdownExtension(rendered);
 }
 
 export function getDateTimeParts(input, timeZone) {
@@ -45,11 +66,14 @@ export function getDateTimeParts(input, timeZone) {
 
   return {
     yyyy,
+    YYYY: yyyy,
     MM,
     dd,
+    DD: dd,
     HH,
     mm,
     "yyyy-MM-dd": `${yyyy}-${MM}-${dd}`,
+    "YYYY-MM-DD": `${yyyy}-${MM}-${dd}`,
     "HH:mm": `${HH}:${mm}`,
     minutesOfDay: Number(HH) * 60 + Number(mm),
     isoLike: `${yyyy}-${MM}-${dd}T${HH}:${mm}:00`
@@ -90,4 +114,9 @@ function normalizeContent(value) {
     throw new Error("content is required");
   }
   return content;
+}
+
+function ensureMarkdownExtension(file) {
+  if (path.posix.extname(file)) return file;
+  return `${file}.md`;
 }

@@ -34,6 +34,18 @@ test("appendToHeading creates the heading when it is missing", () => {
   assert.equal(output, "# Daily\n\n## Noon\n[12:34] New\n");
 });
 
+test("insertAfterLastMatchingLine can keep blank lines around timestamp entries", () => {
+  const input = "# Daily\n\n## Afternoon\n[16:18] A\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Afternoon",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[16:21] B",
+    blankLineBetweenEntries: true
+  });
+
+  assert.equal(output, "# Daily\n\n## Afternoon\n[16:18] A\n\n[16:21] B\n");
+});
+
 test("createSafeLineRegex rejects nested repetition patterns", () => {
   assert.throws(() => createSafeLineRegex("(a+)+$"), /nested repetition/);
 });

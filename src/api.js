@@ -26,8 +26,9 @@ import {
   rebuildEmbeddingIndex,
   searchEmbeddingIndex
 } from "./embedding-index.js";
-import { getDateTimeParts, renderTemplate } from "./time.js";
+import { buildDailyPath, getDateTimeParts, renderTemplate } from "./time.js";
 import { executeOperation, resolveVaultPath } from "./vault.js";
+import { getReviewStatus, runReviewTask } from "./review-tasks.js";
 
 const DEFAULT_FILE_DIR = "Inbox";
 const MAX_BATCH_OPERATIONS = 50;
@@ -55,6 +56,8 @@ export const API_HANDLER_ROUTES = [
   "index/errors/clear",
   "index/rebuild",
   "index/file",
+  "reviews/status",
+  "reviews/run",
   "batch",
   "uri/execute",
   "unsupported/active",
@@ -138,6 +141,10 @@ async function executePrimary(config, route, params) {
       return rebuildEmbeddingIndex(config, { force: truthy(params.force) });
     case "index/file":
       return indexEmbeddingFile(config, normalizeApiFilePath(config, params));
+    case "reviews/status":
+      return getReviewStatus(config);
+    case "reviews/run":
+      return runReviewTask(config, params.taskId || params.id || params.task);
     case "batch":
       return executeBatch(config, params);
     case "uri/execute":
@@ -327,13 +334,14 @@ async function appendDailyByTime(config, params) {
     operation: "append_daily_by_time",
     content: contentOf(params),
     at: params.at,
+    createIfMissing: params.createIfMissing,
+    templatePath: params.templatePath || params.template,
     idempotencyKey: params.idempotencyKey
   });
 }
 
 async function readDaily(config, params) {
-  const parts = getDateTimeParts(params.at || new Date(), config.dailyNote.timeZone);
-  const dailyPath = renderTemplate(config.dailyNote.pathTemplate, parts);
+  const dailyPath = buildDailyPath(params.at || new Date(), config.dailyNote);
   return readFile(config, { path: dailyPath });
 }
 

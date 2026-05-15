@@ -2,57 +2,77 @@
 
 Chinese version: [docker-deploy_cn.md](docker-deploy_cn.md).
 
-VaultEcho's Docker setup contains two services:
+VaultEcho is Obsidian-native, but this repository only runs the VaultEcho service. Obsidian Headless Sync is a prerequisite that you set up outside this Docker Compose file.
 
 ```text
-vaultecho
-  Receives Coze/n8n/curl requests and directly modifies Markdown files under /vault
-
-obsidian-headless
-  Runs ob sync --path /vault --continuous on the same /vault directory
+External input -> VaultEcho API -> mounted local Vault -> Obsidian Headless Sync -> Obsidian Sync
 ```
 
-The write flow is:
+VaultEcho writes Markdown files under `/vault` inside the container. Docker maps `/vault` to the local Vault directory that is already managed by Obsidian Headless Sync.
+
+## 1. Prepare An Obsidian Headless Vault
+
+Before running VaultEcho, prepare a local Vault directory with Obsidian Headless Sync and keep continuous sync running for it.
+
+Official docs:
+
+- [Obsidian Headless](https://help.obsidian.md/headless)
+- [Headless Sync](https://help.obsidian.md/sync/headless)
+
+The expected result is a local directory such as:
 
 ```text
-External input -> VaultEcho API -> /vault Markdown files -> Obsidian Headless Sync -> Obsidian Sync
+/srv/obsidian/my-vault
 ```
 
-`obsidian-headless` is a community npm package, not an official Obsidian CLI. The project installs the fixed `OBSIDIAN_HEADLESS_VERSION` from `.env` so container restarts do not install the latest version at runtime, but that does not replace Vault backups.
+That directory should be:
 
-## 1. Test VaultEcho API Locally
+- A real Obsidian Vault.
+- Configured with Obsidian Headless Sync.
+- Continuously synced by your own Headless process or service.
+- Not simultaneously managed by desktop Obsidian Sync on the same machine.
+
+VaultEcho does not install Headless, does not run `ob login`, and does not store Obsidian credentials. It only mounts and edits this Vault directory.
+
+## 2. Test VaultEcho Locally
 
 Enter the project directory:
 
 ```bash
-cd path-to-this-repo-root-dir
+cd /Users/x/Developer/obsidian-ai-capture-gateway
 ```
 
-Prepare environment variables and local mount directories:
+Prepare environment variables and the data directory:
 
 ```bash
 cp .env.example .env
-mkdir -p vault data obsidian-config
+mkdir -p data
 ```
 
-Edit `.env` and at least replace these values:
+Edit `.env`:
 
 ```env
 API_TOKEN=replace-with-a-long-random-token
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-another-long-random-password
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
-OBSIDIAN_HEADLESS_VERSION=0.0.8
 BIND_HOST=127.0.0.1
+OBSIDIAN_VAULT_PATH=/srv/obsidian/my-vault
 ```
 
-You can generate random values with:
+For a local smoke test without real Headless Sync, you can temporarily use:
+
+```env
+OBSIDIAN_VAULT_PATH=./vault
+```
+
+Generate random secrets with:
 
 ```bash
 openssl rand -base64 32
 ```
 
-Start the API service:
+Start VaultEcho:
 
 ```bash
 docker compose up -d --build vaultecho
@@ -66,7 +86,9 @@ Open the admin UI:
 http://127.0.0.1:8787/
 ```
 
-The browser prompts for Basic Auth. Use `ADMIN_USERNAME` and `ADMIN_PASSWORD` from `.env`. The local Docker config should be:
+The browser prompts for Basic Auth. Use `ADMIN_USERNAME` and `ADMIN_PASSWORD` from `.env`.
+
+Docker runtime paths should be:
 
 ```text
 Vault Root: /vault
@@ -75,12 +97,10 @@ Image Attachment Dir: Attachments/Images
 Audio Attachment Dir: Attachments/Audio
 Daily Note Path Template: Daily/{{yyyy-MM-dd}}.md
 Time Zone: Asia/Shanghai
-Allowed Dirs: Inbox, Notes, Ideas, Projects, Daily, Templates, Attachments, Archive
+Allowed Dirs: Inbox, Notes, Ideas, Projects, Daily, Reviews, Templates, Attachments, Archive
 ```
 
-Docker saves runtime configuration to local `data/docker-config.json`. This is separate from the `data/config.json` used by local `npm start`, preventing the container from reading macOS paths such as `/Users/...`.
-
-Test a local write:
+Test a write:
 
 ```bash
 curl -X POST http://127.0.0.1:8787/v1/api/daily/append-by-time \
@@ -93,70 +113,33 @@ curl -X POST http://127.0.0.1:8787/v1/api/daily/append-by-time \
   }'
 ```
 
-Confirm the file:
+Confirm the file in your mounted Vault path:
 
 ```bash
-cat vault/Daily/2026-05-14.md
+cat /srv/obsidian/my-vault/Daily/2026-05-14.md
 ```
 
-Stop the local API:
+## 3. Runtime Paths
 
-```bash
-docker compose down
+`docker-compose.yml` uses:
+
+```yaml
+volumes:
+  - ${OBSIDIAN_VAULT_PATH:-./vault}:/vault
+  - ./data:/data
 ```
 
-## 2. Optionally Test Obsidian Headless Locally
+Meaning:
 
-If you only want to verify API file writes, section 1 is enough. Continue here only when you want to verify Obsidian Sync.
+- `OBSIDIAN_VAULT_PATH`: host path of the Vault already managed by Obsidian Headless Sync.
+- `/vault`: container path used by VaultEcho.
+- `./data`: VaultEcho runtime data, config, idempotency records, and embedding index.
 
-Use a dedicated test Sync Vault. Do not let desktop Obsidian open and sync the same local directory used by Headless. A safe layout is:
+Docker saves runtime configuration to `data/docker-config.json`. This is separate from local `npm start` config at `data/config.json`, preventing the container from reading host-only paths such as `/Users/...`.
 
-```text
-Directory A: your private desktop Vault
-  Used by desktop Obsidian
+## 4. Prepare The VPS
 
-Directory B: path-to-this-repo-root-dir/vault
-  Used by VaultEcho + Obsidian Headless
-```
-
-Build the Headless image:
-
-```bash
-docker compose --profile sync build obsidian-headless
-```
-
-Log in to Obsidian interactively:
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob login
-```
-
-Login state is stored in local `./obsidian-config`, mounted as `/home/node/.config` inside the container.
-
-List remote Sync Vaults:
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-list-remote
-```
-
-Bind your remote test Vault to `/vault` inside the container:
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-setup --vault "Your Test Vault" --path /vault
-```
-
-Start the API plus continuous sync:
-
-```bash
-docker compose --profile sync up -d --build
-docker compose --profile sync logs -f obsidian-headless
-```
-
-After that, VaultEcho writes to `/vault`, and Headless syncs via `ob sync --path /vault --continuous`.
-
-## 3. Prepare The VPS
-
-The following assumes Ubuntu or Debian. A 1C2G/30G VPS can run this project because embeddings use a remote API and no local model runs on the VPS.
+The following assumes Ubuntu or Debian. A 1C2G/30G VPS can run VaultEcho because embeddings use a remote API and no local model runs on the VPS.
 
 Install Docker, Compose, Nginx, and Certbot:
 
@@ -174,7 +157,7 @@ sudo usermod -aG docker "$USER"
 newgrp docker
 ```
 
-Check the installation:
+Check:
 
 ```bash
 docker --version
@@ -182,7 +165,7 @@ docker compose version
 nginx -v
 ```
 
-Prepare the deployment directory:
+Prepare the deploy directory:
 
 ```bash
 sudo mkdir -p /opt/vaultecho
@@ -190,26 +173,32 @@ sudo chown -R "$USER:$USER" /opt/vaultecho
 cd /opt/vaultecho
 ```
 
-Put the project under `/opt/vaultecho`. If you already have a GitHub repository:
+Put the project under `/opt/vaultecho`. If it is already pushed to GitHub:
 
 ```bash
 git clone <your-repo-url> .
 ```
 
-If you do not have a remote repository yet, run this on your local machine to sync the directory to the VPS:
+If there is no remote repository yet, run this from your local machine:
 
 ```bash
-rsync -av --exclude node_modules --exclude .git /Users/{local-valutecho-dir}/ user@your-vps:/opt/vaultecho/
+rsync -av --exclude node_modules --exclude .git /Users/{local-vaultecho-dir}/ user@your-vps:/opt/vaultecho/
 ```
 
-## 4. Configure VaultEcho On The VPS
+## 5. Configure VaultEcho On The VPS
 
-On the VPS under `/opt/vaultecho`:
+First ensure Obsidian Headless Sync has already prepared a local Vault directory on the VPS, for example:
+
+```text
+/srv/obsidian/my-vault
+```
+
+Then configure VaultEcho:
 
 ```bash
 cp .env.example .env
-mkdir -p vault data obsidian-config
-sudo chown -R "$(id -u):$(id -g)" vault data obsidian-config
+mkdir -p data
+sudo chown -R "$(id -u):$(id -g)" data
 ```
 
 Edit `.env`:
@@ -219,18 +208,19 @@ API_TOKEN=replace-with-a-long-random-token
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-another-long-random-password
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
-OBSIDIAN_HEADLESS_VERSION=0.0.8
 BIND_HOST=127.0.0.1
+OBSIDIAN_VAULT_PATH=/srv/obsidian/my-vault
 ```
 
 Meaning:
 
-- `API_TOKEN`: Bearer token for external systems such as Coze, Shortcuts, and curl when calling `/v1/api/...`.
+- `API_TOKEN`: Bearer token for external systems such as Coze, Shortcuts, and curl.
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD`: Basic Auth for the Web admin UI, `/v1/config`, and `/health`.
-- `APP_ENCRYPTION_KEY`: encrypts the embedding API key saved through the Web UI. Keep it stable after generation; changing it makes the old key undecryptable.
-- `BIND_HOST`: used by direct `npm start`. Docker Compose overrides it to `0.0.0.0` inside the container, but the host port is still bound only to `127.0.0.1:8787`.
+- `APP_ENCRYPTION_KEY`: encrypts embedding API keys saved through the Web UI. Keep it stable.
+- `OBSIDIAN_VAULT_PATH`: host path of the Vault already managed by Obsidian Headless Sync.
+- `BIND_HOST`: used by direct `npm start`. Docker Compose overrides it to `0.0.0.0` inside the container, while the host port remains bound to `127.0.0.1:8787`.
 
-Start VaultEcho API:
+Start VaultEcho:
 
 ```bash
 docker compose up -d --build vaultecho
@@ -238,49 +228,10 @@ docker compose ps
 docker compose logs -f vaultecho
 ```
 
-Verify from the VPS itself:
+Verify locally on the VPS:
 
 ```bash
 curl -i http://127.0.0.1:8787/health -u admin:replace-with-another-long-random-password
-```
-
-## 5. Initialize Obsidian Headless On The VPS
-
-Build the image:
-
-```bash
-docker compose --profile sync build obsidian-headless
-```
-
-Log in interactively:
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob login
-```
-
-List remote Vaults:
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-list-remote
-```
-
-Bind your test Sync Vault:
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-setup --vault "Your Test Vault" --path /vault
-```
-
-Start API plus Headless continuous sync:
-
-```bash
-docker compose --profile sync up -d --build
-docker compose --profile sync logs -f obsidian-headless
-```
-
-If the `ob` commands differ from this document, check the help for the currently pinned version:
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob --help
 ```
 
 ## 6. Nginx Reverse Proxy
@@ -337,13 +288,13 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Request an HTTPS certificate:
+Request HTTPS:
 
 ```bash
 sudo certbot --nginx -d vault.example.com
 ```
 
-Certbot upgrades the site to HTTPS. Then check again:
+Check again:
 
 ```bash
 sudo nginx -t
@@ -351,7 +302,7 @@ sudo systemctl reload nginx
 curl -i https://vault.example.com/health -u admin:replace-with-another-long-random-password
 ```
 
-If you use `ufw`, only open the reverse-proxy ports and keep origin port `8787` closed:
+If you use `ufw`, only expose reverse-proxy ports and keep origin port `8787` closed:
 
 ```bash
 sudo ufw allow OpenSSH
@@ -380,27 +331,39 @@ Image Attachment Dir: Attachments/Images
 Audio Attachment Dir: Attachments/Audio
 Daily Note Path Template: Daily/{{yyyy-MM-dd}}.md
 Time Zone: Asia/Shanghai
+Allowed Dirs: Inbox, Notes, Ideas, Projects, Daily, Reviews, Templates, Attachments, Archive
 Slots:
   Morning 05:00-11:59
   Afternoon 12:00-17:59
   Evening 18:00-04:59
 ```
 
-If your own daily-note headings are localized, change the slot headings in the Web UI.
+If your daily-note headings are localized, change slot headings in the Web UI.
 
-To enable semantic search, configure the Embedding section:
+To enable semantic search, configure Embedding:
 
 ```text
 Enabled: on
 Provider: openai-compatible
 Base URL: https://api.openai.com/v1
 Model: your embedding model name
-API Key: API key from the corresponding provider
+API Key: API key from the provider
 Auto Index After Write: on
 Auto Scan Interval Minutes: 0 or a positive interval
 ```
 
-After first configuration, click Rebuild Index in the Web UI or use curl:
+To enable Review Tasks, also configure AI Model:
+
+```text
+Provider: openai-compatible
+Base URL: https://api.openai.com/v1
+Model: your chat model name
+API Key: API key from the provider
+```
+
+Then enable the Review Tasks section, choose the weekly/monthly/quarterly/yearly tasks you want, keep `Reviews` in Allowed Dirs for the default output paths, and click Review Status or Run Now to verify. Task schedules are computed in the global Time Zone; they do not run every minute.
+
+After first configuration, click Rebuild Index in the Web UI or call:
 
 ```bash
 curl -X POST https://vault.example.com/v1/api/index/rebuild \
@@ -411,7 +374,7 @@ curl -X POST https://vault.example.com/v1/api/index/rebuild \
 
 ## 8. External Write Test
 
-Daily write:
+Write a daily entry:
 
 ```bash
 curl -X POST https://vault.example.com/v1/api/daily/append-by-time \
@@ -424,44 +387,39 @@ curl -X POST https://vault.example.com/v1/api/daily/append-by-time \
   }'
 ```
 
-Read:
+Read it back:
 
 ```bash
 curl "https://vault.example.com/v1/api/files/read?path=Daily/2026-05-14.md" \
   -H "Authorization: Bearer replace-with-a-long-random-token"
 ```
 
-Check sync logs:
-
-```bash
-docker compose --profile sync logs -f obsidian-headless
-```
+Then confirm your external Headless process syncs that file to Obsidian Sync.
 
 ## 9. Backup And Restore
 
 Back up these paths regularly:
 
 ```text
-/opt/vaultecho/vault
+<OBSIDIAN_VAULT_PATH>
 /opt/vaultecho/data
-/opt/vaultecho/obsidian-config
 /opt/vaultecho/.env
 ```
 
 Notes:
 
-- `vault` is the local Obsidian Vault.
-- `data/config.json` is the runtime config saved by the Web UI.
-- `data/idempotency` stores duplicate-write prevention records. Records older than 30 days are cleaned. It is not critical to back up; losing it mainly means old requests may no longer deduplicate.
+- `OBSIDIAN_VAULT_PATH` is the local Obsidian Vault and the most important data.
+- `data/docker-config.json` is the runtime config saved by the Web UI in Docker.
+- `data/idempotency` stores duplicate-write prevention records. It is not critical to back up.
 - `data/index` is the local embedding index. It can be deleted and rebuilt, but rebuilding consumes remote embedding API calls again.
-- `.env` contains service secrets. When it lives on the same host as `data/config.json`, `APP_ENCRYPTION_KEY` mainly prevents accidental plaintext exposure in config files or logs; it does not protect against a full host compromise.
+- `.env` contains service secrets.
 
 Before real use, keep at least one rollback option:
 
 ```text
-Private Git commits for /opt/vaultecho/vault
+Private Git commits for the Vault
 or VPS snapshots
-or periodic archives of vault/data/obsidian-config
+or periodic archives of the Vault and /opt/vaultecho/data
 ```
 
 ## 10. Common Maintenance Commands
@@ -469,58 +427,58 @@ or periodic archives of vault/data/obsidian-config
 Check status:
 
 ```bash
-docker compose --profile sync ps
+docker compose ps
 ```
 
 Check logs:
 
 ```bash
 docker compose logs -f vaultecho
-docker compose --profile sync logs -f obsidian-headless
 ```
 
 Restart:
 
 ```bash
-docker compose --profile sync restart
+docker compose restart vaultecho
 ```
 
 Rebuild after code updates:
 
 ```bash
-docker compose --profile sync up -d --build
+docker compose up -d --build vaultecho
 ```
 
-Stop services without deleting data:
+Stop VaultEcho without deleting data:
 
 ```bash
-docker compose --profile sync down
+docker compose down
 ```
 
 ## 11. FAQ
 
 ### EACCES: permission denied, mkdir '/Users'
 
-The container read host development config, for example this in `data/config.json`:
+The container read host development config, for example:
 
 ```json
 {
-  "vaultRoot": "path-to-this-repo-root-dir/vault",
-  "dataDir": "path-to-this-repo-root-dir/data"
+  "vaultRoot": "/Users/x/Developer/obsidian-ai-capture-gateway/vault",
+  "dataDir": "/Users/x/Developer/obsidian-ai-capture-gateway/data"
 }
 ```
 
-Inside the container, paths must be `/vault` and `/data`, not macOS `/Users/...` paths. The current Docker Compose file uses `/data/docker-config.json` for Docker, so run:
-
-```bash
-docker compose down
-docker compose up -d --build vaultecho
-docker compose logs -f vaultecho
-```
-
-If you manually changed Docker config to `/Users/...` in the Web UI, delete `data/docker-config.json` and restart to regenerate the default Docker config:
+Inside Docker, paths must be `/vault` and `/data`, not macOS `/Users/...` paths. Delete `data/docker-config.json` and restart to regenerate Docker defaults:
 
 ```bash
 rm data/docker-config.json
 docker compose up -d --build vaultecho
 ```
+
+### VaultEcho writes files but Obsidian does not sync them
+
+VaultEcho does not run Obsidian Headless. Check your external Headless process:
+
+- Is it running continuously for the same local Vault path as `OBSIDIAN_VAULT_PATH`?
+- Does it have permission to read and write that directory?
+- Is desktop Obsidian also syncing the same local directory on the same machine?
+- Does `ob sync` report errors in your Headless service logs?

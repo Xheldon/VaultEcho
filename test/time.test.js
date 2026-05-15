@@ -4,9 +4,12 @@ import { buildDailyWrite, pickTimeSlot } from "../src/time.js";
 
 const dailyNote = {
   pathTemplate: "Daily/{{yyyy-MM-dd}}.md",
+  templatePath: "",
+  createIfMissing: true,
   headingLevel: 2,
   linePattern: "^\\[\\d{2}:\\d{2}\\]",
   lineFormat: "[{{HH:mm}}] {{content}}",
+  blankLineBetweenEntries: true,
   timeZone: "Asia/Shanghai",
   slots: [
     { heading: "Morning", start: "05:00", end: "11:59" },
@@ -29,6 +32,23 @@ test("buildDailyWrite chooses the afternoon heading at 16:21", () => {
   assert.equal(result.heading, "Afternoon");
   assert.equal(result.timestamp, "16:21");
   assert.equal(result.content, "[16:21] Working on Obsidian automation");
+});
+
+test("buildDailyWrite supports uppercase path variables and adds markdown extension", () => {
+  const result = buildDailyWrite(
+    {
+      operation: "append_daily_by_time",
+      at: "2026-05-13T16:21:00+08:00",
+      content: "Working on Obsidian automation"
+    },
+    {
+      ...dailyNote,
+      pathTemplate: "Daily/{{YYYY}}/{{YYYY}}-{{MM}}-{{DD}}"
+    }
+  );
+
+  assert.equal(result.path, "Daily/2026/2026-05-13.md");
+  assert.equal(result.templateVars["YYYY-MM-DD"], "2026-05-13");
 });
 
 test("pickTimeSlot supports a slot that crosses midnight", () => {

@@ -1,14 +1,13 @@
 # VaultEcho 项目边界和路线
 
-VaultEcho 的核心定位是个人 Obsidian Vault 的读写与智能反馈网关，不是 Coze、n8n 或 Claude Code 的替代品。
+VaultEcho 的核心定位是强绑定 Obsidian 的 Vault 读写与智能反馈网关。它假设目标 Vault 是一个已经由 Obsidian Headless Sync 管理的本地目录，但它自己不安装、不运行、也不登录 Obsidian Headless。
 
 ## 一句话架构
 
 ```text
-输入端 -> Coze/n8n/快捷指令 -> VaultEcho API -> Vault 文件系统 -> Obsidian Headless Sync
-                                      |
-                                      v
-                              Index / AI Task / Webhook
+输入端 -> Coze/n8n/快捷指令 -> VaultEcho API -> 挂载的 Vault 文件系统 -> Obsidian Headless Sync
+                                      \
+                                       -> embedding index -> scheduled AI tasks -> Vault or webhook
 ```
 
 ## 当前边界
@@ -17,13 +16,16 @@ VaultEcho 的核心定位是个人 Obsidian Vault 的读写与智能反馈网关
 
 - 接收外部系统已经处理好的写入意图。
 - 对 Vault 内 Markdown 做安全的新建、覆盖、追加、heading 写入、frontmatter 修改和软删除。
+- 把 Obsidian 的模板、Daily Note、heading、YAML frontmatter 等概念作为一等 API 能力。
 - 对 Vault 做轻量索引，支持后续 AI 任务读取上下文。
 - 调用远程 embedding API，保存本地语义索引。
-- 把 AI 任务结果写回 Vault 或发送到 webhook。
+- 运行带语义召回的定时回顾任务，并把受管理的 Markdown 结果写回 Vault。
 
 本服务不负责：
 
 - 替代 Coze/n8n 的复杂拖拽工作流。
+- 安装 Obsidian Headless、执行 `ob login`、保存 Obsidian 账号凭据。
+- 管理 Obsidian Sync 冲突，或保证某次写入已经被 Headless 同步。
 - 在 1C2G VPS 上跑本地大模型或本地 embedding 模型。
 - 作为多租户 SaaS。
 - 在后台调用 Claude Code/Codex CLI 做生产任务。
@@ -34,7 +36,7 @@ VaultEcho 的核心定位是个人 Obsidian Vault 的读写与智能反馈网关
 目标部署环境是个人 VPS，典型规格可能只有 1C2G/30G。这个规格可以稳定运行：
 
 - Node.js API 服务。
-- Obsidian Headless Sync。
+- 外部运行的 Obsidian Headless Sync 进程。
 - JSON/SQLite 级别的本地索引。
 - 定时 AI 任务。
 - 远程 Claude/OpenAI-compatible API 调用。
@@ -64,33 +66,37 @@ VaultEcho 的核心定位是个人 Obsidian Vault 的读写与智能反馈网关
 - 单文件索引：`POST /v1/api/index/file`，适合调试或外部脚本更新单篇笔记。
 - 写入后自动索引：开启 `autoIndexAfterWrite` 后，VaultEcho API 修改某个 Markdown 文件时会异步更新该文件索引。
 
-Headless Sync 从远端拉下来的变更不是通过本服务写入的，因此需要：
+外部 Headless Sync 从远端拉下来的变更不是通过本服务写入的，因此需要：
 
 - 手动重建索引，或
 - 配置 `autoScanIntervalMinutes` 定期扫描并增量补偿。
 
-## AI Task 的下一步形态
+## 内置 Review Tasks
 
-不要先做通用工作流编辑器。下一阶段建议只做一个轻量 AI Task Runner：
+VaultEcho 当前内置的是面向回顾闭环的小型任务运行器，不是通用拖拽工作流编辑器：
 
 ```text
-Context Selector -> Prompt Profile -> Model Provider -> Output Sink
+Task Schedule -> Period Source Notes -> Semantic Recall -> Prompt -> Chat Model -> Managed Markdown Output
 ```
 
-最小任务模型：
+第一版任务模型支持：
 
-- `Context Selector`: 从索引或文件系统选择最近 N 天、某目录、某 daily note、某 heading、某 tag 的内容。
-- `Prompt Profile`: 用户可编辑提示词，内置少量默认任务。
-- `Model Provider`: 远程 Claude/OpenAI-compatible Chat API。
-- `Output Sink`: 写回指定文件、指定 heading、daily note 总结块，或发送 webhook。
+- 周、月、季、年周期。
+- 按配置的用户时区计算每个任务自己的精确运行时间。
+- 从 Daily、Inbox、Notes、Ideas、Projects 等来源目录读取周期内容。
+- 按需从本地 embedding 索引做语义召回。
+- 用户可编辑提示词。
+- 把受管理输出块写入配置的 Vault 路径，例如 `Reviews/Weekly/{{YYYY}}-W{{WW}}.md`。
 
-优先内置的任务：
+调度器不会每分钟轮询。它会计算下一个启用任务的运行时间，睡到该时间后对到期任务按周期只运行一次，把运行记录写入 `data/review-runs.json`，然后再计算下一次唤醒。
 
-- 昨日新增内容总结。
-- 昨日日记情绪总结，并写入那天的 `## 总结`。
-- 最近 7 天思考主题雷达。
+后续高价值扩展：
+
 - Inbox 自动分拣建议。
 - 项目 open loops 提醒。
+- 增加 webhook 输出。
+- 增加 heading、tag、saved search 等来源选择器。
+- 在回顾输出块格式稳定后，再增加低风险的 daily note 总结块自动写入。
 
 ## 安全原则
 

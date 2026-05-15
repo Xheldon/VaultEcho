@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { appendToHeading, insertAfterLastMatchingLine } from "./markdown.js";
-import { buildDailyWrite } from "./time.js";
+import { buildDailyWrite, renderTemplate } from "./time.js";
 import { MAX_MARKDOWN_APPEND_BYTES, MAX_MARKDOWN_PATCH_BYTES } from "./limits.js";
 
 const fileQueues = new Map();
@@ -35,7 +35,7 @@ export async function executeOperation(config, operation) {
       case "insert_after_last_matching_line":
         return patchHeading(targetPath, preparedOperation, insertAfterLastMatchingLine);
       case "append_daily_by_time":
-        return appendDailyByTime(targetPath, preparedOperation);
+        return appendDailyByTime(config, targetPath, preparedOperation);
       case "soft_delete":
         return softDelete(config, targetPath);
       default:
@@ -67,6 +67,9 @@ function prepareOperation(config, operation) {
   return {
     ...operation,
     ...dailyWrite,
+    templatePath: operation.templatePath ?? config.dailyNote.templatePath,
+    createIfMissing: normalizeBoolean(operation.createIfMissing, config.dailyNote.createIfMissing),
+    blankLineBetweenEntries: config.dailyNote.blankLineBetweenEntries,
     ifHeadingMissing: operation.ifHeadingMissing || "create"
   };
 }
@@ -162,6 +165,7 @@ async function patchHeading(targetPath, operation, transform) {
     headingLevel: operation.headingLevel || 2,
     linePattern: operation.linePattern,
     content: normalizeString(operation.content),
+    blankLineBetweenEntries: Boolean(operation.blankLineBetweenEntries),
     ifHeadingMissing: operation.ifHeadingMissing || "create"
   });
 
@@ -170,7 +174,20 @@ async function patchHeading(targetPath, operation, transform) {
   return { ok: true, operation: operation.operation, path: targetPath.relativePath };
 }
 
-async function appendDailyByTime(targetPath, operation) {
+async function appendDailyByTime(config, targetPath, operation) {
+  if (!(await exists(targetPath.absolutePath))) {
+    if (!operation.createIfMissing) {
+      throw new Error(`Daily note does not exist: ${targetPath.relativePath}`);
+    }
+    if (operation.templatePath) {
+      await fs.mkdir(path.dirname(targetPath.absolutePath), { recursive: true });
+      await atomicWrite(
+        targetPath.absolutePath,
+        ensureTrailingNewline(await renderDailyTemplate(config, operation.templatePath, operation.templateVars || {}))
+      );
+    }
+  }
+
   const result = await patchHeading(targetPath, operation, insertAfterLastMatchingLine);
   return {
     ...result,
@@ -179,6 +196,23 @@ async function appendDailyByTime(targetPath, operation) {
     slot: operation.slot,
     at: operation.at
   };
+}
+
+async function renderDailyTemplate(config, templatePath, variables) {
+  const template = await readVaultRelativeFile(config, templatePath, "Daily note template");
+  return renderTemplate(template, variables);
+}
+
+async function readVaultRelativeFile(config, inputPath, label) {
+  const absolutePath = resolveVaultReadPath(config, inputPath, label);
+  try {
+    return await fs.readFile(absolutePath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error(`${label} not found: ${inputPath}`);
+    }
+    throw error;
+  }
 }
 
 async function softDelete(config, targetPath) {
@@ -272,12 +306,40 @@ function normalizeString(value) {
   return String(value);
 }
 
+function normalizeBoolean(value, fallback) {
+  if (value === true || value === "true" || value === "1" || value === 1) return true;
+  if (value === false || value === "false" || value === "0" || value === 0) return false;
+  return fallback;
+}
+
 function ensureTrailingNewline(value) {
   return value.endsWith("\n") ? value : `${value}\n`;
 }
 
 function toVaultRelativePath(targetPath, filePath) {
   return path.relative(targetPath.vaultRoot, filePath).replaceAll(path.sep, "/");
+}
+
+function resolveVaultReadPath(config, inputPath, label) {
+  if (!inputPath || typeof inputPath !== "string") {
+    throw new Error(`${label} path is required`);
+  }
+  if (path.isAbsolute(inputPath)) {
+    throw new Error(`${label} absolute paths are not allowed`);
+  }
+
+  const relativePath = path.posix.normalize(inputPath.replaceAll("\\", "/"));
+  if (relativePath === "." || relativePath.startsWith("../") || relativePath === "..") {
+    throw new Error(`${label} path traversal is not allowed`);
+  }
+
+  const absolutePath = path.resolve(config.vaultRoot, relativePath);
+  const relativeFromRoot = path.relative(config.vaultRoot, absolutePath);
+  if (relativeFromRoot.startsWith("..") || path.isAbsolute(relativeFromRoot)) {
+    throw new Error(`${label} path escapes vault root`);
+  }
+
+  return absolutePath;
 }
 
 async function readIdempotencyRecord(config, key) {

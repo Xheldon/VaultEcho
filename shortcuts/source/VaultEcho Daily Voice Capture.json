@@ -1,0 +1,90 @@
+{
+  "WFWorkflowName": "VaultEcho Daily Voice Capture",
+  "WFWorkflowClientRelease": "18.0",
+  "WFWorkflowClientVersion": "2700.0.4",
+  "WFWorkflowIcon": {
+    "WFWorkflowIconGlyphNumber": 59531,
+    "WFWorkflowIconStartColor": 4274264319
+  },
+  "WFWorkflowImportQuestions": [],
+  "WFWorkflowInputContentItemClasses": [
+    "WFTextContentItem"
+  ],
+  "WFWorkflowOutputContentItemClasses": [],
+  "WFWorkflowHasOutputFallback": false,
+  "WFWorkflowMinimumClientVersion": 1300,
+  "WFWorkflowMinimumClientVersionString": "1300",
+  "WFWorkflowTypes": [
+    "WatchKit",
+    "NCWidget"
+  ],
+  "WFWorkflowActions": [
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.dictatetext",
+      "WFWorkflowActionParameters": {
+        "WFDictateTextStopListening": "After Pause",
+        "UUID": "AE9AF48C-90CF-46C5-A701-E7FF24A42889"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
+      "WFWorkflowActionParameters": {
+        "UUID": "6E59CF28-DC1B-456B-A788-9E668D2A6885",
+        "ShowHeaders": true,
+        "WFURL": "https://YOUR_DOMAIN/v1/api/daily/append-by-time",
+        "WFHTTPMethod": "POST",
+        "WFHTTPBodyType": "JSON",
+        "WFHTTPHeaders": {
+          "Value": {
+            "WFDictionaryFieldValueItems": [
+              {
+                "WFItemType": 0,
+                "WFKey": "Authorization",
+                "WFValue": "Bearer CHANGE_ME_API_TOKEN"
+              },
+              {
+                "WFItemType": 0,
+                "WFKey": "Content-Type",
+                "WFValue": "application/json"
+              }
+            ]
+          },
+          "WFSerializationType": "WFDictionaryFieldValue"
+        },
+        "WFJSONValues": {
+          "Value": {
+            "WFDictionaryFieldValueItems": [
+              {
+                "WFItemType": 0,
+                "WFKey": "content",
+                "WFValue": {
+                  "Value": {
+                    "OutputUUID": "AE9AF48C-90CF-46C5-A701-E7FF24A42889",
+                    "Type": "ActionOutput",
+                    "OutputName": "Dictated Text"
+                  },
+                  "WFSerializationType": "WFTextTokenAttachment"
+                }
+              },
+              {
+                "WFItemType": 0,
+                "WFKey": "source",
+                "WFValue": "apple-shortcuts"
+              }
+            ]
+          },
+          "WFSerializationType": "WFDictionaryFieldValue"
+        }
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.notification",
+      "WFWorkflowActionParameters": {
+        "UUID": "94D88A19-901F-4E84-9AE5-8AD11B9693B6",
+        "WFNotificationActionTitle": "VaultEcho",
+        "WFNotificationActionBody": "Captured to daily note.",
+        "WFNotificationActionSound": false
+      }
+    }
+  ]
+}

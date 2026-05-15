@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { executeOperation, resolveVaultPath } from "./vault.js";
-import { getDateTimeParts, renderTemplate } from "./time.js";
+import { buildDailyPath, getDateTimeParts } from "./time.js";
 import { MAX_MARKDOWN_READ_BYTES, MAX_MARKDOWN_SCAN_BYTES } from "./limits.js";
 
 const DEFAULT_NEW_NOTE_DIR = "Inbox";
@@ -165,8 +165,7 @@ async function handleDaily(config, params) {
     });
   }
 
-  const parts = getDateTimeParts(params.at || new Date(), config.dailyNote.timeZone);
-  const dailyPath = renderTemplate(config.dailyNote.pathTemplate, parts);
+  const dailyPath = buildDailyPath(params.at || new Date(), config.dailyNote);
   const target = resolveVaultPath(config, dailyPath);
   const content = readContentParam(params, "");
 

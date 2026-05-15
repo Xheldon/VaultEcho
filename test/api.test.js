@@ -240,9 +240,12 @@ function testConfig(root) {
     allowedDirs: ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Templates", "Attachments", "Archive"],
     dailyNote: {
       pathTemplate: "Daily/{{yyyy-MM-dd}}.md",
+      templatePath: "",
+      createIfMissing: true,
       headingLevel: 2,
       linePattern: "^\\[\\d{2}:\\d{2}\\]",
       lineFormat: "[{{HH:mm}}] {{content}}",
+      blankLineBetweenEntries: true,
       timeZone: "Asia/Shanghai",
       slots: [
         { heading: "Morning", start: "05:00", end: "11:59" },

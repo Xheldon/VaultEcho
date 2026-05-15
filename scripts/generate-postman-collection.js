@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const outputPath = path.resolve("docs/postman/VaultEcho.postman_collection.json");
+const outputCnPath = path.resolve("docs/postman/VaultEcho_cn.postman_collection.json");
 
 const collection = {
   info: {
@@ -58,7 +59,8 @@ const collection = {
         body: {
           vaultRoot: "/vault",
           dataDir: "/data",
-          allowedDirs: ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Templates", "Attachments", "Archive"],
+          timeZone: "Asia/Shanghai",
+          allowedDirs: ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Reviews", "Templates", "Attachments", "Archive"],
           maxJsonBodyBytes: 1048576,
           attachments: {
             imageDir: "Attachments/Images",
@@ -76,11 +78,49 @@ const collection = {
             autoIndexAfterWrite: true,
             autoScanIntervalMinutes: 0
           },
+          ai: {
+            provider: "openai-compatible",
+            baseUrl: "https://api.openai.com/v1",
+            model: "",
+            temperature: 0.2,
+            maxOutputTokens: 1600
+          },
+          reviews: {
+            enabled: false,
+            maxSourceChars: 60000,
+            maxRecallChars: 16000,
+            tasks: [
+              {
+                id: "weekly-review",
+                enabled: false,
+                name: "Weekly Review",
+                period: "weekly",
+                targetPeriod: "previous",
+                schedule: { weekday: 1, time: "08:00" },
+                sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
+                output: {
+                  pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
+                  heading: "Weekly Review",
+                  writeMode: "replace_managed_block"
+                },
+                semanticRecall: {
+                  enabled: true,
+                  query: "",
+                  limit: 8,
+                  scopeDirs: ["Daily", "Notes", "Ideas", "Projects"]
+                },
+                prompt: "Summarize this period, identify patterns, open loops, and questions worth thinking about next. Use semantic recall for historical connections."
+              }
+            ]
+          },
           dailyNote: {
-            pathTemplate: "Daily/{{yyyy-MM-dd}}.md",
+            pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md",
+            templatePath: "",
+            createIfMissing: true,
             headingLevel: 2,
             linePattern: "^\\[\\d{2}:\\d{2}\\]",
             lineFormat: "[{{HH:mm}}] {{content}}",
+            blankLineBetweenEntries: true,
             timeZone: "Asia/Shanghai",
             slots: [
               { heading: "Morning", start: "05:00", end: "11:59" },
@@ -249,6 +289,7 @@ const collection = {
         body: {
           at: "{{dailyAt}}",
           content: "Postman daily capture",
+          createIfMissing: true,
           idempotencyKey: "postman-daily-{{$timestamp}}"
         }
       }),
@@ -309,7 +350,17 @@ const collection = {
       })
     ]),
 
-    folder("07 Batch And Script", [
+    folder("07 Review Tasks", [
+      apiRequest("Review Status", "GET", "/v1/api/reviews/status", {
+        description: "Shows configured review tasks, whether scheduling is enabled, next run times, and last run records."
+      }),
+      apiRequest("Run Weekly Review Now", "POST", "/v1/api/reviews/run", {
+        description: "Runs a configured review task immediately. Requires AI model config; semantic recall is used when embedding is configured and indexed.",
+        body: { taskId: "weekly-review" }
+      })
+    ]),
+
+    folder("08 Batch And Script", [
       apiRequest("Batch - Write Then Append Heading", "POST", "/v1/api/batch", {
         description: "Executes multiple API operations in one request.",
         body: {
@@ -347,7 +398,7 @@ const collection = {
       })
     ]),
 
-    folder("08 Obsidian URI Compatibility", [
+    folder("09 Obsidian URI Compatibility", [
       apiRequest("URI New", "POST", "/v1/api/uri/execute", {
         description: "Executes a supported obsidian://new URI.",
         body: {
@@ -373,7 +424,7 @@ const collection = {
       })
     ]),
 
-    folder("09 Aliases And Unsupported", [
+    folder("10 Aliases And Unsupported", [
       apiRequest("Alias - new", "POST", "/v1/api/new", {
         description: "Short alias for files/create.",
         body: {
@@ -402,6 +453,10 @@ const collection = {
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 await fs.writeFile(outputPath, `${JSON.stringify(collection, null, 2)}\n`, "utf8");
 console.log(`Wrote ${outputPath}`);
+
+const chineseCollection = createChineseCollection(collection);
+await fs.writeFile(outputCnPath, `${JSON.stringify(chineseCollection, null, 2)}\n`, "utf8");
+console.log(`Wrote ${outputCnPath}`);
 
 function folder(name, items) {
   return { name, item: items };
@@ -484,4 +539,47 @@ function basicAuth(username, password) {
       }
     ]
   };
+}
+
+function createChineseCollection(source) {
+  const next = JSON.parse(JSON.stringify(source));
+  next.info.description = [
+    "VaultEcho Postman collection for Chinese users.",
+    "",
+    ...String(source.info.description).split("\n").slice(2)
+  ].join("\n");
+
+  const saveConfig = findItem(next, "00 Admin And Config", "Save Runtime Config - Basic Example");
+  patchJsonBody(saveConfig, (body) => {
+    body.dailyNote.slots = [
+      { heading: "\u4e0a\u5348", start: "05:00", end: "11:59" },
+      { heading: "\u4e0b\u5348", start: "12:00", end: "17:59" },
+      { heading: "\u665a\u4e0a", start: "18:00", end: "04:59" }
+    ];
+  });
+
+  patchJsonBody(findItem(next, "01 Setup Fixtures", "Create Daily Note Skeleton"), (body) => {
+    body.content = "## \u4e0a\u5348\n\n## \u4e0b\u5348\n[16:18] Existing line\n\n## \u665a\u4e0a\n";
+  });
+  patchJsonBody(findItem(next, "05 Daily", "Daily Append By Time - Body Content"), (body) => {
+    body.content = "\u5728\u6298\u817e Obsidian \u7684\u591a\u4eba\u65e5\u8bb0\u5f55\u4e91\u7aef\u5904\u7406\u81ea\u52a8\u5316\u65b9\u6848\uff0c\u563f\u563f";
+  });
+  patchJsonBody(findItem(next, "10 Aliases And Unsupported", "Alias - daily"), (body) => {
+    body.content = "\u901a\u8fc7 /v1/api/daily alias \u5199\u5165\u7684\u65e5\u8bb0";
+  });
+
+  return next;
+}
+
+function findItem(collectionObject, folderName, itemName) {
+  return collectionObject.item
+    .find((folderItem) => folderItem.name === folderName)?.item
+    .find((requestItem) => requestItem.name === itemName);
+}
+
+function patchJsonBody(item, patcher) {
+  if (!item?.request?.body?.raw) return;
+  const body = JSON.parse(item.request.body.raw);
+  patcher(body);
+  item.request.body.raw = JSON.stringify(body, null, 2);
 }

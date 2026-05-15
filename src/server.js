@@ -10,12 +10,15 @@ import {
   saveRuntimeConfig
 } from "./config.js";
 import { startEmbeddingAutoScan } from "./embedding-index.js";
+import { startReviewTaskScheduler } from "./review-tasks.js";
 import { startIdempotencyCleanup } from "./vault.js";
 import { renderAdminPage } from "./ui.js";
 
 const ADMIN_INDEX_MUTATIONS = new Set(["index/errors/clear", "index/rebuild"]);
+const ADMIN_REVIEW_MUTATIONS = new Set(["reviews/run"]);
 const serverConfig = loadServerConfig();
 let runtimeConfigCache = await loadRuntimeConfig(serverConfig);
+let reviewScheduler;
 await ensureRuntimeDirs(runtimeConfigCache);
 
 const server = http.createServer(async (request, response) => {
@@ -50,18 +53,19 @@ const server = http.createServer(async (request, response) => {
       await ensureRuntimeDirs(runtimeConfig);
       await saveRuntimeConfig(serverConfig, runtimeConfig);
       runtimeConfigCache = runtimeConfig;
+      reviewScheduler?.reschedule();
       return sendJson(response, 200, publicRuntimeConfig(runtimeConfig));
     }
 
     if (url.pathname.startsWith("/v1/api/")) {
       const action = decodeURIComponent(url.pathname.slice("/v1/api/".length));
       let authScheme;
-      if (action.startsWith("index/")) {
+      if (action.startsWith("index/") || action.startsWith("reviews/")) {
         authScheme = requireApiOrAdminAuth(serverConfig, request);
       } else {
         authScheme = requireApiAuth(serverConfig, request);
       }
-      if (authScheme === "basic" && ADMIN_INDEX_MUTATIONS.has(action)) {
+      if (authScheme === "basic" && (ADMIN_INDEX_MUTATIONS.has(action) || ADMIN_REVIEW_MUTATIONS.has(action))) {
         requireAdminMutationProtection(request);
       }
       const body = ["GET", "DELETE"].includes(request.method)
@@ -93,6 +97,7 @@ server.listen(serverConfig.port, serverConfig.bindHost, () => {
 
 startEmbeddingAutoScan(() => Promise.resolve(runtimeConfigCache));
 startIdempotencyCleanup(() => Promise.resolve(runtimeConfigCache));
+reviewScheduler = startReviewTaskScheduler(() => Promise.resolve(runtimeConfigCache));
 
 async function ensureRuntimeDirs(config) {
   await fs.mkdir(config.vaultRoot, { recursive: true });

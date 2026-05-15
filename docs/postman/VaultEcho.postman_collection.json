@@ -160,7 +160,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vaultRoot\": \"/vault\",\n  \"dataDir\": \"/data\",\n  \"allowedDirs\": [\n    \"Inbox\",\n    \"Notes\",\n    \"Ideas\",\n    \"Projects\",\n    \"Daily\",\n    \"Templates\",\n    \"Attachments\",\n    \"Archive\"\n  ],\n  \"maxJsonBodyBytes\": 1048576,\n  \"attachments\": {\n    \"imageDir\": \"Attachments/Images\",\n    \"audioDir\": \"Attachments/Audio\"\n  },\n  \"embedding\": {\n    \"enabled\": false,\n    \"provider\": \"openai-compatible\",\n    \"baseUrl\": \"https://api.openai.com/v1\",\n    \"model\": \"\",\n    \"dimensions\": 0,\n    \"batchSize\": 16,\n    \"maxChunkChars\": 1600,\n    \"searchLimit\": 8,\n    \"autoIndexAfterWrite\": true,\n    \"autoScanIntervalMinutes\": 0\n  },\n  \"dailyNote\": {\n    \"pathTemplate\": \"Daily/{{yyyy-MM-dd}}.md\",\n    \"headingLevel\": 2,\n    \"linePattern\": \"^\\\\[\\\\d{2}:\\\\d{2}\\\\]\",\n    \"lineFormat\": \"[{{HH:mm}}] {{content}}\",\n    \"timeZone\": \"Asia/Shanghai\",\n    \"slots\": [\n      {\n        \"heading\": \"Morning\",\n        \"start\": \"05:00\",\n        \"end\": \"11:59\"\n      },\n      {\n        \"heading\": \"Afternoon\",\n        \"start\": \"12:00\",\n        \"end\": \"17:59\"\n      },\n      {\n        \"heading\": \"Evening\",\n        \"start\": \"18:00\",\n        \"end\": \"04:59\"\n      }\n    ]\n  }\n}",
+              "raw": "{\n  \"vaultRoot\": \"/vault\",\n  \"dataDir\": \"/data\",\n  \"timeZone\": \"Asia/Shanghai\",\n  \"allowedDirs\": [\n    \"Inbox\",\n    \"Notes\",\n    \"Ideas\",\n    \"Projects\",\n    \"Daily\",\n    \"Reviews\",\n    \"Templates\",\n    \"Attachments\",\n    \"Archive\"\n  ],\n  \"maxJsonBodyBytes\": 1048576,\n  \"attachments\": {\n    \"imageDir\": \"Attachments/Images\",\n    \"audioDir\": \"Attachments/Audio\"\n  },\n  \"embedding\": {\n    \"enabled\": false,\n    \"provider\": \"openai-compatible\",\n    \"baseUrl\": \"https://api.openai.com/v1\",\n    \"model\": \"\",\n    \"dimensions\": 0,\n    \"batchSize\": 16,\n    \"maxChunkChars\": 1600,\n    \"searchLimit\": 8,\n    \"autoIndexAfterWrite\": true,\n    \"autoScanIntervalMinutes\": 0\n  },\n  \"ai\": {\n    \"provider\": \"openai-compatible\",\n    \"baseUrl\": \"https://api.openai.com/v1\",\n    \"model\": \"\",\n    \"temperature\": 0.2,\n    \"maxOutputTokens\": 1600\n  },\n  \"reviews\": {\n    \"enabled\": false,\n    \"maxSourceChars\": 60000,\n    \"maxRecallChars\": 16000,\n    \"tasks\": [\n      {\n        \"id\": \"weekly-review\",\n        \"enabled\": false,\n        \"name\": \"Weekly Review\",\n        \"period\": \"weekly\",\n        \"targetPeriod\": \"previous\",\n        \"schedule\": {\n          \"weekday\": 1,\n          \"time\": \"08:00\"\n        },\n        \"sourceDirs\": [\n          \"Daily\",\n          \"Inbox\",\n          \"Notes\",\n          \"Ideas\",\n          \"Projects\"\n        ],\n        \"output\": {\n          \"pathTemplate\": \"Reviews/Weekly/{{YYYY}}-W{{WW}}.md\",\n          \"heading\": \"Weekly Review\",\n          \"writeMode\": \"replace_managed_block\"\n        },\n        \"semanticRecall\": {\n          \"enabled\": true,\n          \"query\": \"\",\n          \"limit\": 8,\n          \"scopeDirs\": [\n            \"Daily\",\n            \"Notes\",\n            \"Ideas\",\n            \"Projects\"\n          ]\n        },\n        \"prompt\": \"Summarize this period, identify patterns, open loops, and questions worth thinking about next. Use semantic recall for historical connections.\"\n      }\n    ]\n  },\n  \"dailyNote\": {\n    \"pathTemplate\": \"Daily/{{YYYY}}-{{MM}}-{{DD}}.md\",\n    \"templatePath\": \"\",\n    \"createIfMissing\": true,\n    \"headingLevel\": 2,\n    \"linePattern\": \"^\\\\[\\\\d{2}:\\\\d{2}\\\\]\",\n    \"lineFormat\": \"[{{HH:mm}}] {{content}}\",\n    \"blankLineBetweenEntries\": true,\n    \"timeZone\": \"Asia/Shanghai\",\n    \"slots\": [\n      {\n        \"heading\": \"Morning\",\n        \"start\": \"05:00\",\n        \"end\": \"11:59\"\n      },\n      {\n        \"heading\": \"Afternoon\",\n        \"start\": \"12:00\",\n        \"end\": \"17:59\"\n      },\n      {\n        \"heading\": \"Evening\",\n        \"start\": \"18:00\",\n        \"end\": \"04:59\"\n      }\n    ]\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -607,7 +607,7 @@
             "description": "Chooses heading by configured time slots and formats line using configured lineFormat.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"at\": \"{{dailyAt}}\",\n  \"content\": \"Postman daily capture\",\n  \"idempotencyKey\": \"postman-daily-{{$timestamp}}\"\n}",
+              "raw": "{\n  \"at\": \"{{dailyAt}}\",\n  \"content\": \"Postman daily capture\",\n  \"createIfMissing\": true,\n  \"idempotencyKey\": \"postman-daily-{{$timestamp}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -835,7 +835,44 @@
       ]
     },
     {
-      "name": "07 Batch And Script",
+      "name": "07 Review Tasks",
+      "item": [
+        {
+          "name": "Review Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/api/reviews/status",
+            "description": "Shows configured review tasks, whether scheduling is enabled, next run times, and last run records."
+          }
+        },
+        {
+          "name": "Run Weekly Review Now",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/reviews/run",
+            "description": "Runs a configured review task immediately. Requires AI model config; semantic recall is used when embedding is configured and indexed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"taskId\": \"weekly-review\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Batch And Script",
       "item": [
         {
           "name": "Batch - Write Then Append Heading",
@@ -886,7 +923,7 @@
       ]
     },
     {
-      "name": "08 Obsidian URI Compatibility",
+      "name": "09 Obsidian URI Compatibility",
       "item": [
         {
           "name": "URI New",
@@ -960,7 +997,7 @@
       ]
     },
     {
-      "name": "09 Aliases And Unsupported",
+      "name": "10 Aliases And Unsupported",
       "item": [
         {
           "name": "Alias - new",

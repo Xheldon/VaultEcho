@@ -10,23 +10,6 @@ services:
       BIND_HOST: 0.0.0.0
       CONFIG_PATH: /data/docker-config.json
     volumes:
-      - ./vault:/vault
+      - ${OBSIDIAN_VAULT_PATH:-./vault}:/vault
       - ./data:/data
-    restart: unless-stopped
-
-  obsidian-headless:
-    build:
-      context: .
-      dockerfile: Dockerfile.obsidian-headless
-      args:
-        OBSIDIAN_HEADLESS_VERSION: ${OBSIDIAN_HEADLESS_VERSION:-0.0.8}
-    image: vaultecho-obsidian-headless:${OBSIDIAN_HEADLESS_VERSION:-0.0.8}
-    profiles:
-      - sync
-    working_dir: /vault
-    environment:
-      OBSIDIAN_AUTH_TOKEN: ${OBSIDIAN_AUTH_TOKEN:-}
-    volumes:
-      - ./vault:/vault
-      - ./obsidian-config:/home/node/.config
     restart: unless-stopped

@@ -35,9 +35,11 @@ Authorization: Bearer <API_TOKEN>
 | `index/status` | GET or POST | 查看 embedding 配置是否就绪，以及当前索引包含多少文件和块。 |
 | `index/rebuild` | POST | 扫描允许目录下的 Markdown 文件，调用远程 embedding API，增量构建本地索引。 |
 | `index/file` | POST | 为单个 Markdown 文件重建 embedding 索引；文件不存在时会从索引中移除。 |
+| `reviews/status` | GET or POST | 查看已配置的回顾任务、调度是否启用、下次运行时间和最近运行记录。 |
+| `reviews/run` | POST | 立即运行一个已配置的回顾任务，使用周期内容、语义召回、配置的 AI 模型和任务输出路径。 |
 | `tags/list` | GET | 统计允许目录下 Markdown hashtag 的出现次数。 |
 | `batch` | POST | 在一个请求中执行多个 API 操作。 |
-| `uri/execute` | POST | 解析 Obsidian URI，并在 Headless 模式下执行其中可映射到文件系统的部分。 |
+| `uri/execute` | POST | 解析 Obsidian URI，并执行其中可映射到 Vault 文件系统操作的部分。 |
 | `unsupported/active` | GET or POST | 对桌面端专属的 active-file 行为返回明确的 unsupported 响应。 |
 | `unsupported/commands` | GET or POST | 对桌面 Obsidian command 执行返回明确的 unsupported 响应。 |
 
@@ -60,6 +62,8 @@ Authorization: Bearer <API_TOKEN>
 | `tags` | `tags/list` |
 | `reindex` | `index/rebuild` |
 | `index` | `index/status` |
+| `review` | `reviews/run` |
+| `reviews` | `reviews/status` |
 | `script` | `batch` |
 | `uri` | `uri/execute` |
 | `active` | `unsupported/active` |
@@ -528,6 +532,8 @@ curl -X POST http://localhost:8787/v1/api/frontmatter/set \
 |---|---|
 | `content | text` | 条目正文，不需要包含 `[HH:mm]` 前缀。 |
 | `at` | 可选 ISO 时间。默认使用当前时间。 |
+| `createIfMissing` | 可选布尔值覆盖。默认使用 Daily Note 配置。 |
+| `templatePath | template` | 可选的 Vault 内模板路径覆盖，只在创建缺失日记时使用。 |
 | `idempotencyKey` | 可选的幂等键，用于防止重复写入。 |
 
 示例：
@@ -660,7 +666,7 @@ curl http://localhost:8787/v1/api/index/status \
 
 - 首次部署后为 Vault 建立语义索引。
 - 修改 embedding 模型、baseUrl、切块大小后重新生成索引。
-- Headless 从 Obsidian Sync 拉取了大量历史笔记后手动补偿索引。
+- 外部 Obsidian Headless Sync 进程从 Obsidian Sync 拉取了大量历史笔记后手动补偿索引。
 
 参数：
 
@@ -703,6 +709,54 @@ curl -X POST http://localhost:8787/v1/api/index/file \
   -H "Authorization: Bearer change-me" \
   -H "Content-Type: application/json" \
   -d '{ "path": "Ideas/api-note.md" }'
+```
+
+## reviews/status
+
+**查看回顾任务状态**
+
+查看已配置的回顾任务、调度是否启用、下次运行时间和最近运行记录。
+
+方法：`GET or POST`
+
+适用场景：
+
+- 修改 Web UI 中的周、月、季、年回顾配置后，确认调度时间是否正确。
+- 检查某个周期的定时回顾是否已经运行过。
+
+示例：
+
+```bash
+curl http://localhost:8787/v1/api/reviews/status \
+  -H "Authorization: Bearer change-me"
+```
+
+## reviews/run
+
+**立即运行回顾任务**
+
+立即运行一个已配置的回顾任务，使用周期内容、语义召回、配置的 AI 模型和任务输出路径。
+
+方法：`POST`
+
+适用场景：
+
+- 启用定时任务前，先手动测试回顾提示词效果。
+- 手动重新生成某个周、月、季、年回顾。
+
+参数：
+
+| 参数 | 说明 |
+|---|---|
+| `taskId | id | task` | 回顾任务 id，例如 weekly-review。 |
+
+示例：
+
+```bash
+curl -X POST http://localhost:8787/v1/api/reviews/run \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{ "taskId": "weekly-review" }'
 ```
 
 ## tags/list
@@ -762,7 +816,7 @@ curl -X POST http://localhost:8787/v1/api/batch \
 
 **执行 Obsidian URI 兼容请求**
 
-解析 Obsidian URI，并在 Headless 模式下执行其中可映射到文件系统的部分。
+解析 Obsidian URI，并执行其中可映射到 Vault 文件系统操作的部分。
 
 方法：`POST`
 

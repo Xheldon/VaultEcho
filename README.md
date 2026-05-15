@@ -4,27 +4,48 @@ Capture anything. Let your vault answer back.
 
 Chinese version: [README_cn.md](README_cn.md).
 
-VaultEcho is a minimal personal Vault write and feedback gateway. Coze, n8n, Shortcuts, or other automation platforms process arbitrary input into structured JSON, call VaultEcho's API, and write the result into a local Obsidian Vault. VaultEcho also provides indexing, semantic recall, and the foundation for later AI feedback tasks. Obsidian Headless Sync can then sync the local Vault to Obsidian Sync.
+VaultEcho is an Obsidian-native capture and feedback gateway. Coze, n8n, Shortcuts, or other automation platforms process arbitrary input into structured JSON, call VaultEcho's API, and write the result into a local Vault that is already managed by Obsidian Headless Sync. VaultEcho also provides indexing, semantic recall, and scheduled AI review tasks.
 
 ## Target Flow
 
 ```text
-Input sources -> Coze workflow -> VaultEcho API -> local Vault -> Obsidian Headless Sync -> Obsidian
+Input sources -> Coze workflow -> VaultEcho API -> local Vault -> Obsidian Headless Sync -> Obsidian Sync
 ```
 
 The first version intentionally does not build an AI workflow editor. Coze handles transcription, cleanup, routing, and write-intent generation. VaultEcho focuses on safe, auditable file writes.
 
-For project boundaries, embedding design, and the AI task roadmap, see [docs/architecture-roadmap.md](docs/architecture-roadmap.md).
+For project boundaries, embedding design, and the review-task roadmap, see [docs/architecture-roadmap.md](docs/architecture-roadmap.md).
+
+For Apple Shortcuts capture recipes, see [docs/shortcuts.md](docs/shortcuts.md).
+
+## Obsidian Headless Prerequisite
+
+VaultEcho is intentionally bound to Obsidian. Before running VaultEcho, prepare a local Vault directory with Obsidian Headless Sync and keep `ob sync --continuous` running for that directory.
+
+Follow the official docs:
+
+- [Obsidian Headless](https://help.obsidian.md/headless)
+- [Headless Sync](https://help.obsidian.md/sync/headless)
+
+The only contract VaultEcho needs is a writable local Vault path:
+
+```text
+/path/to/headless-vault
+  Managed by Obsidian Headless Sync
+  Mounted into VaultEcho Docker as /vault
+```
+
+VaultEcho does not install Headless, log in to Obsidian, or manage Obsidian credentials. It reads and writes Markdown files in the mounted Vault; Headless handles sync.
 
 ## Quick Start
 
 ```bash
 cp .env.example .env
-npm test
-npm start
+mkdir -p data
+docker compose up -d --build vaultecho
 ```
 
-Open the config UI:
+Before starting Docker for real use, set `OBSIDIAN_VAULT_PATH` in `.env` to the local Vault directory managed by Obsidian Headless Sync. Then open the config UI:
 
 ```text
 http://localhost:8787/
@@ -38,25 +59,26 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-me-admin
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
 BIND_HOST=127.0.0.1
+OBSIDIAN_VAULT_PATH=/path/to/headless-vault
 ```
 
 `API_TOKEN` is used as the Bearer token for external systems such as Coze and Shortcuts. `ADMIN_USERNAME` and `ADMIN_PASSWORD` protect the Web admin UI, `/v1/config`, and `/health` with Basic Auth. `APP_ENCRYPTION_KEY` encrypts embedding API keys saved through the Web UI. Generate it once and keep it stable; do not change it on every restart.
 
-Runtime settings such as Vault Root, Data Dir, Daily Note rules, and embedding model settings are edited in the Web UI and saved to `data/config.json`. Local `npm start` reads `.env` through Node 22's `--env-file=.env`.
+Runtime settings such as Vault Root, Data Dir, Daily Note rules, and embedding model settings are edited in the Web UI. Docker saves them to `data/docker-config.json`; local `npm start` saves them to `data/config.json`.
 
 `BIND_HOST` defaults to `127.0.0.1`, so direct `npm start` on a VPS does not expose the service publicly. Docker Compose overrides it to `0.0.0.0` inside the container, but the host port is still bound only to `127.0.0.1:8787`.
 
-If you already have a desktop Obsidian Vault, use a separate local directory for Headless testing:
+If you already have a desktop Obsidian Vault, use a separate local directory for Headless:
 
 ```text
 Directory A: /Users/x/Obsidian/Xheldon
   Used by desktop Obsidian
 
-Directory B: /Users/x/Developer/VaultEcho/vault
+Directory B: /path/to/headless-vault
   Used by Headless Sync and VaultEcho
 ```
 
-Directory B can be a brand-new test Sync Vault. Do not let desktop Obsidian open and sync directory B at the same time.
+Directory B can be a brand-new test Sync Vault. Do not let desktop Obsidian and Headless Sync manage the same local directory on the same machine.
 
 ## Web Configuration
 
@@ -65,14 +87,19 @@ The config UI supports:
 - Admin access: browser Basic Auth from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`.
 - `Vault Root`: local Vault directory to write. Local default: `vault/` under the project. Docker default: `/vault`.
 - `Data Dir`: idempotency records and runtime config. Local default: `data/` under the project. Docker default: `/data`.
-- `Allowed Top-Level Dirs`: path allowlist, for example `Inbox,Notes,Ideas,Projects,Daily,Templates,Attachments,Archive`.
+- `Time Zone`: the user's time zone. It drives daily-note path resolution, time-slot insertion, and scheduled review tasks.
+- `Allowed Top-Level Dirs`: path allowlist, for example `Inbox,Notes,Ideas,Projects,Daily,Reviews,Templates,Attachments,Archive`.
 - `Max JSON Body Bytes`: request body size limit.
 - `Image Attachment Dir`: default image attachment directory, default `Attachments/Images`.
 - `Audio Attachment Dir`: default audio attachment directory, default `Attachments/Audio`.
-- `Daily Timestamp Insertion Rules`: folded by default. Includes Daily Path Template, Time Zone, Slots, Line Format, and Line Pattern for endpoints such as `daily/append-by-time`.
+- `Daily Timestamp Insertion Rules`: folded by default. Includes the daily file path template, optional daily template file, create-if-missing behavior, heading level, non-overlapping time slots, line format, line pattern, and blank-line spacing for endpoints such as `daily/append-by-time`.
 - `Embedding`: OpenAI-compatible embedding API base URL, model, API key, chunk size, batch size, and auto-scan interval.
+- `AI Model`: OpenAI-compatible chat API used by built-in review tasks.
+- `Review Tasks`: folded by default. Configures weekly, monthly, quarterly, and yearly AI reviews with source folders, semantic recall, prompt, schedule, and output path.
 
 The first embedding version uses a remote API to generate vectors and stores the index at `data/index/embeddings.json`. This lets a 1C2G VPS run VaultEcho without a local model, Qdrant, Elasticsearch, or database extension. After API writes change a file, VaultEcho can automatically update that file's index. Changes pulled by Headless Sync can be compensated by the Rebuild Index button or by an auto-scan interval.
+
+Review tasks use exact task schedules, not per-minute polling. The scheduler computes the next enabled task time in the configured user time zone, sleeps until then, gathers period source notes, optionally pulls semantic recall from the embedding index, calls the configured AI model, and writes a managed Markdown block to the configured output path.
 
 ## Docker
 
@@ -82,20 +109,17 @@ Minimal start:
 
 ```bash
 cp .env.example .env
-mkdir -p vault data obsidian-config
+mkdir -p vault data
 docker compose up -d --build vaultecho
 ```
 
-Docker Compose binds VaultEcho only to `127.0.0.1:8787` on the host. Public access should go through Nginx, Caddy, or Cloudflare Tunnel. Do not expose `8787` directly to the public internet.
+For real use, set `OBSIDIAN_VAULT_PATH` in `.env` to the Vault directory already managed by Obsidian Headless Sync:
 
-Enable Obsidian Headless Sync:
-
-```bash
-export OBSIDIAN_AUTH_TOKEN="your-token"
-docker compose --profile sync up -d --build
+```env
+OBSIDIAN_VAULT_PATH=/srv/obsidian/my-vault
 ```
 
-Before first use, complete remote Vault setup for Obsidian Headless, for example by running `ob sync-list-remote` and `ob sync-setup --vault "Your Vault" --path /vault` inside the container. Headless Sync is currently an open beta. Back up your Vault before using it, and avoid using desktop Sync and Headless Sync for the same local Vault directory on the same device.
+Docker Compose mounts that path into the VaultEcho container as `/vault`. Docker Compose binds VaultEcho only to `127.0.0.1:8787` on the host. Public access should go through Nginx, Caddy, or Cloudflare Tunnel. Do not expose `8787` directly to the public internet.
 
 ## API
 
@@ -196,7 +220,9 @@ curl -X POST http://localhost:8787/v1/api/daily/append-by-time \
   }'
 ```
 
-If `16:21` matches `Afternoon`, the entry is inserted below the final `[HH:mm]` line under `## Afternoon`.
+If `16:21` matches `Afternoon`, the entry is inserted below the final `[HH:mm]` line under `## Afternoon`. The Web UI controls the daily path template, heading level, missing-note template, and whether a blank line is kept between timestamp entries.
+
+If `at` is omitted, VaultEcho uses the server's current clock and interprets it through the configured user time zone. Passing `at` is still useful for backfill, testing, or upstream systems that captured an event earlier than the request time.
 
 ### Frontmatter
 
@@ -241,6 +267,22 @@ curl -X POST http://localhost:8787/v1/api/search/semantic \
   -H "Content-Type: application/json" \
   -d '{ "query": "Obsidian automation ideas I have been exploring recently", "limit": 5 }'
 ```
+
+### Review Tasks
+
+Review tasks turn the Vault from passive storage into a feedback loop. A task selects a period, reads relevant notes, optionally recalls older semantically related notes, calls the configured AI model, then writes a managed block to the configured output file.
+
+```bash
+curl http://localhost:8787/v1/api/reviews/status \
+  -H "Authorization: Bearer change-me"
+
+curl -X POST http://localhost:8787/v1/api/reviews/run \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{ "taskId": "weekly-review" }'
+```
+
+The default tasks are disabled until you configure the AI model, embedding model, and review prompts in the Web UI. If semantic recall is unavailable, the task still runs with period notes and records a warning in the result.
 
 ### Batch
 
@@ -311,7 +353,7 @@ curl -X POST http://localhost:8787/v1/api/uri/execute \
 ## Security Boundary
 
 - Paths must be Vault-relative. Absolute paths and `../` are rejected.
-- By default, writes are only allowed under `Inbox`, `Notes`, `Ideas`, `Projects`, `Daily`, `Attachments`, and `Archive`.
+- By default, writes are only allowed under `Inbox`, `Notes`, `Ideas`, `Projects`, `Daily`, `Reviews`, `Templates`, `Attachments`, and `Archive`.
 - Every write request must include a Bearer token.
 - `idempotencyKey` is supported to avoid duplicate writes when Coze or webhooks retry.
 - Writes to the same target file are serialized within one process, reducing concurrent daily-note conflicts.

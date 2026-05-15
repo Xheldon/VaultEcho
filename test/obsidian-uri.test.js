@@ -61,7 +61,7 @@ test("daily URI can use the gateway time-slot extension", async () => {
   assert.equal(result.heading, "Afternoon");
   assert.equal(
     await fs.readFile(dailyPath, "utf8"),
-    "## Morning\n\n## Afternoon\n[16:18] A\n[16:21] B\n\n## Evening\n"
+    "## Morning\n\n## Afternoon\n[16:18] A\n\n[16:21] B\n\n## Evening\n"
   );
 });
 
@@ -84,12 +84,15 @@ function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),
     dataDir: path.join(root, "data"),
-    allowedDirs: ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Attachments", "Archive"],
+    allowedDirs: ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Templates", "Attachments", "Archive"],
     dailyNote: {
       pathTemplate: "Daily/{{yyyy-MM-dd}}.md",
+      templatePath: "",
+      createIfMissing: true,
       headingLevel: 2,
       linePattern: "^\\[\\d{2}:\\d{2}\\]",
       lineFormat: "[{{HH:mm}}] {{content}}",
+      blankLineBetweenEntries: true,
       timeZone: "Asia/Shanghai",
       slots: [
         { heading: "Morning", start: "05:00", end: "11:59" },

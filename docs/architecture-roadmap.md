@@ -2,12 +2,12 @@
 
 Chinese version: [architecture-roadmap_cn.md](architecture-roadmap_cn.md).
 
-VaultEcho is a personal Obsidian Vault read/write and intelligence gateway. It is not a replacement for Coze, n8n, Claude Code, or Codex.
+VaultEcho is an Obsidian-native Vault read/write and intelligence gateway. It assumes the target Vault is a local directory managed by Obsidian Headless Sync, but it does not install, run, or log in to Obsidian Headless itself.
 
 ## One-Line Architecture
 
 ```text
-Input sources -> Coze/n8n/Shortcuts -> VaultEcho API -> Vault filesystem -> Obsidian Headless Sync
+Input sources -> Coze/n8n/Shortcuts -> VaultEcho API -> mounted Vault filesystem -> Obsidian Headless Sync
                                       \
                                        -> embedding index -> scheduled AI tasks -> Vault or webhook
 ```
@@ -18,13 +18,16 @@ VaultEcho is responsible for:
 
 - Receiving already-processed write intents from external systems.
 - Safely creating, overwriting, appending, heading-patching, frontmatter-patching, and soft-deleting Markdown files inside the Vault.
+- Treating Obsidian concepts such as templates, daily notes, headings, and YAML frontmatter as first-class API surfaces.
 - Maintaining a lightweight local index for future AI tasks.
 - Calling a remote embedding API and storing a local semantic index.
-- Writing AI task outputs back to the Vault or sending them to webhooks in later versions.
+- Running scheduled review tasks with semantic recall and writing managed Markdown output back to the Vault.
 
 VaultEcho is not responsible for:
 
 - Replacing Coze or n8n as a drag-and-drop workflow builder.
+- Installing Obsidian Headless, running `ob login`, or storing Obsidian account credentials.
+- Managing Obsidian Sync conflicts or guaranteeing that Headless has synced a write.
 - Running local LLMs or local embedding models on a 1C2G VPS.
 - Becoming a multi-tenant SaaS.
 - Calling Claude Code or Codex CLI in the background for production tasks.
@@ -35,7 +38,7 @@ VaultEcho is not responsible for:
 The target deployment is a small personal VPS, often around 1C2G with 30G disk. That can reasonably run:
 
 - A Node.js API service.
-- Obsidian Headless Sync.
+- An external Obsidian Headless Sync process.
 - A JSON or SQLite-sized local index.
 - Scheduled AI tasks.
 - Remote Claude/OpenAI-compatible API calls.
@@ -65,33 +68,37 @@ VaultEcho supports three index triggers:
 - Single-file index: `POST /v1/api/index/file`, useful for debugging or external scripts.
 - Auto-index after write: when `autoIndexAfterWrite` is enabled, files changed through VaultEcho API are indexed asynchronously.
 
-Changes pulled by Headless Sync are not written through VaultEcho. They need either:
+Changes pulled by the external Headless Sync process are not written through VaultEcho. They need either:
 
 - A manual rebuild, or
 - `autoScanIntervalMinutes` to periodically scan and update changed files.
 
-## Next AI Task Shape
+## Built-In Review Tasks
 
-Do not build a general workflow editor first. The next practical step is a small AI Task Runner:
+VaultEcho now includes a small task runner focused on review loops, not a general drag-and-drop workflow editor:
 
 ```text
-Trigger -> Context Selector -> Prompt Profile -> Model Provider -> Output Sink
+Task Schedule -> Period Source Notes -> Semantic Recall -> Prompt -> Chat Model -> Managed Markdown Output
 ```
 
-Minimum task model:
+The first task model supports:
 
-- `Context Selector`: select content from the index or filesystem by recent N days, folder, daily note, heading, or tag.
-- `Prompt Profile`: user-editable prompts plus a few built-in tasks.
-- `Model Provider`: remote Claude/OpenAI-compatible chat API.
-- `Output Sink`: write to a file, heading, daily-note summary block, or webhook.
+- Weekly, monthly, quarterly, and yearly periods.
+- Exact per-task schedules computed in the configured user time zone.
+- Source folders such as Daily, Inbox, Notes, Ideas, and Projects.
+- Optional semantic recall from the local embedding index.
+- User-editable prompts.
+- Managed output blocks written to configured Vault paths such as `Reviews/Weekly/{{YYYY}}-W{{WW}}.md`.
 
-High-value built-in tasks:
+The scheduler does not poll every minute. It computes the next enabled task run, sleeps until that time, runs due tasks once per period, records run history in `data/review-runs.json`, and then schedules the next wake-up.
 
-- Summarize yesterday's new content.
-- Summarize yesterday's journal mood and write it below a configured summary heading.
-- Detect themes from the last 7 days.
+High-value next extensions:
+
 - Suggest Inbox triage.
 - Surface open loops from active project notes.
+- Add webhook output sinks.
+- Add source selectors for heading, tag, and saved search.
+- Add lower-risk daily-note summary insertion after the review block format is stable.
 
 ## Security Principles
 

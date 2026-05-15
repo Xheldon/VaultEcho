@@ -1,47 +1,69 @@
 # Docker 部署
 
-VaultEcho 的 Docker 形态包含两个服务：
+English version: [docker-deploy.md](docker-deploy.md)。
+
+VaultEcho 强绑定 Obsidian，但本仓库的 Docker Compose 只运行 VaultEcho 服务。Obsidian Headless Sync 是你在本 Docker 之外先准备好的前置条件。
 
 ```text
-vaultecho
-  接收 Coze/n8n/curl 请求，直接修改 /vault 里的 Markdown 文件
-
-obsidian-headless
-  在同一个 /vault 上运行 ob sync --path /vault --continuous
+外部输入 -> VaultEcho API -> 挂载的本地 Vault -> Obsidian Headless Sync -> Obsidian Sync
 ```
 
-写入流程是：
+VaultEcho 在容器内写 `/vault` 下的 Markdown 文件。Docker 会把 `/vault` 映射到已经由 Obsidian Headless Sync 管理的本地 Vault 目录。
+
+## 1. 准备 Obsidian Headless Vault
+
+运行 VaultEcho 前，先用 Obsidian Headless Sync 准备好一个本地 Vault 目录，并让 Headless 对这个目录持续同步。
+
+官方文档：
+
+- [Obsidian Headless](https://help.obsidian.md/headless)
+- [Headless Sync](https://help.obsidian.md/sync/headless)
+
+最终你应该得到一个本地目录，例如：
 
 ```text
-外部输入 -> VaultEcho API -> /vault Markdown 文件 -> Obsidian Headless Sync -> Obsidian Sync
+/srv/obsidian/my-vault
 ```
 
-`obsidian-headless` 是 npm 上的社区包，不是 Obsidian 官方 CLI。项目固定安装 `.env` 里的 `OBSIDIAN_HEADLESS_VERSION`，避免容器重启时自动安装 latest，但这不能替代 Vault 备份。
+这个目录应该是：
 
-## 1. 本地先试 VaultEcho API
+- 一个真实的 Obsidian Vault。
+- 已经配置好 Obsidian Headless Sync。
+- 由你自己的 Headless 进程或服务持续同步。
+- 不要在同一台机器上同时由桌面 Obsidian Sync 管理。
+
+VaultEcho 不负责安装 Headless、不执行 `ob login`，也不保存 Obsidian 凭据。它只挂载并修改这个 Vault 目录。
+
+## 2. 本地测试 VaultEcho
 
 进入项目目录：
 
 ```bash
-cd path-to-this-repo-root-dir
+cd /Users/x/Developer/obsidian-ai-capture-gateway
 ```
 
-准备环境变量和本地挂载目录：
+准备环境变量和数据目录：
 
 ```bash
 cp .env.example .env
-mkdir -p vault data obsidian-config
+mkdir -p data
 ```
 
-编辑 `.env`，至少改掉这些值：
+编辑 `.env`：
 
 ```env
 API_TOKEN=replace-with-a-long-random-token
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-another-long-random-password
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
-OBSIDIAN_HEADLESS_VERSION=0.0.8
 BIND_HOST=127.0.0.1
+OBSIDIAN_VAULT_PATH=/srv/obsidian/my-vault
+```
+
+如果只是本地冒烟测试、暂时没有真实 Headless Sync，可以临时使用：
+
+```env
+OBSIDIAN_VAULT_PATH=./vault
 ```
 
 可以用下面命令生成随机值：
@@ -50,7 +72,7 @@ BIND_HOST=127.0.0.1
 openssl rand -base64 32
 ```
 
-启动 API 服务：
+启动 VaultEcho：
 
 ```bash
 docker compose up -d --build vaultecho
@@ -64,7 +86,9 @@ docker compose logs -f vaultecho
 http://127.0.0.1:8787/
 ```
 
-浏览器会弹出 Basic Auth 登录框，使用 `.env` 里的 `ADMIN_USERNAME` / `ADMIN_PASSWORD`。本地 Docker 默认配置应该是：
+浏览器会弹出 Basic Auth 登录框，使用 `.env` 里的 `ADMIN_USERNAME` / `ADMIN_PASSWORD`。
+
+Docker 运行配置应该是：
 
 ```text
 Vault Root: /vault
@@ -73,12 +97,10 @@ Image Attachment Dir: Attachments/Images
 Audio Attachment Dir: Attachments/Audio
 Daily Note Path Template: Daily/{{yyyy-MM-dd}}.md
 Time Zone: Asia/Shanghai
-Allowed Dirs: Inbox, Notes, Ideas, Projects, Daily, Templates, Attachments, Archive
+Allowed Dirs: Inbox, Notes, Ideas, Projects, Daily, Reviews, Templates, Attachments, Archive
 ```
 
-Docker 会把运行配置保存到本地 `data/docker-config.json`。这个文件和本机 `npm start` 使用的 `data/config.json` 分开，避免容器读到 macOS 的 `/Users/...` 路径。
-
-本地测试写入：
+测试写入：
 
 ```bash
 curl -X POST http://127.0.0.1:8787/v1/api/daily/append-by-time \
@@ -91,70 +113,33 @@ curl -X POST http://127.0.0.1:8787/v1/api/daily/append-by-time \
   }'
 ```
 
-确认文件：
+在挂载的 Vault 路径中确认文件：
 
 ```bash
-cat vault/Daily/2026-05-14.md
+cat /srv/obsidian/my-vault/Daily/2026-05-14.md
 ```
 
-停止本地 API：
+## 3. 运行路径
 
-```bash
-docker compose down
+`docker-compose.yml` 使用：
+
+```yaml
+volumes:
+  - ${OBSIDIAN_VAULT_PATH:-./vault}:/vault
+  - ./data:/data
 ```
 
-## 2. 本地可选试 Obsidian Headless
+含义：
 
-如果只是验证 API 写文件，第 1 步足够。要验证 Obsidian Sync，再继续本节。
+- `OBSIDIAN_VAULT_PATH`: 宿主机上已经由 Obsidian Headless Sync 管理的 Vault 路径。
+- `/vault`: VaultEcho 容器内使用的 Vault 路径。
+- `./data`: VaultEcho 的运行数据、配置、幂等记录和 embedding 索引。
 
-建议用一个专门的测试 Sync Vault，不要让桌面 Obsidian 同时打开并同步这个 Headless 使用的本地目录。可以是：
+Docker 会把运行配置保存到 `data/docker-config.json`。这个文件和本机 `npm start` 使用的 `data/config.json` 分开，避免容器读到 `/Users/...` 这类宿主机开发路径。
 
-```text
-目录 A: 你的私人桌面 Vault
-  桌面 Obsidian 使用
+## 4. VPS 准备
 
-目录 B: path-to-this-repo-root-dir/vault
-  VaultEcho + Obsidian Headless 使用
-```
-
-构建 Headless 镜像：
-
-```bash
-docker compose --profile sync build obsidian-headless
-```
-
-交互式登录 Obsidian：
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob login
-```
-
-登录状态会保存在本地 `./obsidian-config`，对应容器里的 `/home/node/.config`。
-
-列出远端 Sync Vault：
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-list-remote
-```
-
-把远端测试 Vault 绑定到容器内 `/vault`：
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-setup --vault "Your Test Vault" --path /vault
-```
-
-启动 API + 连续同步：
-
-```bash
-docker compose --profile sync up -d --build
-docker compose --profile sync logs -f obsidian-headless
-```
-
-之后调用 VaultEcho 写入 `/vault`，Headless 会通过 `ob sync --path /vault --continuous` 同步。
-
-## 3. VPS 准备
-
-下面默认 VPS 是 Ubuntu 或 Debian。1C2G/30G 可以跑本项目，因为 embedding 使用远程 API，不在 VPS 上跑本地模型。
+下面默认 VPS 是 Ubuntu 或 Debian。1C2G/30G 可以跑 VaultEcho，因为 embedding 使用远程 API，不在 VPS 上跑本地模型。
 
 安装 Docker、Compose、Nginx 和 Certbot：
 
@@ -197,17 +182,23 @@ git clone <your-repo-url> .
 如果还没有远端仓库，可以先在本机执行下面的命令，把目录同步到 VPS：
 
 ```bash
-rsync -av --exclude node_modules --exclude .git /Users/{local-valutecho-dir}/ user@your-vps:/opt/vaultecho/
+rsync -av --exclude node_modules --exclude .git /Users/{local-vaultecho-dir}/ user@your-vps:/opt/vaultecho/
 ```
 
-## 4. VPS 配置 VaultEcho
+## 5. VPS 配置 VaultEcho
 
-在 VPS 的 `/opt/vaultecho`：
+先确认 Obsidian Headless Sync 已经在 VPS 上准备好一个本地 Vault 目录，例如：
+
+```text
+/srv/obsidian/my-vault
+```
+
+然后配置 VaultEcho：
 
 ```bash
 cp .env.example .env
-mkdir -p vault data obsidian-config
-sudo chown -R "$(id -u):$(id -g)" vault data obsidian-config
+mkdir -p data
+sudo chown -R "$(id -u):$(id -g)" data
 ```
 
 编辑 `.env`：
@@ -217,18 +208,19 @@ API_TOKEN=replace-with-a-long-random-token
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-another-long-random-password
 APP_ENCRYPTION_KEY=replace-with-a-stable-random-secret
-OBSIDIAN_HEADLESS_VERSION=0.0.8
 BIND_HOST=127.0.0.1
+OBSIDIAN_VAULT_PATH=/srv/obsidian/my-vault
 ```
 
 说明：
 
 - `API_TOKEN`：Coze、快捷指令、curl 等外部系统调用 `/v1/api/...` 的 Bearer Token。
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD`：Web 管理页、`/v1/config`、`/health` 的 Basic Auth。
-- `APP_ENCRYPTION_KEY`：用于加密 Web UI 中保存的 embedding API Key。生成后保持稳定，换掉后旧 key 无法解密。
+- `APP_ENCRYPTION_KEY`：用于加密 Web UI 中保存的 embedding API Key。生成后保持稳定。
+- `OBSIDIAN_VAULT_PATH`：宿主机上已经由 Obsidian Headless Sync 管理的 Vault 路径。
 - `BIND_HOST`：直接 `npm start` 时生效。Docker Compose 会在容器内覆盖为 `0.0.0.0`，但宿主机端口仍只绑定到 `127.0.0.1:8787`。
 
-启动 VaultEcho API：
+启动 VaultEcho：
 
 ```bash
 docker compose up -d --build vaultecho
@@ -240,45 +232,6 @@ docker compose logs -f vaultecho
 
 ```bash
 curl -i http://127.0.0.1:8787/health -u admin:replace-with-another-long-random-password
-```
-
-## 5. VPS 初始化 Obsidian Headless
-
-构建镜像：
-
-```bash
-docker compose --profile sync build obsidian-headless
-```
-
-交互式登录：
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob login
-```
-
-列出远端 Vault：
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-list-remote
-```
-
-绑定你的测试 Sync Vault：
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob sync-setup --vault "Your Test Vault" --path /vault
-```
-
-启动 API + Headless 连续同步：
-
-```bash
-docker compose --profile sync up -d --build
-docker compose --profile sync logs -f obsidian-headless
-```
-
-如果 `ob` 命令和文档不一致，先看当前固定版本的帮助：
-
-```bash
-docker compose --profile sync run --rm obsidian-headless ob --help
 ```
 
 ## 6. Nginx 反代
@@ -341,7 +294,7 @@ sudo systemctl reload nginx
 sudo certbot --nginx -d vault.example.com
 ```
 
-Certbot 会把站点升级到 HTTPS。完成后再检查：
+再次检查：
 
 ```bash
 sudo nginx -t
@@ -378,13 +331,14 @@ Image Attachment Dir: Attachments/Images
 Audio Attachment Dir: Attachments/Audio
 Daily Note Path Template: Daily/{{yyyy-MM-dd}}.md
 Time Zone: Asia/Shanghai
+Allowed Dirs: Inbox, Notes, Ideas, Projects, Daily, Reviews, Templates, Attachments, Archive
 Slots:
   Morning 05:00-11:59
   Afternoon 12:00-17:59
   Evening 18:00-04:59
 ```
 
-如果你的日记 heading 是中文，可以在 Web UI 里把 slot heading 改成 `上午` / `下午` / `晚上`。
+如果你的日记 heading 是中文，可以在 Web UI 里修改 slot heading。
 
 如果要启用语义搜索，在 Embedding 区域配置：
 
@@ -398,6 +352,17 @@ Auto Index After Write: on
 Auto Scan Interval Minutes: 0 或一个大于 0 的间隔
 ```
 
+如果要启用 Review Tasks，还需要在 AI Model 区域配置：
+
+```text
+Provider: openai-compatible
+Base URL: https://api.openai.com/v1
+Model: 你的 chat 模型名
+API Key: 对应服务商的 API Key
+```
+
+然后启用 Review Tasks 区域，选择需要开启的周、月、季、年任务。默认输出路径会写入 `Reviews`，所以需要把 `Reviews` 保留在 Allowed Dirs 中。可以用 Review Status 或 Run Now 验证。任务运行时间按全局 Time Zone 计算，不会每分钟轮询。
+
 首次配置后可以在 Web UI 点击“重建索引”，或用 curl：
 
 ```bash
@@ -409,7 +374,7 @@ curl -X POST https://vault.example.com/v1/api/index/rebuild \
 
 ## 8. 外部写入测试
 
-Daily 写入：
+写入 Daily：
 
 ```bash
 curl -X POST https://vault.example.com/v1/api/daily/append-by-time \
@@ -429,37 +394,32 @@ curl "https://vault.example.com/v1/api/files/read?path=Daily/2026-05-14.md" \
   -H "Authorization: Bearer replace-with-a-long-random-token"
 ```
 
-查看同步日志：
-
-```bash
-docker compose --profile sync logs -f obsidian-headless
-```
+然后确认你外部运行的 Headless 进程能把该文件同步到 Obsidian Sync。
 
 ## 9. 备份和恢复
 
 建议定期备份：
 
 ```text
-/opt/vaultecho/vault
+<OBSIDIAN_VAULT_PATH>
 /opt/vaultecho/data
-/opt/vaultecho/obsidian-config
 /opt/vaultecho/.env
 ```
 
 说明：
 
-- `vault` 是本地 Obsidian Vault。
-- `data/config.json` 是 Web UI 保存的运行配置。
-- `data/idempotency` 是防重复写入记录，会清理 30 天前的记录；它不需要重点备份，丢失的影响主要是旧请求可能无法继续去重。
+- `OBSIDIAN_VAULT_PATH` 是本地 Obsidian Vault，是最重要的数据。
+- `data/docker-config.json` 是 Docker 下 Web UI 保存的运行配置。
+- `data/idempotency` 是防重复写入记录，不需要重点备份。
 - `data/index` 是本地 embedding 索引，可删除后重建，但会重新消耗远程 embedding API 调用。
-- `.env` 是服务密钥。它和 `data/config.json` 同机保存时，`APP_ENCRYPTION_KEY` 的主要作用是防止 API Key 被配置文件或日志意外明文泄露，不是防主机入侵。
+- `.env` 是服务密钥。
 
 正式使用前建议至少做一种可回滚方案：
 
 ```text
-私有 Git 定期提交 /opt/vaultecho/vault
+私有 Git 定期提交 Vault
 或 VPS 快照
-或定期打包备份 vault/data/obsidian-config
+或定期打包备份 Vault 和 /opt/vaultecho/data
 ```
 
 ## 10. 常用维护命令
@@ -467,58 +427,58 @@ docker compose --profile sync logs -f obsidian-headless
 查看状态：
 
 ```bash
-docker compose --profile sync ps
+docker compose ps
 ```
 
 查看日志：
 
 ```bash
 docker compose logs -f vaultecho
-docker compose --profile sync logs -f obsidian-headless
 ```
 
 重启：
 
 ```bash
-docker compose --profile sync restart
+docker compose restart vaultecho
 ```
 
 更新代码后重建：
 
 ```bash
-docker compose --profile sync up -d --build
+docker compose up -d --build vaultecho
 ```
 
-只停服务，不删除数据：
+只停 VaultEcho，不删除数据：
 
 ```bash
-docker compose --profile sync down
+docker compose down
 ```
 
 ## 11. 常见问题
 
 ### EACCES: permission denied, mkdir '/Users'
 
-这是容器读到了宿主机开发配置，例如 `data/config.json` 里的：
+这是容器读到了宿主机开发配置，例如：
 
 ```json
 {
-  "vaultRoot": "path-to-this-repo-root-dir/vault",
-  "dataDir": "path-to-this-repo-root-dir/data"
+  "vaultRoot": "/Users/x/Developer/obsidian-ai-capture-gateway/vault",
+  "dataDir": "/Users/x/Developer/obsidian-ai-capture-gateway/data"
 }
 ```
 
-容器内应该使用 `/vault` 和 `/data`，不能使用 macOS 的 `/Users/...` 路径。当前 Docker Compose 已固定使用 `/data/docker-config.json`，执行：
-
-```bash
-docker compose down
-docker compose up -d --build vaultecho
-docker compose logs -f vaultecho
-```
-
-如果你手动在 Web UI 里把 Docker 配置改成了 `/Users/...`，删除 `data/docker-config.json` 后重启即可让 Docker 重新生成默认配置：
+容器内应该使用 `/vault` 和 `/data`，不能使用 macOS 的 `/Users/...` 路径。删除 `data/docker-config.json` 后重启即可让 Docker 重新生成默认配置：
 
 ```bash
 rm data/docker-config.json
 docker compose up -d --build vaultecho
 ```
+
+### VaultEcho 已经写入文件，但 Obsidian 没同步
+
+VaultEcho 不运行 Obsidian Headless。检查你外部运行的 Headless 进程：
+
+- 是否正在持续同步 `OBSIDIAN_VAULT_PATH` 指向的同一个本地 Vault？
+- 是否有权限读写该目录？
+- 是否在同一台机器上让桌面 Obsidian 也同步同一个本地目录？
+- `ob sync` 在你的 Headless 服务日志里是否报错？

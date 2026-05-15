@@ -71,6 +71,78 @@ test("review task summarizes period notes with semantic recall and writes a mana
   }
 });
 
+test("review task can include daily notes from the configured daily path template", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+  config.allowedDirs = ["Journal", "Reviews", "Templates", "Archive"];
+  config.dailyNote.pathTemplate = "Journal/{{YYYY}}/{{YYYY}}-{{MM}}-{{DD}}.md";
+  config.reviews.tasks = [
+    {
+      id: "weekly-review",
+      enabled: true,
+      name: "Weekly Review",
+      period: "weekly",
+      targetPeriod: "previous",
+      schedule: { weekday: 1, time: "08:00" },
+      includeDailyNotes: true,
+      sourceDirs: [],
+      output: {
+        pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
+        heading: "Weekly Review",
+        writeMode: "replace_managed_block"
+      },
+      semanticRecall: {
+        enabled: false,
+        query: "",
+        limit: 3,
+        scopeDirs: []
+      },
+      prompt: "Summarize the period."
+    }
+  ];
+
+  await fs.mkdir(path.join(root, "vault", "Journal", "2026"), { recursive: true });
+  await fs.writeFile(
+    path.join(root, "vault", "Journal", "2026", "2026-05-13.md"),
+    "## Afternoon\n\n[16:21] Custom daily path note.\n",
+    "utf8"
+  );
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith("/chat/completions")) {
+      const body = JSON.parse(options.body);
+      assert.match(body.messages[1].content, /Journal\/2026\/2026-05-13.md/);
+      assert.match(body.messages[1].content, /Custom daily path note/);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: "## Key themes\n\n- Daily notes can live outside a Daily directory."
+              }
+            }
+          ]
+        })
+      };
+    }
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  try {
+    const result = await runReviewTask(config, "weekly-review", {
+      now: new Date("2026-05-18T00:30:00.000Z")
+    });
+
+    assert.equal(result.path, "Reviews/Weekly/2026-W20.md");
+    const output = await fs.readFile(path.join(root, "vault", result.path), "utf8");
+    assert.match(output, /Daily notes can live outside a Daily directory/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 function fakeEmbedding(text) {
   const normalized = String(text).toLowerCase();
   return [

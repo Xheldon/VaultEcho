@@ -161,7 +161,7 @@ async function collectPeriodDocuments(config, task, range) {
   const seen = new Set();
   const sourceDirs = (task.sourceDirs || []).filter((dir) => config.allowedDirs.includes(dir));
 
-  if (sourceDirs.includes("Daily")) {
+  if (task.includeDailyNotes || sourceDirs.includes("Daily")) {
     for (const day of daysInRange(range.startDate, range.endDate)) {
       const dailyPath = buildDailyPath(localNoonToDate(day, config.timeZone), config.dailyNote);
       await addDocument(config, docs, seen, dailyPath);
@@ -169,7 +169,7 @@ async function collectPeriodDocuments(config, task, range) {
   }
 
   for (const dir of sourceDirs) {
-    if (dir === "Daily") continue;
+    if (dir === "Daily" && task.includeDailyNotes) continue;
     const root = path.join(config.vaultRoot, dir);
     for await (const filePath of walkMarkdown(root)) {
       const stat = await statIfExists(filePath);

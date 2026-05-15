@@ -1,6 +1,8 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { executeApiAction } from "./api.js";
 import {
   loadRuntimeConfig,
@@ -12,10 +14,22 @@ import {
 import { startEmbeddingAutoScan } from "./embedding-index.js";
 import { startReviewTaskScheduler } from "./review-tasks.js";
 import { startIdempotencyCleanup } from "./vault.js";
-import { renderAdminPage } from "./ui.js";
 
 const ADMIN_INDEX_MUTATIONS = new Set(["index/errors/clear", "index/rebuild"]);
 const ADMIN_REVIEW_MUTATIONS = new Set(["reviews/run"]);
+const ADMIN_DIST_ROOT = path.resolve(fileURLToPath(new URL("../public/admin/", import.meta.url)));
+const ADMIN_INDEX_FILE = path.join(ADMIN_DIST_ROOT, "index.html");
+const STATIC_CONTENT_TYPES = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2"
+};
 const serverConfig = loadServerConfig();
 let runtimeConfigCache = await loadRuntimeConfig(serverConfig);
 let reviewScheduler;
@@ -25,9 +39,16 @@ const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, "http://localhost");
 
-    if (request.method === "GET" && ["/", "/admin"].includes(url.pathname)) {
+    if (request.method === "GET" && ["/", "/admin", "/admin/"].includes(url.pathname)) {
       requireAdminAuth(serverConfig, request);
-      return sendHtml(response, 200, renderAdminPage());
+      return sendStaticAdminFile(response, ADMIN_INDEX_FILE);
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/assets/")) {
+      requireAdminAuth(serverConfig, request);
+      const assetPath = resolveAdminAssetPath(url.pathname);
+      if (!assetPath) return sendJson(response, 404, { ok: false, error: "Not found" });
+      return sendStaticAdminFile(response, assetPath);
     }
 
     if (request.method === "GET" && url.pathname === "/health") {
@@ -43,6 +64,16 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/v1/config") {
       requireAdminAuth(serverConfig, request);
       return sendJson(response, 200, publicRuntimeConfig(runtimeConfigCache));
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/config/vault-dirs") {
+      requireAdminAuth(serverConfig, request);
+      await ensureRuntimeDirs(runtimeConfigCache);
+      return sendJson(response, 200, {
+        ok: true,
+        dirs: await listVaultTopLevelDirs(runtimeConfigCache),
+        allowedDirs: runtimeConfigCache.allowedDirs
+      });
     }
 
     if (request.method === "PUT" && url.pathname === "/v1/config") {
@@ -102,6 +133,14 @@ reviewScheduler = startReviewTaskScheduler(() => Promise.resolve(runtimeConfigCa
 async function ensureRuntimeDirs(config) {
   await fs.mkdir(config.vaultRoot, { recursive: true });
   await fs.mkdir(config.dataDir, { recursive: true });
+}
+
+async function listVaultTopLevelDirs(config) {
+  const entries = await fs.readdir(config.vaultRoot, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function requireApiAuth(config, request) {
@@ -292,11 +331,37 @@ function sendJson(response, statusCode, payload, headers = {}) {
   response.end(JSON.stringify(payload, null, 2));
 }
 
-function sendHtml(response, statusCode, html) {
-  response.writeHead(statusCode, {
-    "content-type": "text/html; charset=utf-8",
-    "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+function resolveAdminAssetPath(urlPathname) {
+  let relativePath = "";
+  try {
+    relativePath = decodeURIComponent(urlPathname.replace(/^\/+/, ""));
+  } catch {
+    return null;
+  }
+  const absolutePath = path.resolve(ADMIN_DIST_ROOT, relativePath);
+  if (absolutePath !== ADMIN_DIST_ROOT && !absolutePath.startsWith(`${ADMIN_DIST_ROOT}${path.sep}`)) {
+    return null;
+  }
+  return absolutePath;
+}
+
+async function sendStaticAdminFile(response, absolutePath) {
+  let body;
+  try {
+    body = await fs.readFile(absolutePath);
+  } catch (error) {
+    const statusCode = error.code === "ENOENT" ? 404 : 500;
+    return sendJson(response, statusCode, {
+      ok: false,
+      error: statusCode === 404 ? "Admin UI asset not found. Run `npm run admin:build`." : error.message
+    });
+  }
+
+  response.writeHead(200, {
+    "content-type": STATIC_CONTENT_TYPES[path.extname(absolutePath)] || "application/octet-stream",
+    "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'",
+    "x-content-type-options": "nosniff",
     "x-frame-options": "DENY"
   });
-  response.end(html);
+  response.end(body);
 }

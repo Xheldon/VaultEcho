@@ -9,12 +9,14 @@ VaultEcho is an Obsidian-native capture and feedback gateway. Coze, n8n, Shortcu
 ## Target Flow
 
 ```text
-Input sources -> Coze workflow -> VaultEcho API -> local Vault -> Obsidian Headless Sync -> Obsidian Sync
+Input sources (any of http request client like iPhone Shortcuts) -> VaultEcho API -> local Vault -> Obsidian Headless Sync -> Obsidian Sync
 ```
 
 The first version intentionally does not build an AI workflow editor. Coze handles transcription, cleanup, routing, and write-intent generation. VaultEcho focuses on safe, auditable file writes.
 
 For project boundaries, embedding design, and the review-task roadmap, see [docs/architecture-roadmap.md](docs/architecture-roadmap.md).
+
+For Web admin configuration fields, see [docs/admin-config.md](docs/admin-config.md).
 
 For Apple Shortcuts capture recipes, see [docs/shortcuts.md](docs/shortcuts.md).
 
@@ -82,13 +84,16 @@ Directory B can be a brand-new test Sync Vault. Do not let desktop Obsidian and 
 
 ## Web Configuration
 
+The admin UI is a Vue/Vite + Element Plus build served from `public/admin`. During Docker image builds it is generated automatically; for local `npm start`, run `npm run admin:build` after changing files under `admin/`.
+
 The config UI supports:
 
+- Language toggle: English by default, with a Chinese UI option stored in browser localStorage.
 - Admin access: browser Basic Auth from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`.
 - `Vault Root`: local Vault directory to write. Local default: `vault/` under the project. Docker default: `/vault`.
 - `Data Dir`: idempotency records and runtime config. Local default: `data/` under the project. Docker default: `/data`.
 - `Time Zone`: the user's time zone. It drives daily-note path resolution, time-slot insertion, and scheduled review tasks.
-- `Allowed Top-Level Dirs`: path allowlist, for example `Inbox,Notes,Ideas,Projects,Daily,Reviews,Templates,Attachments,Archive`.
+- `Allowed Top-Level Dirs`: path allowlist selected from refreshed Vault top-level directories, with a custom-dir fallback.
 - `Max JSON Body Bytes`: request body size limit.
 - `Image Attachment Dir`: default image attachment directory, default `Attachments/Images`.
 - `Audio Attachment Dir`: default audio attachment directory, default `Attachments/Audio`.
@@ -353,7 +358,7 @@ curl -X POST http://localhost:8787/v1/api/uri/execute \
 ## Security Boundary
 
 - Paths must be Vault-relative. Absolute paths and `../` are rejected.
-- By default, writes are only allowed under `Inbox`, `Notes`, `Ideas`, `Projects`, `Daily`, `Reviews`, `Templates`, `Attachments`, and `Archive`.
+- Writes are only allowed under the configured top-level directory allowlist. New configs initialize that allowlist from existing Vault folders when possible.
 - Every write request must include a Bearer token.
 - `idempotencyKey` is supported to avoid duplicate writes when Coze or webhooks retry.
 - Writes to the same target file are serialized within one process, reducing concurrent daily-note conflicts.

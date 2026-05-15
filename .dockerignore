@@ -1,0 +1,10 @@
+.DS_Store
+.env
+.git
+.vite
+data
+dist
+node_modules
+obsidian-config
+vault
+*.log

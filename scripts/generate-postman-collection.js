@@ -97,6 +97,7 @@ const collection = {
                 period: "weekly",
                 targetPeriod: "previous",
                 schedule: { weekday: 1, time: "08:00" },
+                includeDailyNotes: true,
                 sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
                 output: {
                   pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",

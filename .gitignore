@@ -4,4 +4,7 @@ node_modules/
 data/
 vault/
 obsidian-config/
+public/admin/
 *.log
+.vite/
+dist/

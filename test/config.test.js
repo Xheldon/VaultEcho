@@ -46,6 +46,7 @@ test("runtime config encrypts embedding api key and public config only exposes a
   assert.equal(publicConfig.ai.apiKeySet, false);
   assert.equal(publicConfig.reviews.enabled, false);
   assert.equal(publicConfig.reviews.tasks.length, 4);
+  assert.equal(publicConfig.reviews.tasks[0].includeDailyNotes, true);
   assert.equal(publicConfig.dailyNote.templatePath, "");
   assert.equal(publicConfig.dailyNote.createIfMissing, true);
   assert.equal(publicConfig.dailyNote.blankLineBetweenEntries, true);
@@ -93,6 +94,23 @@ test("runtime config normalizes attachment directories", async () => {
     }),
     /cannot escape/
   );
+});
+
+test("runtime config initializes allowed dirs from existing vault folders", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
+  await fs.mkdir(path.join(root, "vault", "Inbox"), { recursive: true });
+  await fs.mkdir(path.join(root, "vault", "Journal"), { recursive: true });
+  await fs.mkdir(path.join(root, "vault", ".obsidian"), { recursive: true });
+  const serverConfig = loadServerConfig(
+    {
+      CONFIG_PATH: path.join(root, "data", "config.json")
+    },
+    root
+  );
+
+  const loaded = await loadRuntimeConfig(serverConfig);
+
+  assert.deepEqual(loaded.allowedDirs, ["Inbox", "Journal"]);
 });
 
 test("runtime config rejects overlapping daily note time slots", async () => {

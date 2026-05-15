@@ -2,18 +2,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { encryptSecret } from "./secrets.js";
 
-const DEFAULT_ALLOWED_DIRS = [
-  "Inbox",
-  "Notes",
-  "Ideas",
-  "Projects",
-  "Daily",
-  "Reviews",
-  "Templates",
-  "Attachments",
-  "Archive"
-];
-
 const DEFAULT_TIME_ZONE = "Asia/Shanghai";
 
 const DEFAULT_DAILY_NOTE = {
@@ -66,6 +54,7 @@ const DEFAULT_REVIEW_TASKS = [
     period: "weekly",
     targetPeriod: "previous",
     schedule: { weekday: 1, time: "08:00" },
+    includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
     output: {
       pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
@@ -87,6 +76,7 @@ const DEFAULT_REVIEW_TASKS = [
     period: "monthly",
     targetPeriod: "previous",
     schedule: { monthDay: 1, time: "08:00" },
+    includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
     output: {
       pathTemplate: "Reviews/Monthly/{{YYYY}}-{{MM}}.md",
@@ -108,6 +98,7 @@ const DEFAULT_REVIEW_TASKS = [
     period: "quarterly",
     targetPeriod: "previous",
     schedule: { quarterDayOffset: 1, time: "08:00" },
+    includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
     output: {
       pathTemplate: "Reviews/Quarterly/{{YYYY}}-Q{{Q}}.md",
@@ -129,6 +120,7 @@ const DEFAULT_REVIEW_TASKS = [
     period: "yearly",
     targetPeriod: "previous",
     schedule: { month: 1, monthDay: 1, time: "09:00" },
+    includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
     output: {
       pathTemplate: "Reviews/Yearly/{{YYYY}}.md",
@@ -177,6 +169,10 @@ export async function loadRuntimeConfig(serverConfig) {
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     const config = normalizeRuntimeConfig({}, serverConfig);
+    const inferredAllowedDirs = await listExistingTopLevelDirs(config.vaultRoot);
+    if (inferredAllowedDirs.length > 0) {
+      config.allowedDirs = inferredAllowedDirs;
+    }
     await saveRuntimeConfig(serverConfig, config);
     return config;
   }
@@ -201,7 +197,7 @@ export function normalizeRuntimeConfig(input = {}, serverConfig, previous = {}) 
     vaultRoot: path.resolve(input.vaultRoot || serverConfig.defaultVaultRoot),
     dataDir: path.resolve(input.dataDir || serverConfig.defaultDataDir),
     timeZone,
-    allowedDirs: normalizeAllowedDirs(input.allowedDirs),
+    allowedDirs: normalizeAllowedDirs(input.allowedDirs, previous.allowedDirs),
     maxJsonBodyBytes: normalizePositiveInteger(input.maxJsonBodyBytes, 1024 * 1024),
     attachments: normalizeAttachmentConfig(input.attachments),
     embedding: normalizeEmbeddingConfig(input.embedding, previous.embedding, serverConfig),
@@ -268,18 +264,29 @@ async function readRawRuntimeConfig(serverConfig) {
   }
 }
 
-function normalizeAllowedDirs(value) {
+async function listExistingTopLevelDirs(vaultRoot) {
+  try {
+    const entries = await fs.readdir(vaultRoot, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right));
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+function normalizeAllowedDirs(value, fallback = []) {
   if (Array.isArray(value)) {
-    const dirs = value.map((item) => String(item).trim()).filter(Boolean);
-    return dirs.length > 0 ? dirs : DEFAULT_ALLOWED_DIRS;
+    return Array.from(new Set(value.map((item) => String(item).trim()).filter(Boolean)));
   }
 
   if (typeof value === "string") {
-    const dirs = value.split(",").map((item) => item.trim()).filter(Boolean);
-    return dirs.length > 0 ? dirs : DEFAULT_ALLOWED_DIRS;
+    return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean)));
   }
 
-  return DEFAULT_ALLOWED_DIRS;
+  return Array.isArray(fallback) ? Array.from(new Set(fallback.map((item) => String(item).trim()).filter(Boolean))) : [];
 }
 
 function normalizeSlots(value) {
@@ -386,6 +393,7 @@ function normalizeReviewTask(task, index) {
     period,
     targetPeriod: task.targetPeriod === "current" ? "current" : "previous",
     schedule: normalizeReviewSchedule(schedule, fallback.schedule, period),
+    includeDailyNotes: normalizeBoolean(task.includeDailyNotes, fallback.includeDailyNotes ?? true),
     sourceDirs: normalizeStringList(task.sourceDirs, fallback.sourceDirs),
     output: {
       pathTemplate: normalizeVaultRelativeTemplatePath(output.pathTemplate, fallback.output.pathTemplate),

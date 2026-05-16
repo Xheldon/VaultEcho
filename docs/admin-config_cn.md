@@ -57,7 +57,8 @@ Review Tasks 使用 OpenAI-compatible Chat API：
 第一版使用远程 OpenAI-compatible Embedding API，并把向量索引保存到 `data/index/embeddings.json`。
 
 - `Enabled`: 是否启用 embedding 能力。
-- `Base URL` / `Model` / `API Key`: 远程 embedding API 配置。Provider 同样固定为 OpenAI-compatible 协议。
+- `Enable remote embeddings`: 语义搜索、自动索引和语义召回的全局开关。只有开启后才显示模型配置。
+- `Base URL` / `Model` / `API Key`: 远程 embedding API 配置。Provider 固定为 OpenAI-compatible 协议。
 - `Dimensions`: 期望维度。填 `0` 表示让 VaultEcho 自动推断。
 - `Batch Size` / `Max Chunk Chars` / `Search Limit`: 控制索引和搜索。
 - `Auto Index After Write`: VaultEcho 通过 API 写入文件后，自动更新该文件索引。
@@ -73,15 +74,17 @@ Review Tasks 是定时 AI 回顾任务：读取一个周期内的笔记，按需
 
 ### 全局字段
 
-- `Enable scheduled review tasks`: 开关后台定时任务。
+- `Enable automatic scheduling`: 自动调度总开关。只有开启后才显示任务卡片配置。
+- `Review Status`: 读取每个任务的启用状态、下一次运行时间和最近一次运行记录。
 - `Max Source Chars`: 发送给 AI 的当前周期来源笔记最大字符数。
 - `Max Recall Chars`: 发送给 AI 的语义召回结果最大字符数。
-- `Run Task ID`: 手动运行的任务 ID。`Run Now` 不会把定时任务标记为已完成。
 
 Review Tasks 使用精确计时器，不是每分钟轮询。配置变化后，VaultEcho 会按当前卡片配置重新计算下一次运行时间。
 
 ### 任务卡片字段
 
+- `Enable this task`: 是否让这个任务卡片参与自动调度。可以同时启用多个任务。
+- `Run Now`: 先保存当前管理页配置，再手动运行这个任务一次。它不会把定时任务标记为已完成。
 - `Task ID`: 稳定标识，用于手动运行、运行历史和 managed block 标记。建议保持小写且不要频繁改，例如 `weekly-review`。
 - `Name`: 展示名称。
 - `Period`: `weekly`、`monthly`、`quarterly` 或 `yearly`。

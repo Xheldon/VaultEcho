@@ -57,7 +57,8 @@ Review tasks use an OpenAI-compatible chat API:
 The first version uses a remote OpenAI-compatible embedding API and stores vectors in `data/index/embeddings.json`.
 
 - `Enabled`: turns embedding features on.
-- `Base URL`, `Model`, `API Key`: remote embedding API settings. The provider is also fixed to the OpenAI-compatible protocol.
+- `Enable remote embeddings`: global switch for semantic search, auto-indexing, and semantic recall. The model settings are shown only when this is enabled.
+- `Base URL`, `Model`, `API Key`: remote embedding API settings. The provider is fixed to the OpenAI-compatible protocol.
 - `Dimensions`: optional expected vector dimensions. Use `0` to let VaultEcho infer it.
 - `Batch Size`, `Max Chunk Chars`, `Search Limit`: indexing and search controls.
 - `Auto Index After Write`: update changed files after VaultEcho writes them.
@@ -73,15 +74,17 @@ The UI now uses editable task cards. The `Advanced JSON` section is only an esca
 
 ### Global Fields
 
-- `Enable scheduled review tasks`: starts or stops background scheduling.
+- `Enable automatic scheduling`: starts or stops background scheduling. Task cards are shown only when this is enabled.
+- `Review Status`: loads each task's enabled state, next run time, and latest run record.
 - `Max Source Chars`: maximum characters from current-period source notes sent to AI.
 - `Max Recall Chars`: maximum characters from semantic recall results sent to AI.
-- `Run Task ID`: manual one-off run target. `Run Now` does not mark the scheduled run as complete.
 
 Review tasks use exact timers, not a per-minute polling loop. When config changes, VaultEcho reloads the scheduler from the current task cards.
 
 ### Task Card Fields
 
+- `Enable this task`: enables this specific card for automatic scheduling. Multiple tasks can be enabled at the same time.
+- `Run Now`: saves the current admin config, then runs this specific task once. It does not mark the scheduled run as complete.
 - `Task ID`: stable identifier used by manual run, run history, and managed output block markers. Keep it lowercase and stable, for example `weekly-review`.
 - `Name`: display name only.
 - `Period`: `weekly`, `monthly`, `quarterly`, or `yearly`.

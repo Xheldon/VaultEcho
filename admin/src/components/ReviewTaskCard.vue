@@ -3,10 +3,11 @@
     <template #header>
       <div class="task-card-header">
         <div class="task-title">
-          <el-switch v-model="task.enabled" />
+          <el-switch v-model="task.enabled" :active-text="labels.enableThisTask" />
           <strong>{{ task.name || task.id }}</strong>
         </div>
         <div class="task-actions">
+          <el-button size="small" type="primary" plain @click="$emit('run', task.id)">{{ labels.runNow }}</el-button>
           <el-button size="small" @click="$emit('duplicate')">{{ labels.duplicate }}</el-button>
           <el-button size="small" type="danger" plain @click="$emit('remove')">{{ labels.remove }}</el-button>
         </div>
@@ -149,5 +150,5 @@ defineProps({
   }
 });
 
-defineEmits(["duplicate", "remove"]);
+defineEmits(["duplicate", "remove", "run"]);
 </script>

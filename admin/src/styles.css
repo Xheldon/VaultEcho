@@ -78,8 +78,9 @@ code {
 .header-actions,
 .button-row,
 .footer-actions,
-.review-toolbar,
 .directory-toolbar,
+.feature-toggle-panel,
+.review-global-panel,
 .task-card-header,
 .task-title,
 .task-actions {
@@ -234,7 +235,7 @@ code {
   align-items: center;
 }
 
-.review-toolbar {
+.feature-toggle-panel {
   justify-content: space-between;
   padding: 14px;
   border: 1px solid var(--ve-border);
@@ -242,8 +243,30 @@ code {
   background: #f8fafc;
 }
 
-.run-input {
-  width: min(320px, 100%);
+.review-global-panel {
+  margin-bottom: 14px;
+}
+
+.review-status-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.review-status-item {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) minmax(220px, 2fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--ve-border);
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--ve-muted);
+}
+
+.review-status-item strong {
+  color: var(--ve-text);
 }
 
 .task-list {
@@ -311,7 +334,11 @@ code {
   }
 
   .footer-actions,
-  .review-toolbar {
+  .feature-toggle-panel {
     justify-content: flex-start;
+  }
+
+  .review-status-item {
+    grid-template-columns: 1fr;
   }
 }

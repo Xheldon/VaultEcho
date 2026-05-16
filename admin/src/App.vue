@@ -90,38 +90,41 @@
               <SectionTitle icon="Connection" :title="t('semanticIndex')" :description="t('semanticDesc')" />
             </template>
             <el-form label-position="top">
-              <el-form-item>
+              <div class="feature-toggle-panel">
                 <el-switch v-model="form.embedding.enabled" :active-text="t('enableRemoteEmbeddings')" />
-              </el-form-item>
-              <ModelForm v-model="form.embedding" :labels="labels" :api-key-hint="apiKeyHint(form.embedding.apiKeySet)" embedding />
-              <el-row :gutter="12">
-                <el-col :span="12">
-                  <el-form-item :label="t('batchSize')">
-                    <el-input-number v-model="form.embedding.batchSize" :min="1" class="full-width" />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="12">
-                  <el-form-item :label="t('searchLimit')">
-                    <el-input-number v-model="form.embedding.searchLimit" :min="1" :max="50" class="full-width" />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="12">
-                  <el-form-item :label="t('maxChunkChars')">
-                    <el-input-number v-model="form.embedding.maxChunkChars" :min="200" :step="100" class="full-width" />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="12">
-                  <el-form-item :label="t('autoScanMinutes')">
-                    <el-input-number v-model="form.embedding.autoScanIntervalMinutes" :min="0" class="full-width" />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-              <el-checkbox v-model="form.embedding.autoIndexAfterWrite">{{ t("autoIndexAfterWrite") }}</el-checkbox>
-              <div class="button-row">
-                <el-button @click="loadIndexStatus">{{ t("indexStatus") }}</el-button>
-                <el-button @click="clearIndexErrors">{{ t("clearIndexErrors") }}</el-button>
-                <el-button type="primary" plain @click="rebuildIndex">{{ t("rebuildIndex") }}</el-button>
+                <div class="form-hint">{{ form.embedding.enabled ? t("embeddingEnabledHint") : t("embeddingDisabledHint") }}</div>
               </div>
+              <template v-if="form.embedding.enabled">
+                <ModelForm v-model="form.embedding" :labels="labels" :api-key-hint="apiKeyHint(form.embedding.apiKeySet)" embedding />
+                <el-row :gutter="12">
+                  <el-col :span="12">
+                    <el-form-item :label="t('batchSize')">
+                      <el-input-number v-model="form.embedding.batchSize" :min="1" class="full-width" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item :label="t('searchLimit')">
+                      <el-input-number v-model="form.embedding.searchLimit" :min="1" :max="50" class="full-width" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item :label="t('maxChunkChars')">
+                      <el-input-number v-model="form.embedding.maxChunkChars" :min="200" :step="100" class="full-width" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item :label="t('autoScanMinutes')">
+                      <el-input-number v-model="form.embedding.autoScanIntervalMinutes" :min="0" class="full-width" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-checkbox v-model="form.embedding.autoIndexAfterWrite">{{ t("autoIndexAfterWrite") }}</el-checkbox>
+                <div class="button-row">
+                  <el-button @click="loadIndexStatus">{{ t("indexStatus") }}</el-button>
+                  <el-button @click="clearIndexErrors">{{ t("clearIndexErrors") }}</el-button>
+                  <el-button type="primary" plain @click="rebuildIndex">{{ t("rebuildIndex") }}</el-button>
+                </div>
+              </template>
             </el-form>
           </el-card>
         </el-col>
@@ -182,47 +185,58 @@
             <SectionTitle icon="Notebook" :title="t('reviewTasks')" :description="t('reviewDesc')" inline />
           </template>
           <div class="collapse-body">
-            <div class="review-toolbar">
-              <el-switch v-model="form.reviews.enabled" :active-text="t('enableReviewTasks')" />
-              <el-input v-model="reviewRunTaskId" class="run-input" :placeholder="t('runTaskId')" />
+            <div class="feature-toggle-panel review-global-panel">
+              <div>
+                <el-switch v-model="form.reviews.enabled" :active-text="t('enableReviewScheduler')" />
+                <div class="form-hint">{{ form.reviews.enabled ? t("reviewSchedulerEnabledHint") : t("reviewSchedulerDisabledHint") }}</div>
+              </div>
               <el-button @click="loadReviewStatus">{{ t("reviewStatus") }}</el-button>
-              <el-button type="primary" plain @click="runReviewTask">{{ t("runNow") }}</el-button>
             </div>
-            <el-row :gutter="18">
-              <el-col :xs="24" :md="12">
-                <el-form-item :label="t('maxSourceChars')">
-                  <el-input-number v-model="form.reviews.maxSourceChars" :min="1000" :step="1000" class="full-width" />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="12">
-                <el-form-item :label="t('maxRecallChars')">
-                  <el-input-number v-model="form.reviews.maxRecallChars" :min="1000" :step="1000" class="full-width" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-            <div class="task-list">
-              <ReviewTaskCard
-                v-for="(task, index) in form.reviews.tasks"
-                :key="task.__key"
-                v-model="form.reviews.tasks[index]"
-                :dir-options="taskDirOptions(task)"
-                :labels="labels"
-                @duplicate="duplicateTask(index)"
-                @remove="removeTask(index)"
-              />
+            <div v-if="reviewStatus" class="review-status-list">
+              <div v-for="task in reviewStatus.tasks" :key="task.id" class="review-status-item">
+                <strong>{{ task.name || task.id }}</strong>
+                <span>{{ task.enabled ? `${t("nextRunAt")}: ${formatDateTime(task.nextRunAt)}` : t("taskDisabled") }}</span>
+                <span>{{ t("lastRun") }}: {{ formatReviewRun(task.lastRun) }}</span>
+              </div>
             </div>
-            <div class="button-row">
-              <el-button :icon="Plus" @click="addReviewTask">{{ t("addTask") }}</el-button>
-            </div>
-            <el-collapse class="advanced-collapse">
-              <el-collapse-item name="json" :title="t('advancedJson')">
-                <el-input v-model="reviewTasksJson" type="textarea" :rows="14" />
-                <div class="button-row">
-                  <el-button @click="syncReviewJsonFromTasks">{{ t("refreshFromCards") }}</el-button>
-                  <el-button @click="applyReviewJson">{{ t("applyJsonToCards") }}</el-button>
-                </div>
-              </el-collapse-item>
-            </el-collapse>
+            <template v-if="form.reviews.enabled">
+              <el-row :gutter="18">
+                <el-col :xs="24" :md="12">
+                  <el-form-item :label="t('maxSourceChars')">
+                    <el-input-number v-model="form.reviews.maxSourceChars" :min="1000" :step="1000" class="full-width" />
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :md="12">
+                  <el-form-item :label="t('maxRecallChars')">
+                    <el-input-number v-model="form.reviews.maxRecallChars" :min="1000" :step="1000" class="full-width" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <div class="task-list">
+                <ReviewTaskCard
+                  v-for="(task, index) in form.reviews.tasks"
+                  :key="task.__key"
+                  v-model="form.reviews.tasks[index]"
+                  :dir-options="taskDirOptions(task)"
+                  :labels="labels"
+                  @duplicate="duplicateTask(index)"
+                  @remove="removeTask(index)"
+                  @run="runReviewTask(task.id)"
+                />
+              </div>
+              <div class="button-row">
+                <el-button :icon="Plus" @click="addReviewTask">{{ t("addTask") }}</el-button>
+              </div>
+              <el-collapse class="advanced-collapse">
+                <el-collapse-item name="json" :title="t('advancedJson')">
+                  <el-input v-model="reviewTasksJson" type="textarea" :rows="14" />
+                  <div class="button-row">
+                    <el-button @click="syncReviewJsonFromTasks">{{ t("refreshFromCards") }}</el-button>
+                    <el-button @click="applyReviewJson">{{ t("applyJsonToCards") }}</el-button>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
+            </template>
           </div>
         </el-collapse-item>
       </el-collapse>
@@ -285,6 +299,8 @@ const translations = {
     temperature: "Temperature",
     maxOutputTokens: "最大输出 Tokens",
     enableRemoteEmbeddings: "启用远程 Embedding",
+    embeddingEnabledHint: "语义搜索、自动索引和回顾任务语义召回会使用这组配置。",
+    embeddingDisabledHint: "关闭后不运行语义索引和语义召回；打开后再配置模型和索引参数。",
     dimensions: "维度",
     batchSize: "批量大小",
     searchLimit: "搜索结果数",
@@ -311,9 +327,19 @@ const translations = {
     reviewTasks: "回顾任务",
     reviewDesc: "周、月、季、年 AI 回顾，支持语义召回和受管理输出块。",
     enableReviewTasks: "启用定时回顾任务",
+    enableReviewScheduler: "启用自动调度",
+    reviewSchedulerEnabledHint: "自动调度会按下方已启用任务的周期和运行时间执行；保存配置后生效。",
+    reviewSchedulerDisabledHint: "自动调度关闭时，下方任务不会自动执行；打开后才显示任务配置。",
     runTaskId: "运行任务 ID",
     reviewStatus: "回顾状态",
+    reviewStatusLoaded: "回顾状态已更新",
     runNow: "立即运行",
+    savingBeforeRun: "正在保存当前配置，然后运行任务...",
+    enableThisTask: "启用此任务",
+    nextRunAt: "下次运行",
+    lastRun: "上次运行",
+    taskDisabled: "此任务未启用",
+    noLastRun: "暂无记录",
     maxSourceChars: "最大来源字符数",
     maxRecallChars: "最大召回字符数",
     addTask: "添加任务",
@@ -406,7 +432,9 @@ const labels = computed(() => ({
   thursday: t("thursday"),
   friday: t("friday"),
   saturday: t("saturday"),
-  noVaultDirs: t("noVaultDirs")
+  noVaultDirs: t("noVaultDirs"),
+  enableThisTask: t("enableThisTask"),
+  runNow: t("runNow")
 }));
 
 const language = ref(localStorage.getItem("vaultecho.uiLanguage") || "en");
@@ -416,7 +444,7 @@ const vaultDirs = ref([]);
 const loadingDirs = ref(false);
 const customAllowedDir = ref("");
 const reviewTasksJson = ref("[]");
-const reviewRunTaskId = ref("");
+const reviewStatus = ref(null);
 const form = reactive(defaultForm());
 
 const timeZoneOptions = computed(() => {
@@ -482,6 +510,8 @@ const englishText = {
   temperature: "Temperature",
   maxOutputTokens: "Max Output Tokens",
   enableRemoteEmbeddings: "Enable remote embeddings",
+  embeddingEnabledHint: "Semantic search, auto-indexing, and review-task recall use this configuration.",
+  embeddingDisabledHint: "Semantic indexing and recall are disabled. Enable it to configure the model and index settings.",
   dimensions: "Dimensions",
   batchSize: "Batch Size",
   searchLimit: "Search Limit",
@@ -508,9 +538,19 @@ const englishText = {
   reviewTasks: "Review Tasks",
   reviewDesc: "Weekly, monthly, quarterly, and yearly AI reviews with semantic recall.",
   enableReviewTasks: "Enable scheduled review tasks",
+  enableReviewScheduler: "Enable automatic scheduling",
+  reviewSchedulerEnabledHint: "Automatic scheduling runs the enabled task cards below. Save config to apply changes.",
+  reviewSchedulerDisabledHint: "Automatic scheduling is off. Enable it to show and edit review task cards.",
   runTaskId: "Run Task ID",
   reviewStatus: "Review Status",
+  reviewStatusLoaded: "Review status updated",
   runNow: "Run Now",
+  savingBeforeRun: "Saving current config before running the task...",
+  enableThisTask: "Enable this task",
+  nextRunAt: "Next run",
+  lastRun: "Last run",
+  taskDisabled: "This task is disabled",
+  noLastRun: "No run yet",
   maxSourceChars: "Max Source Chars",
   maxRecallChars: "Max Recall Chars",
   addTask: "Add Task",
@@ -598,13 +638,18 @@ async function loadConfig() {
 async function saveConfig() {
   try {
     setStatus("Saving config...");
-    const saved = await request("/v1/config", { method: "PUT", body: JSON.stringify(toPayload()) });
-    applyConfig(saved);
-    await loadVaultDirs({ silent: true });
+    await persistConfig();
     setStatus("Config saved", "success");
   } catch (error) {
     setStatus(error.message, "error");
   }
+}
+
+async function persistConfig() {
+  const saved = await request("/v1/config", { method: "PUT", body: JSON.stringify(toPayload()) });
+  applyConfig(saved);
+  await loadVaultDirs({ silent: true });
+  return saved;
 }
 
 function applyConfig(config) {
@@ -623,7 +668,7 @@ function applyConfig(config) {
     ...(config.reviews || {}),
     tasks: (config.reviews?.tasks || []).map(normalizeTaskForForm)
   };
-  reviewRunTaskId.value = form.reviews.tasks[0]?.id || "";
+  reviewStatus.value = null;
   syncReviewJsonFromTasks();
 }
 
@@ -717,19 +762,21 @@ async function rebuildIndex() {
 async function loadReviewStatus() {
   try {
     const payload = await request("/v1/api/reviews/status", { method: "POST", body: "{}" });
-    const enabled = payload.result.enabled ? "enabled" : "disabled";
-    const next = (payload.result.tasks || []).filter((task) => task.enabled).map((task) => `${task.id}: ${task.nextRunAt || "not scheduled"}`).join("; ");
-    setStatus(`Review tasks are ${enabled}. ${next || "No enabled tasks."}`, "success");
+    reviewStatus.value = payload.result;
+    setStatus(t("reviewStatusLoaded"), "success");
   } catch (error) {
     setStatus(error.message, "error");
   }
 }
 
-async function runReviewTask() {
+async function runReviewTask(taskId) {
   try {
-    if (!reviewRunTaskId.value.trim()) throw new Error("Run Task ID is required");
-    const payload = await request("/v1/api/reviews/run", { method: "POST", body: JSON.stringify({ taskId: reviewRunTaskId.value.trim() }) });
+    if (!String(taskId || "").trim()) throw new Error("Task ID is required");
+    setStatus(t("savingBeforeRun"));
+    await persistConfig();
+    const payload = await request("/v1/api/reviews/run", { method: "POST", body: JSON.stringify({ taskId: String(taskId).trim() }) });
     setStatus(`Review written to ${payload.result.path}`, "success");
+    await loadReviewStatus();
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -788,6 +835,25 @@ function setStatus(message, type = "info") {
 
 function toggleLanguage() {
   language.value = language.value === "en" ? "zh" : "en";
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat(language.value === "zh" ? "zh-CN" : "en", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: form.timeZone
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function formatReviewRun(run) {
+  if (!run) return t("noLastRun");
+  const status = run.ok === false ? `Failed: ${run.error || ""}` : run.path || "OK";
+  return `${formatDateTime(run.ranAt)} · ${status}`;
 }
 
 function normalizeTaskForForm(task) {

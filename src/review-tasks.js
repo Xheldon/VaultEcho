@@ -151,7 +151,9 @@ export function nextReviewRunAt(config, now = new Date()) {
 
 function findReviewTask(config, taskId) {
   const tasks = config.reviews?.tasks || [];
-  const task = tasks.find((item) => item.id === taskId) || tasks[0];
+  const requestedId = String(taskId || "").trim();
+  const task = requestedId ? tasks.find((item) => item.id === requestedId) : tasks[0];
+  if (requestedId && !task) throw new Error(`Review task not found: ${requestedId}`);
   if (!task) throw new Error("No review task is configured");
   return task;
 }

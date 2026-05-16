@@ -143,6 +143,18 @@ test("review task can include daily notes from the configured daily path templat
   }
 });
 
+test("review task rejects an unknown task id", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+
+  await assert.rejects(
+    () => runReviewTask(config, "missing-review", {
+      now: new Date("2026-05-18T00:30:00.000Z")
+    }),
+    /Review task not found: missing-review/
+  );
+});
+
 function fakeEmbedding(text) {
   const normalized = String(text).toLowerCase();
   return [

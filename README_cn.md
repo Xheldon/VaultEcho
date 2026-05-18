@@ -90,6 +90,8 @@ OBSIDIAN_VAULT_PATH=/path/to/headless-vault
 - `Data Dir`: 幂等记录和运行配置目录。本机默认是项目下的 `data/`，Docker 默认是 `/data`。
 - `Time Zone`: 用户时区。它会同时影响日记路径解析、按时间段插入，以及定时回顾任务。
 - `Allowed Top-Level Dirs`: 路径白名单，可从刷新到的 Vault 顶层目录中选择，也保留自定义目录入口。
+- `Include Root Markdown Files`: 可选把 Vault 根目录下的 `.md` 文件纳入语义索引和回顾任务。
+- `Global Exclude Paths`: 全局排除的 Vault 相对目录或文件，会从语义索引和所有回顾任务中排除。
 - `Max JSON Body Bytes`: 请求体大小限制。
 - `Image Attachment Dir`: 图片附件默认目录，默认 `Attachments/Images`。
 - `Audio Attachment Dir`: 音频附件默认目录，默认 `Attachments/Audio`。
@@ -271,7 +273,7 @@ curl -X POST http://localhost:8787/v1/api/search/semantic \
 
 ### Review Tasks
 
-Review Tasks 把 Vault 从被动存储推进到主动反馈。任务会选定一个周期，读取相关笔记，按需召回历史上语义相关的内容，调用配置的 AI 模型，然后把结果写入配置输出文件中的受管理块。
+Review Tasks 把 Vault 从被动存储推进到主动反馈。任务会选定一个周期，读取相关笔记，按需召回历史上语义相关的内容，调用配置的 AI 模型，然后把结果写入配置输出文件中的受管理块。每个任务也可以排除 Vault 相对目录或子目录，例如 `Attachments` 或 `书影音/电影`，这些路径会同时从来源笔记和语义召回中排除。
 
 ```bash
 curl http://localhost:8787/v1/api/reviews/status \

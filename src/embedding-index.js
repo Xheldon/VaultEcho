@@ -138,6 +138,18 @@ export async function indexEmbeddingFile(config, relativePath) {
   const chunksWithoutFile = store.chunks.filter((chunk) => chunk.path !== normalizedPath);
   const nextFiles = { ...store.files };
 
+  if (isExcludedPath(normalizedPath, config.excludePaths)) {
+    delete nextFiles[normalizedPath];
+    await writeIndexStore(config, normalizeIndexStore({
+      ...store,
+      signature,
+      updatedAt: new Date().toISOString(),
+      files: nextFiles,
+      chunks: chunksWithoutFile
+    }));
+    return { ok: true, operation: "index/file", path: normalizedPath, skipped: true, reason: "Path is excluded" };
+  }
+
   if (!exists) {
     delete nextFiles[normalizedPath];
     await writeIndexStore(config, normalizeIndexStore({
@@ -358,7 +370,9 @@ function embeddingSignature(config) {
     baseUrl: config.embedding?.baseUrl || "",
     model: config.embedding?.model || "",
     dimensions: config.embedding?.dimensions || 0,
-    maxChunkChars: config.embedding?.maxChunkChars || DEFAULT_MAX_CHUNK_CHARS
+    maxChunkChars: config.embedding?.maxChunkChars || DEFAULT_MAX_CHUNK_CHARS,
+    includeRootMarkdownFiles: Boolean(config.includeRootMarkdownFiles),
+    excludePaths: normalizeExcludePaths(config.excludePaths)
   }));
 }
 
@@ -451,13 +465,44 @@ function splitByLength(text, maxLength) {
 
 async function listMarkdownFiles(config) {
   const files = [];
+  if (config.includeRootMarkdownFiles) {
+    files.push(...await listRootMarkdownFiles(config.vaultRoot));
+  }
   for (const dir of config.allowedDirs) {
     const root = path.join(config.vaultRoot, dir);
     for await (const filePath of walkMarkdown(root)) {
       files.push(filePath);
     }
   }
-  return files.sort((left, right) => left.localeCompare(right));
+  const excludePaths = normalizeExcludePaths(config.excludePaths);
+  return files
+    .filter((filePath) => !isExcludedPath(toVaultRelativePath(config, filePath), excludePaths))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeExcludePaths(paths = []) {
+  return (Array.isArray(paths) ? paths : [])
+    .map((item) => path.posix.normalize(String(item || "").trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "")))
+    .filter((item) => item && item !== "." && item !== ".." && !item.startsWith("../"));
+}
+
+function isExcludedPath(relativePath, excludePaths = []) {
+  const normalizedExcludePaths = normalizeExcludePaths(excludePaths);
+  const normalized = path.posix.normalize(String(relativePath || "").replaceAll("\\", "/").replace(/^\/+|\/+$/g, ""));
+  return normalizedExcludePaths.some((excluded) => normalized === excluded || normalized.startsWith(`${excluded}/`));
+}
+
+async function listRootMarkdownFiles(vaultRoot) {
+  let entries;
+  try {
+    entries = await fs.readdir(vaultRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".md"))
+    .map((entry) => path.join(vaultRoot, entry.name));
 }
 
 async function* walkMarkdown(root) {

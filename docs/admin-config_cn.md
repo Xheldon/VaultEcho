@@ -21,6 +21,8 @@ English version: [admin-config.md](admin-config.md).
 - `Data Dir`: 运行配置、幂等记录、embedding 索引和回顾任务运行历史。Docker 中使用 `/data`。
 - `Time Zone`: 全局用户时区。它同时影响日记路径、`daily/append-by-time` 和定时 Review Tasks。
 - `Allowed Top-Level Dirs`: 允许 VaultEcho 读写的顶层目录，使用勾选样式选择。新配置会尽量从当前 Vault 已有顶层目录初始化。
+- `Include root Markdown files`: 是否把 Vault 根目录下的 `.md` 文件纳入语义索引和 Review Task 周期来源。
+- `Global Exclude Paths`: 全局排除的 Vault 相对目录或文件，会从语义索引和所有 Review Tasks 中排除；任务级排除路径会与这里合并。
 - `Vault Directory Picker`: 刷新当前 Vault 已有顶层目录，并渲染为可勾选项。如果某个目录还不存在但未来会创建，例如 `Reviews`，用 `Custom Dir` 添加。
 - `Max JSON Body Bytes`: 请求体大小限制。
 - `Image Attachment Dir` / `Audio Attachment Dir`: 后续附件写入的默认 Vault 相对目录。
@@ -96,6 +98,7 @@ Review Tasks 使用精确计时器，不是每分钟轮询。配置变化后，V
 - `Month`: 年度任务使用，`1` 到 `12`。
 - `Include daily notes resolved from Daily File Path`: 按配置的 `Daily File Path` 逐日读取周期内的每日笔记。即使你的日记目录叫 `日记`、`Journal` 而不是 `Daily`，也应该开启它。
 - `Source Dirs`: 额外来源目录。VaultEcho 会按文件修改时间筛选所选周期内的文件。
+- `Exclude Paths`: 要排除的 Vault 相对目录或子目录，会同时排除周期来源笔记和语义召回结果。适合附件、批量导入、历史整理目录，例如 `Attachments` 或 `书影音/电影`。
 - `Use semantic recall`: 从 embedding 索引中搜索历史相关内容。
 - `Semantic Recall Query`: 固定召回查询。留空时会从周期笔记内容中派生召回语义。
 - `Semantic Recall Limit`: 召回条数。

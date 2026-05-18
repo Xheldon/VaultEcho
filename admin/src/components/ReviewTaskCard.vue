@@ -91,6 +91,22 @@
           </el-form-item>
         </el-col>
         <el-col :xs="24">
+          <el-form-item :label="labels.excludePaths">
+            <el-select
+              v-model="task.excludePaths"
+              class="full-width"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              :placeholder="labels.excludePathsPlaceholder"
+            >
+              <el-option v-for="dir in dirOptions" :key="dir" :value="dir" :label="dir" />
+            </el-select>
+            <div class="form-hint">{{ labels.excludePathsHint }}</div>
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24">
           <el-checkbox v-model="task.semanticRecall.enabled">{{ labels.semanticRecall }}</el-checkbox>
         </el-col>
         <el-col :xs="24" :md="18">

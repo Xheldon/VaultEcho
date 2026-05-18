@@ -123,6 +123,138 @@ test("review task applies a task-specific template once and appends repeated run
   }
 });
 
+test("review task excludes configured folders from source notes and semantic recall", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+  config.allowedDirs = ["Notes", "Reviews"];
+  config.excludePaths = ["Notes/Imports"];
+  config.reviews.tasks[0] = {
+    ...config.reviews.tasks[0],
+    includeDailyNotes: false,
+    sourceDirs: ["Notes"],
+    excludePaths: ["Notes/Movies"],
+    semanticRecall: {
+      enabled: true,
+      query: "movie backlog",
+      limit: 20,
+      scopeDirs: ["Notes"]
+    }
+  };
+
+  await fs.mkdir(path.join(root, "vault", "Notes", "Movies"), { recursive: true });
+  await fs.mkdir(path.join(root, "vault", "Notes", "Imports"), { recursive: true });
+  await fs.writeFile(
+    path.join(root, "vault", "Notes", "week.md"),
+    "# Week\n\nReal weekly work note about project planning.\n",
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(root, "vault", "Notes", "Movies", "import.md"),
+    "# Movie backlog\n\nImported 1000 historical movie records.\n",
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(root, "vault", "Notes", "Imports", "bulk.md"),
+    "# Bulk import\n\nImported 500 historical notes.\n",
+    "utf8"
+  );
+  const mtime = new Date("2026-05-13T08:00:00.000Z");
+  await fs.utimes(path.join(root, "vault", "Notes", "week.md"), mtime, mtime);
+  await fs.utimes(path.join(root, "vault", "Notes", "Movies", "import.md"), mtime, mtime);
+  await fs.utimes(path.join(root, "vault", "Notes", "Imports", "bulk.md"), mtime, mtime);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith("/embeddings")) {
+      const body = JSON.parse(options.body);
+      const input = Array.isArray(body.input) ? body.input : [body.input];
+      return {
+        ok: true,
+        json: async () => ({
+          data: input.map((text, index) => ({ index, embedding: fakeEmbedding(text) }))
+        })
+      };
+    }
+    if (String(url).endsWith("/chat/completions")) {
+      const body = JSON.parse(options.body);
+      const userMessage = body.messages[1].content;
+      assert.match(userMessage, /Notes\/week.md/);
+      assert.match(userMessage, /Real weekly work note/);
+      assert.doesNotMatch(userMessage, /Notes\/Movies\/import.md/);
+      assert.doesNotMatch(userMessage, /Imported 1000 historical movie records/);
+      assert.doesNotMatch(userMessage, /Notes\/Imports\/bulk.md/);
+      assert.doesNotMatch(userMessage, /Imported 500 historical notes/);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: "## Key themes\n\n- Exclusions worked." } }]
+        })
+      };
+    }
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  try {
+    await rebuildEmbeddingIndex(config);
+    const result = await runReviewTask(config, "weekly-review", {
+      now: new Date("2026-05-18T00:30:00.000Z")
+    });
+
+    assert.equal(result.path, "Reviews/Weekly/2026-W20.md");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("review task can include root markdown files as period sources", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+  config.includeRootMarkdownFiles = true;
+  config.allowedDirs = ["Reviews"];
+  config.reviews.tasks[0] = {
+    ...config.reviews.tasks[0],
+    includeDailyNotes: false,
+    sourceDirs: [],
+    semanticRecall: {
+      enabled: false,
+      query: "",
+      limit: 3,
+      scopeDirs: []
+    }
+  };
+
+  await fs.mkdir(path.join(root, "vault"), { recursive: true });
+  await fs.writeFile(path.join(root, "vault", "Evergreen.md"), "# Root\n\nRoot period note.\n", "utf8");
+  const mtime = new Date("2026-05-13T08:00:00.000Z");
+  await fs.utimes(path.join(root, "vault", "Evergreen.md"), mtime, mtime);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith("/chat/completions")) {
+      const body = JSON.parse(options.body);
+      assert.match(body.messages[1].content, /Evergreen.md/);
+      assert.match(body.messages[1].content, /Root period note/);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: "## Key themes\n\n- Root note included." } }]
+        })
+      };
+    }
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  try {
+    const result = await runReviewTask(config, "weekly-review", {
+      now: new Date("2026-05-18T00:30:00.000Z")
+    });
+
+    assert.equal(result.path, "Reviews/Weekly/2026-W20.md");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("review task can include daily notes from the configured daily path template", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
   const config = testConfig(root);

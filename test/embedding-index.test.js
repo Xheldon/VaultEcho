@@ -45,6 +45,74 @@ test("embedding index rebuilds markdown chunks and supports semantic search", as
   }
 });
 
+test("embedding index can include root markdown files", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-embedding-index-"));
+  const config = testConfig(root);
+  config.includeRootMarkdownFiles = true;
+  await fs.mkdir(path.join(root, "vault", "Ideas"), { recursive: true });
+  await fs.writeFile(path.join(root, "vault", "Evergreen.md"), "# Root\n\nroot apple note\n", "utf8");
+  await fs.writeFile(path.join(root, "vault", "Ideas", "banana.md"), "# Fruit\n\nbanana banana note\n", "utf8");
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const input = Array.isArray(body.input) ? body.input : [body.input];
+    return {
+      ok: true,
+      json: async () => ({
+        data: input.map((text, index) => ({
+          index,
+          embedding: fakeEmbedding(text)
+        }))
+      })
+    };
+  };
+
+  try {
+    const rebuilt = await rebuildEmbeddingIndex(config);
+    const search = await searchEmbeddingIndex(config, { query: "apple", limit: 2 });
+
+    assert.equal(rebuilt.files, 2);
+    assert.equal(search.results[0].path, "Evergreen.md");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("embedding index skips globally excluded paths", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-embedding-index-"));
+  const config = testConfig(root);
+  config.excludePaths = ["Ideas/Archive"];
+  await fs.mkdir(path.join(root, "vault", "Ideas", "Archive"), { recursive: true });
+  await fs.writeFile(path.join(root, "vault", "Ideas", "apple.md"), "# Fruit\n\napple apple note\n", "utf8");
+  await fs.writeFile(path.join(root, "vault", "Ideas", "Archive", "banana.md"), "# Fruit\n\nbanana banana note\n", "utf8");
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const input = Array.isArray(body.input) ? body.input : [body.input];
+    return {
+      ok: true,
+      json: async () => ({
+        data: input.map((text, index) => ({
+          index,
+          embedding: fakeEmbedding(text)
+        }))
+      })
+    };
+  };
+
+  try {
+    const rebuilt = await rebuildEmbeddingIndex(config);
+    const search = await searchEmbeddingIndex(config, { query: "banana", limit: 2 });
+
+    assert.equal(rebuilt.files, 1);
+    assert.deepEqual(search.results.map((result) => result.path), ["Ideas/apple.md"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 function fakeEmbedding(text) {
   const normalized = String(text).toLowerCase();
   return [

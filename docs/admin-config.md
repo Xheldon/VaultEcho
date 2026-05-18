@@ -21,6 +21,8 @@ The admin UI defaults to English and includes a language toggle for Chinese. The
 - `Data Dir`: runtime config, idempotency records, embedding index, and review run history. Use `/data` in Docker.
 - `Time Zone`: the user's timezone. It drives daily note path resolution, `daily/append-by-time`, and scheduled review tasks.
 - `Allowed Top-Level Dirs`: checkbox allowlist. New configs are initialized from existing top-level Vault folders when possible.
+- `Include root Markdown files`: includes `.md` files directly under the Vault root in semantic indexing and review-task period sources.
+- `Global Exclude Paths`: Vault-relative folders or files excluded from semantic indexing and all review tasks. Task-level exclude paths are merged with this global list.
 - `Vault Directory Picker`: refreshes existing top-level Vault folders and renders them as checkbox choices. Use `Custom Dir` only for folders that do not exist yet but should be allowed, such as `Reviews`.
 - `Max JSON Body Bytes`: request body size limit.
 - `Image Attachment Dir` and `Audio Attachment Dir`: Vault-relative defaults for future attachment write flows.
@@ -96,6 +98,7 @@ Review tasks use exact timers, not a per-minute polling loop. When config change
 - `Month`: yearly schedule month, `1` to `12`.
 - `Include daily notes resolved from Daily File Path`: reads every daily note path in the period using the configured Daily File Path. This works even if your daily folder is named `Journal` or `日记`.
 - `Source Dirs`: other top-level Vault directories scanned by file modified time for the selected period.
+- `Exclude Paths`: Vault-relative folders or subfolders excluded from both source notes and semantic recall. Use this for attachments, imports, or historical bulk folders such as `Attachments` or `Media/Movies`.
 - `Use semantic recall`: searches the embedding index for historically related notes.
 - `Semantic Recall Query`: optional fixed query. Leave blank to derive recall from the period notes.
 - `Semantic Recall Limit`: number of recall chunks.

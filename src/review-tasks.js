@@ -162,30 +162,43 @@ async function collectPeriodDocuments(config, task, range) {
   const docs = [];
   const seen = new Set();
   const sourceDirs = (task.sourceDirs || []).filter((dir) => config.allowedDirs.includes(dir));
+  const excludePaths = reviewExcludePaths(config, task);
+
+  if (config.includeRootMarkdownFiles) {
+    for (const filePath of await listRootMarkdownFiles(config.vaultRoot)) {
+      const stat = await statIfExists(filePath);
+      if (!stat?.isFile() || stat.size > MAX_MARKDOWN_SCAN_BYTES) continue;
+      if (stat.mtime < range.start || stat.mtime >= range.end) continue;
+      const relativePath = toVaultRelativePath(config, filePath);
+      await addDocument(config, docs, seen, relativePath, stat, excludePaths);
+    }
+  }
 
   if (task.includeDailyNotes || sourceDirs.includes("Daily")) {
     for (const day of daysInRange(range.startDate, range.endDate)) {
       const dailyPath = buildDailyPath(localNoonToDate(day, config.timeZone), config.dailyNote);
-      await addDocument(config, docs, seen, dailyPath);
+      await addDocument(config, docs, seen, dailyPath, null, excludePaths);
     }
   }
 
   for (const dir of sourceDirs) {
     if (dir === "Daily" && task.includeDailyNotes) continue;
+    if (isExcludedPath(dir, excludePaths)) continue;
     const root = path.join(config.vaultRoot, dir);
     for await (const filePath of walkMarkdown(root)) {
       const stat = await statIfExists(filePath);
       if (!stat?.isFile() || stat.size > MAX_MARKDOWN_SCAN_BYTES) continue;
       if (stat.mtime < range.start || stat.mtime >= range.end) continue;
       const relativePath = toVaultRelativePath(config, filePath);
-      await addDocument(config, docs, seen, relativePath, stat);
+      await addDocument(config, docs, seen, relativePath, stat, excludePaths);
     }
   }
 
   return docs.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-async function addDocument(config, docs, seen, relativePath, knownStat = null) {
+async function addDocument(config, docs, seen, relativePath, knownStat = null, excludePaths = []) {
+  if (isExcludedPath(relativePath, excludePaths)) return;
   if (seen.has(relativePath)) return;
   seen.add(relativePath);
   const filePath = path.join(config.vaultRoot, relativePath);
@@ -218,18 +231,22 @@ async function collectSemanticRecall(config, task, sourceText) {
   if (!task.semanticRecall?.enabled) return { results: [] };
   const query = task.semanticRecall.query || sourceText.slice(0, 4000);
   if (!query.trim()) return { results: [] };
+  const excludePaths = reviewExcludePaths(config, task);
+  const requestedLimit = task.semanticRecall.limit || 8;
 
   try {
     const result = await searchEmbeddingIndex(config, {
       query,
-      limit: task.semanticRecall.limit || 8
+      limit: excludePaths.length > 0 ? Math.min(requestedLimit * 3, 50) : requestedLimit
     });
     if (result.ok === false) {
       return { results: [], warning: result.error || "Semantic recall failed" };
     }
     const allowed = new Set(task.semanticRecall.scopeDirs || []);
     const results = (result.results || [])
-      .filter((item) => allowed.size === 0 || allowed.has(item.path.split("/")[0]))
+      .filter((item) => allowed.size === 0 || allowed.has(item.path.split("/")[0]) || isRootMarkdownPath(item.path))
+      .filter((item) => !isExcludedPath(item.path, excludePaths))
+      .slice(0, requestedLimit)
       .map((item) => ({
         path: item.path,
         heading: item.heading,
@@ -240,6 +257,25 @@ async function collectSemanticRecall(config, task, sourceText) {
   } catch (error) {
     return { results: [], warning: error.message };
   }
+}
+
+function isRootMarkdownPath(relativePath) {
+  return typeof relativePath === "string" && relativePath.toLowerCase().endsWith(".md") && !relativePath.includes("/");
+}
+
+function normalizeExcludePaths(paths = []) {
+  return (Array.isArray(paths) ? paths : [])
+    .map((item) => path.posix.normalize(String(item || "").trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "")))
+    .filter((item) => item && item !== "." && item !== ".." && !item.startsWith("../"));
+}
+
+function reviewExcludePaths(config, task) {
+  return normalizeExcludePaths([...(config.excludePaths || []), ...(task.excludePaths || [])]);
+}
+
+function isExcludedPath(relativePath, excludePaths = []) {
+  const normalized = path.posix.normalize(String(relativePath || "").replaceAll("\\", "/").replace(/^\/+|\/+$/g, ""));
+  return excludePaths.some((excluded) => normalized === excluded || normalized.startsWith(`${excluded}/`));
 }
 
 function buildReviewMessages(task, range, sourceText, semanticRecall, maxRecallChars) {
@@ -655,6 +691,19 @@ async function* walkMarkdown(root) {
       yield filePath;
     }
   }
+}
+
+async function listRootMarkdownFiles(vaultRoot) {
+  let entries;
+  try {
+    entries = await fs.readdir(vaultRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".md"))
+    .map((entry) => path.join(vaultRoot, entry.name));
 }
 
 async function statIfExists(filePath) {

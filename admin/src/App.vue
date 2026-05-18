@@ -55,6 +55,26 @@
               </el-form-item>
             </el-col>
             <el-col :xs="24">
+              <el-checkbox v-model="form.includeRootMarkdownFiles">{{ t("includeRootMarkdownFiles") }}</el-checkbox>
+              <div class="form-hint">{{ t("includeRootMarkdownFilesHint") }}</div>
+            </el-col>
+            <el-col :xs="24">
+              <el-form-item :label="t('globalExcludePaths')">
+                <el-select
+                  v-model="form.excludePaths"
+                  class="full-width"
+                  multiple
+                  filterable
+                  allow-create
+                  default-first-option
+                  :placeholder="t('globalExcludePathsPlaceholder')"
+                >
+                  <el-option v-for="dir in allowedDirOptions" :key="dir" :value="dir" :label="dir" />
+                </el-select>
+                <div class="form-hint">{{ t("globalExcludePathsHint") }}</div>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24">
               <div class="directory-toolbar">
                 <el-button :icon="Refresh" :loading="loadingDirs" @click="loadVaultDirs()">{{ t("refreshVaultDirs") }}</el-button>
                 <el-input v-model="customAllowedDir" :placeholder="t('customDirPlaceholder')" clearable />
@@ -278,6 +298,11 @@ const translations = {
     timeZoneHint: "日记时间戳插入和回顾任务调度都使用这个全局时区。",
     allowedDirs: "允许的顶层目录",
     allowedDirsHint: "写入路径必须位于这些勾选的顶层目录中。刷新会读取当前 Vault 已有目录。",
+    includeRootMarkdownFiles: "包含 Vault 根目录 Markdown 文件",
+    includeRootMarkdownFilesHint: "启用后，根目录下的 .md 文件会进入语义索引和回顾任务周期来源；不改变写入安全目录。",
+    globalExcludePaths: "全局排除路径",
+    globalExcludePathsPlaceholder: "输入或选择要全局排除的 Vault 路径",
+    globalExcludePathsHint: "会从语义索引和所有回顾任务来源中排除；任务自己的排除路径会与这里合并。",
     noVaultDirs: "未找到 Vault 顶层目录",
     refreshVaultDirs: "刷新 Vault 目录",
     customDirPlaceholder: "自定义顶层目录，例如 Reviews",
@@ -359,6 +384,9 @@ const translations = {
     quarterDayOffset: "季度日偏移",
     month: "月份",
     sourceDirs: "来源目录",
+    excludePaths: "排除路径",
+    excludePathsPlaceholder: "输入或选择要排除的 Vault 路径",
+    excludePathsHint: "支持顶层目录或子目录，例如 Attachments、书影音/电影。会同时排除来源材料和语义召回结果。",
     includeDailyNotes: "包含按日记路径解析出的每日笔记",
     semanticRecall: "语义召回",
     semanticRecallQuery: "语义召回查询",
@@ -406,6 +434,9 @@ const labels = computed(() => ({
   quarterDayOffset: t("quarterDayOffset"),
   month: t("month"),
   sourceDirs: t("sourceDirs"),
+  excludePaths: t("excludePaths"),
+  excludePathsPlaceholder: t("excludePathsPlaceholder"),
+  excludePathsHint: t("excludePathsHint"),
   includeDailyNotes: t("includeDailyNotes"),
   semanticRecall: t("semanticRecall"),
   semanticRecallQuery: t("semanticRecallQuery"),
@@ -485,6 +516,11 @@ const englishText = {
   timeZoneHint: "Daily timestamp insertion and review task schedules both use this global timezone.",
   allowedDirs: "Allowed Top-Level Dirs",
   allowedDirsHint: "Every write path must stay inside the checked top-level directories. Refresh reads current Vault folders.",
+  includeRootMarkdownFiles: "Include root Markdown files",
+  includeRootMarkdownFilesHint: "When enabled, .md files directly under the Vault root are included in semantic indexing and review-task period sources. This does not change write safety boundaries.",
+  globalExcludePaths: "Global Exclude Paths",
+  globalExcludePathsPlaceholder: "Type or select Vault paths to exclude globally",
+  globalExcludePathsHint: "Excluded from semantic indexing and all review-task sources. Task-level exclude paths are merged with this list.",
   noVaultDirs: "No Vault directories found",
   refreshVaultDirs: "Refresh Vault Dirs",
   customDirPlaceholder: "Custom top-level dir, for example Reviews",
@@ -566,6 +602,9 @@ const englishText = {
   quarterDayOffset: "Quarter Day Offset",
   month: "Month",
   sourceDirs: "Source Dirs",
+  excludePaths: "Exclude Paths",
+  excludePathsPlaceholder: "Type or select Vault paths to exclude",
+  excludePathsHint: "Supports top-level folders or subfolders, for example Attachments or Media/Movies. Applies to both source notes and semantic recall.",
   includeDailyNotes: "Include daily notes resolved from Daily File Path",
   semanticRecall: "Semantic Recall",
   semanticRecallQuery: "Semantic Recall Query",
@@ -596,6 +635,8 @@ function defaultForm() {
     dataDir: "",
     timeZone: "Asia/Shanghai",
     allowedDirs: [],
+    includeRootMarkdownFiles: false,
+    excludePaths: [],
     maxJsonBodyBytes: 1048576,
     attachments: { imageDir: "Attachments/Images", audioDir: "Attachments/Audio" },
     ai: { provider: "openai-compatible", baseUrl: "https://api.openai.com/v1", model: "", apiKey: "", apiKeySet: false, temperature: 0.2, maxOutputTokens: 1600 },
@@ -652,6 +693,8 @@ function applyConfig(config) {
   form.dataDir = config.dataDir || defaults.dataDir;
   form.timeZone = config.timeZone || defaults.timeZone;
   form.allowedDirs = [...(config.allowedDirs || [])];
+  form.includeRootMarkdownFiles = Boolean(config.includeRootMarkdownFiles);
+  form.excludePaths = [...(config.excludePaths || [])];
   form.maxJsonBodyBytes = config.maxJsonBodyBytes || defaults.maxJsonBodyBytes;
   form.attachments = { ...defaults.attachments, ...(config.attachments || {}) };
   form.ai = normalizeProviderForForm({ ...defaults.ai, ...(config.ai || {}), apiKey: "" });
@@ -672,6 +715,8 @@ function toPayload() {
     dataDir: form.dataDir,
     timeZone: form.timeZone,
     allowedDirs: form.allowedDirs,
+    includeRootMarkdownFiles: form.includeRootMarkdownFiles,
+    excludePaths: form.excludePaths,
     maxJsonBodyBytes: form.maxJsonBodyBytes,
     attachments: form.attachments,
     ai: { ...form.ai, provider: "openai-compatible" },
@@ -860,6 +905,7 @@ function normalizeTaskForForm(task) {
     output: { ...fallback.output, ...(task.output || {}) },
     semanticRecall: { ...fallback.semanticRecall, ...(task.semanticRecall || {}) },
     sourceDirs: Array.isArray(task.sourceDirs) ? task.sourceDirs : fallback.sourceDirs,
+    excludePaths: Array.isArray(task.excludePaths) ? task.excludePaths : fallback.excludePaths,
     includeDailyNotes: task.includeDailyNotes !== false
   };
 }
@@ -882,6 +928,7 @@ function createDefaultReviewTask(id) {
     schedule: { time: "08:00", weekday: 1, monthDay: 1, quarterDayOffset: 1, month: 1, period: "weekly" },
     includeDailyNotes: true,
     sourceDirs: [...form.allowedDirs],
+    excludePaths: [],
     output: { pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md", heading: "Review", templatePath: "" },
     semanticRecall: { enabled: true, query: "", limit: 8, scopeDirs: [...form.allowedDirs] },
     prompt: "Summarize this period, identify patterns, open loops, and questions worth thinking about next. Ground claims in the supplied notes."

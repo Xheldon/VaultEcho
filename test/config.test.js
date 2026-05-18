@@ -41,12 +41,15 @@ test("runtime config encrypts embedding api key and public config only exposes a
     imageDir: "Attachments/Images",
     audioDir: "Attachments/Audio"
   });
+  assert.equal(publicConfig.includeRootMarkdownFiles, false);
+  assert.deepEqual(publicConfig.excludePaths, []);
   assert.equal(publicConfig.timeZone, "Asia/Shanghai");
   assert.equal(publicConfig.dailyNote.timeZone, "Asia/Shanghai");
   assert.equal(publicConfig.ai.apiKeySet, false);
   assert.equal(publicConfig.reviews.enabled, false);
   assert.equal(publicConfig.reviews.tasks.length, 4);
   assert.equal(publicConfig.reviews.tasks[0].includeDailyNotes, true);
+  assert.deepEqual(publicConfig.reviews.tasks[0].excludePaths, []);
   assert.equal(publicConfig.reviews.tasks[0].output.templatePath, "");
   assert.equal(publicConfig.reviews.tasks[0].output.writeMode, undefined);
   assert.equal(publicConfig.dailyNote.templatePath, "");
@@ -63,6 +66,70 @@ test("runtime config encrypts embedding api key and public config only exposes a
 
   const preserved = await loadRuntimeConfig(serverConfig);
   assert.equal(preserved.embedding.apiKeyEncrypted, loaded.embedding.apiKeyEncrypted);
+});
+
+test("runtime config normalizes review exclude paths", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
+  const serverConfig = loadServerConfig(
+    {
+      CONFIG_PATH: path.join(root, "data", "config.json")
+    },
+    root
+  );
+
+  await saveRuntimeConfig(serverConfig, {
+    reviews: {
+      tasks: [
+        {
+          id: "weekly-review",
+          excludePaths: ["/Attachments/", "Media\\Movies", "Media/Movies"]
+        }
+      ]
+    }
+  });
+
+  const loaded = await loadRuntimeConfig(serverConfig);
+  assert.deepEqual(loaded.reviews.tasks[0].excludePaths, ["Attachments", "Media/Movies"]);
+
+  await assert.rejects(
+    saveRuntimeConfig(serverConfig, {
+      reviews: {
+        tasks: [
+          {
+            id: "weekly-review",
+            excludePaths: ["../outside"]
+          }
+        ]
+      }
+    }),
+    /cannot escape/
+  );
+});
+
+test("runtime config normalizes global exclude paths", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
+  const serverConfig = loadServerConfig(
+    {
+      CONFIG_PATH: path.join(root, "data", "config.json")
+    },
+    root
+  );
+
+  await saveRuntimeConfig(serverConfig, {
+    excludePaths: ["/Attachments/", "Media\\Movies", "Media/Movies"],
+    includeRootMarkdownFiles: true
+  });
+
+  const loaded = await loadRuntimeConfig(serverConfig);
+  assert.equal(loaded.includeRootMarkdownFiles, true);
+  assert.deepEqual(loaded.excludePaths, ["Attachments", "Media/Movies"]);
+
+  await assert.rejects(
+    saveRuntimeConfig(serverConfig, {
+      excludePaths: ["../outside"]
+    }),
+    /cannot escape/
+  );
 });
 
 test("runtime config normalizes attachment directories", async () => {

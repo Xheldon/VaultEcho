@@ -94,6 +94,8 @@ The config UI supports:
 - `Data Dir`: idempotency records and runtime config. Local default: `data/` under the project. Docker default: `/data`.
 - `Time Zone`: the user's time zone. It drives daily-note path resolution, time-slot insertion, and scheduled review tasks.
 - `Allowed Top-Level Dirs`: path allowlist selected from refreshed Vault top-level directories, with a custom-dir fallback.
+- `Include Root Markdown Files`: optionally indexes and reviews `.md` files directly under the Vault root.
+- `Global Exclude Paths`: Vault-relative folders or files excluded from semantic indexing and all review tasks.
 - `Max JSON Body Bytes`: request body size limit.
 - `Image Attachment Dir`: default image attachment directory, default `Attachments/Images`.
 - `Audio Attachment Dir`: default audio attachment directory, default `Attachments/Audio`.
@@ -275,7 +277,7 @@ curl -X POST http://localhost:8787/v1/api/search/semantic \
 
 ### Review Tasks
 
-Review tasks turn the Vault from passive storage into a feedback loop. A task selects a period, reads relevant notes, optionally recalls older semantically related notes, calls the configured AI model, then writes a managed block to the configured output file.
+Review tasks turn the Vault from passive storage into a feedback loop. A task selects a period, reads relevant notes, optionally recalls older semantically related notes, calls the configured AI model, then writes a managed block to the configured output file. Each task can also exclude Vault-relative folders or subfolders, such as `Attachments` or `Media/Movies`, from both source notes and semantic recall.
 
 ```bash
 curl http://localhost:8787/v1/api/reviews/status \

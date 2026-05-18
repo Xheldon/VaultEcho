@@ -56,6 +56,7 @@ const DEFAULT_REVIEW_TASKS = [
     schedule: { weekday: 1, time: "08:00" },
     includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
+    excludePaths: [],
     output: {
       pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
       heading: "Weekly Review",
@@ -78,6 +79,7 @@ const DEFAULT_REVIEW_TASKS = [
     schedule: { monthDay: 1, time: "08:00" },
     includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
+    excludePaths: [],
     output: {
       pathTemplate: "Reviews/Monthly/{{YYYY}}-{{MM}}.md",
       heading: "Monthly Review",
@@ -100,6 +102,7 @@ const DEFAULT_REVIEW_TASKS = [
     schedule: { quarterDayOffset: 1, time: "08:00" },
     includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
+    excludePaths: [],
     output: {
       pathTemplate: "Reviews/Quarterly/{{YYYY}}-Q{{Q}}.md",
       heading: "Quarterly Review",
@@ -122,6 +125,7 @@ const DEFAULT_REVIEW_TASKS = [
     schedule: { month: 1, monthDay: 1, time: "09:00" },
     includeDailyNotes: true,
     sourceDirs: ["Daily", "Inbox", "Notes", "Ideas", "Projects"],
+    excludePaths: [],
     output: {
       pathTemplate: "Reviews/Yearly/{{YYYY}}.md",
       heading: "Yearly Review",
@@ -198,6 +202,8 @@ export function normalizeRuntimeConfig(input = {}, serverConfig, previous = {}) 
     dataDir: path.resolve(input.dataDir || serverConfig.defaultDataDir),
     timeZone,
     allowedDirs: normalizeAllowedDirs(input.allowedDirs, previous.allowedDirs),
+    includeRootMarkdownFiles: normalizeBoolean(input.includeRootMarkdownFiles, previous.includeRootMarkdownFiles ?? false),
+    excludePaths: normalizeVaultRelativePathList(input.excludePaths, previous.excludePaths || []),
     maxJsonBodyBytes: normalizePositiveInteger(input.maxJsonBodyBytes, 1024 * 1024),
     attachments: normalizeAttachmentConfig(input.attachments),
     embedding: normalizeEmbeddingConfig(input.embedding, previous.embedding, serverConfig),
@@ -240,6 +246,8 @@ export function publicRuntimeConfig(config) {
     dataDir: config.dataDir,
     timeZone: config.timeZone,
     allowedDirs: config.allowedDirs,
+    includeRootMarkdownFiles: Boolean(config.includeRootMarkdownFiles),
+    excludePaths: config.excludePaths,
     maxJsonBodyBytes: config.maxJsonBodyBytes,
     attachments: config.attachments,
     embedding: {
@@ -395,6 +403,7 @@ function normalizeReviewTask(task, index) {
     schedule: normalizeReviewSchedule(schedule, fallback.schedule, period),
     includeDailyNotes: normalizeBoolean(task.includeDailyNotes, fallback.includeDailyNotes ?? true),
     sourceDirs: normalizeStringList(task.sourceDirs, fallback.sourceDirs),
+    excludePaths: normalizeVaultRelativePathList(task.excludePaths, fallback.excludePaths || []),
     output: {
       pathTemplate: normalizeVaultRelativeTemplatePath(output.pathTemplate, fallback.output.pathTemplate),
       heading: normalizeString(output.heading, fallback.output.heading),
@@ -508,6 +517,31 @@ function normalizeOptionalVaultRelativePath(value) {
     throw new Error("Template path cannot escape the vault root");
   }
   return normalized;
+}
+
+function normalizeVaultRelativePathList(value, fallback = []) {
+  const raw = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/\r?\n|,/)
+      : fallback;
+  const paths = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const rawPath = String(item || "").trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+    if (!rawPath) continue;
+    if (path.isAbsolute(rawPath)) {
+      throw new Error("Review exclude paths must be vault-relative paths");
+    }
+    const normalized = path.posix.normalize(rawPath);
+    if (normalized === "." || normalized === ".." || normalized.startsWith("../")) {
+      throw new Error("Review exclude paths cannot escape the vault root");
+    }
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    paths.push(normalized);
+  }
+  return paths;
 }
 
 function isTime(value) {

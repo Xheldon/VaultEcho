@@ -102,7 +102,7 @@ const collection = {
                 output: {
                   pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
                   heading: "Weekly Review",
-                  writeMode: "replace_managed_block"
+                  templatePath: ""
                 },
                 semanticRecall: {
                   enabled: true,

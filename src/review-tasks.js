@@ -121,7 +121,7 @@ export async function runReviewTask(config, taskId, options = {}) {
   const semanticRecall = await collectSemanticRecall(config, task, sourceText);
   const messages = buildReviewMessages(task, range, sourceText, semanticRecall, config.reviews?.maxRecallChars || 16000);
   const summary = await callChatModel(config, messages);
-  const written = await writeReviewOutput(config, task, range, summary);
+  const written = await writeReviewOutput(config, task, range, summary, options.runAt || new Date());
 
   return {
     ok: true,
@@ -308,33 +308,81 @@ async function callChatModel(config, messages) {
   return content.trim();
 }
 
-async function writeReviewOutput(config, task, range, summary) {
+async function writeReviewOutput(config, task, range, summary, runAt) {
   const outputPath = renderTemplate(task.output.pathTemplate, range.variables);
   const target = resolveVaultPath(config, ensureMarkdownExtension(outputPath));
-  const existing = await readTextIfExists(target.absolutePath) ?? "";
-  const next = applyManagedReviewBlock(existing, task, range, summary);
+  const existing = await readTextIfExists(target.absolutePath);
+  const base = existing === null
+    ? await renderReviewBase(config, task, range, target.relativePath, runAt)
+    : existing;
+  const next = appendReviewEntry(base, reviewEntry(range, summary, runAt, config.timeZone));
   await fs.mkdir(path.dirname(target.absolutePath), { recursive: true });
   await atomicWrite(target.absolutePath, next);
   return { path: target.relativePath };
 }
 
-function applyManagedReviewBlock(markdown, task, range, summary) {
-  const start = `<!-- vaultecho:review task=${task.id} period=${range.label} start -->`;
-  const end = "<!-- vaultecho:review end -->";
-  const heading = `${"#".repeat(1)} ${task.output.heading || task.name} ${range.label}`;
-  const block = `${heading}\n\n${start}\n${summary.trim()}\n${end}\n`;
-  const pattern = new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}\\n?`);
+async function renderReviewBase(config, task, range, outputPath, runAt) {
+  const variables = reviewTemplateVariables(task, range, outputPath, runAt, config.timeZone);
+  if (!task.output.templatePath) {
+    return `# ${variables.title}`;
+  }
 
-  if (pattern.test(markdown)) {
-    return ensureTrailingNewline(markdown.replace(pattern, `${start}\n${summary.trim()}\n${end}\n`));
+  const template = await readReviewTemplate(config, task.output.templatePath);
+  return renderTemplate(template, variables).trimEnd();
+}
+
+async function readReviewTemplate(config, templatePath) {
+  const target = resolveVaultPath(config, ensureMarkdownExtension(templatePath));
+  const content = await readTextIfExists(target.absolutePath);
+  if (content === null) {
+    throw new Error(`Review template not found: ${target.relativePath}`);
   }
-  if (task.output.writeMode === "append" && markdown.trim()) {
-    return `${markdown.replace(/\n+$/g, "")}\n\n${block}`;
-  }
-  if (markdown.trim()) {
-    return `${markdown.replace(/\n+$/g, "")}\n\n${block}`;
-  }
-  return block;
+  return content;
+}
+
+function reviewTemplateVariables(task, range, outputPath, runAt, timeZone) {
+  const heading = task.output.heading || task.name;
+  return {
+    ...range.variables,
+    generatedAt: formatInTimeZone(runAt, timeZone),
+    title: `${heading} ${range.label}`,
+    heading,
+    taskId: task.id,
+    taskName: task.name,
+    outputPath
+  };
+}
+
+function reviewEntry(range, summary, runAt, timeZone) {
+  return `${reviewNotice(range, runAt, timeZone)}\n\n${summary.trim()}`;
+}
+
+function reviewNotice(range, runAt, timeZone) {
+  return [
+    "> [!info] VaultEcho Review",
+    `> Period: ${range.label} (${range.startDate.iso} to ${range.endDate.iso})`,
+    `> Generated At: ${formatInTimeZone(runAt, timeZone)}`
+  ].join("\n");
+}
+
+function appendReviewEntry(markdown, entry) {
+  const base = String(markdown || "").trimEnd();
+  return ensureTrailingNewline(base ? `${base}\n\n${entry}` : entry);
+}
+
+function formatInTimeZone(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 function periodRangeForTask(task, occurrence, timeZone) {
@@ -649,8 +697,4 @@ function clampText(value, maxChars) {
 
 function toVaultRelativePath(config, filePath) {
   return path.relative(config.vaultRoot, filePath).replaceAll(path.sep, "/");
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

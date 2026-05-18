@@ -325,7 +325,7 @@ const translations = {
     end: "结束",
     addSlot: "添加时间段",
     reviewTasks: "回顾任务",
-    reviewDesc: "周、月、季、年 AI 回顾，支持语义召回和受管理输出块。",
+    reviewDesc: "周、月、季、年 AI 回顾，支持语义召回和模板化输出文件。",
     enableReviewTasks: "启用定时回顾任务",
     enableReviewScheduler: "启用自动调度",
     reviewSchedulerEnabledHint: "自动调度会按下方已启用任务的周期和运行时间执行；保存配置后生效。",
@@ -365,8 +365,8 @@ const translations = {
     semanticRecallLimit: "语义召回数量",
     semanticRecallScopeDirs: "语义召回范围目录",
     outputPathTemplate: "输出路径模板",
+    reviewTemplatePath: "回顾模板路径",
     outputHeading: "输出 Heading",
-    writeMode: "写入模式",
     prompt: "提示词",
     weekly: "每周",
     monthly: "每月",
@@ -374,8 +374,6 @@ const translations = {
     yearly: "每年",
     previous: "上一个完整周期",
     current: "当前周期",
-    replaceManagedBlock: "替换受管理块",
-    append: "缺失时追加",
     sunday: "周日",
     monday: "周一",
     tuesday: "周二",
@@ -414,8 +412,8 @@ const labels = computed(() => ({
   semanticRecallLimit: t("semanticRecallLimit"),
   semanticRecallScopeDirs: t("semanticRecallScopeDirs"),
   outputPathTemplate: t("outputPathTemplate"),
+  reviewTemplatePath: t("reviewTemplatePath"),
   outputHeading: t("outputHeading"),
-  writeMode: t("writeMode"),
   prompt: t("prompt"),
   weekly: t("weekly"),
   monthly: t("monthly"),
@@ -423,8 +421,6 @@ const labels = computed(() => ({
   yearly: t("yearly"),
   previous: t("previous"),
   current: t("current"),
-  replaceManagedBlock: t("replaceManagedBlock"),
-  append: t("append"),
   sunday: t("sunday"),
   monday: t("monday"),
   tuesday: t("tuesday"),
@@ -576,8 +572,8 @@ const englishText = {
   semanticRecallLimit: "Semantic Recall Limit",
   semanticRecallScopeDirs: "Semantic Recall Scope Dirs",
   outputPathTemplate: "Output Path Template",
+  reviewTemplatePath: "Review Template Path",
   outputHeading: "Output Heading",
-  writeMode: "Write Mode",
   prompt: "Prompt",
   weekly: "Weekly",
   monthly: "Monthly",
@@ -585,8 +581,6 @@ const englishText = {
   yearly: "Yearly",
   previous: "Previous completed period",
   current: "Current period",
-  replaceManagedBlock: "Replace managed block",
-  append: "Append when missing",
   sunday: "Sunday",
   monday: "Monday",
   tuesday: "Tuesday",
@@ -888,7 +882,7 @@ function createDefaultReviewTask(id) {
     schedule: { time: "08:00", weekday: 1, monthDay: 1, quarterDayOffset: 1, month: 1, period: "weekly" },
     includeDailyNotes: true,
     sourceDirs: [...form.allowedDirs],
-    output: { pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md", heading: "Review", writeMode: "replace_managed_block" },
+    output: { pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md", heading: "Review", templatePath: "" },
     semanticRecall: { enabled: true, query: "", limit: 8, scopeDirs: [...form.allowedDirs] },
     prompt: "Summarize this period, identify patterns, open loops, and questions worth thinking about next. Ground claims in the supplied notes."
   };
@@ -897,6 +891,7 @@ function createDefaultReviewTask(id) {
 function stripTaskForSave(task) {
   const copy = JSON.parse(JSON.stringify(task));
   delete copy.__key;
+  if (copy.output) delete copy.output.writeMode;
   return copy;
 }
 

@@ -108,17 +108,14 @@
             <el-input v-model="task.output.pathTemplate" />
           </el-form-item>
         </el-col>
-        <el-col :xs="24" :md="6">
-          <el-form-item :label="labels.outputHeading">
-            <el-input v-model="task.output.heading" />
+        <el-col :xs="24" :md="12">
+          <el-form-item :label="labels.reviewTemplatePath">
+            <el-input v-model="task.output.templatePath" />
           </el-form-item>
         </el-col>
-        <el-col :xs="24" :md="6">
-          <el-form-item :label="labels.writeMode">
-            <el-select v-model="task.output.writeMode" class="full-width">
-              <el-option value="replace_managed_block" :label="labels.replaceManagedBlock" />
-              <el-option value="append" :label="labels.append" />
-            </el-select>
+        <el-col :xs="24" :md="12">
+          <el-form-item :label="labels.outputHeading">
+            <el-input v-model="task.output.heading" />
           </el-form-item>
         </el-col>
         <el-col :xs="24">

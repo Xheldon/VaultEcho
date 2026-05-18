@@ -59,7 +59,7 @@ const DEFAULT_REVIEW_TASKS = [
     output: {
       pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
       heading: "Weekly Review",
-      writeMode: "replace_managed_block"
+      templatePath: ""
     },
     semanticRecall: {
       enabled: true,
@@ -81,7 +81,7 @@ const DEFAULT_REVIEW_TASKS = [
     output: {
       pathTemplate: "Reviews/Monthly/{{YYYY}}-{{MM}}.md",
       heading: "Monthly Review",
-      writeMode: "replace_managed_block"
+      templatePath: ""
     },
     semanticRecall: {
       enabled: true,
@@ -103,7 +103,7 @@ const DEFAULT_REVIEW_TASKS = [
     output: {
       pathTemplate: "Reviews/Quarterly/{{YYYY}}-Q{{Q}}.md",
       heading: "Quarterly Review",
-      writeMode: "replace_managed_block"
+      templatePath: ""
     },
     semanticRecall: {
       enabled: true,
@@ -125,7 +125,7 @@ const DEFAULT_REVIEW_TASKS = [
     output: {
       pathTemplate: "Reviews/Yearly/{{YYYY}}.md",
       heading: "Yearly Review",
-      writeMode: "replace_managed_block"
+      templatePath: ""
     },
     semanticRecall: {
       enabled: true,
@@ -398,7 +398,7 @@ function normalizeReviewTask(task, index) {
     output: {
       pathTemplate: normalizeVaultRelativeTemplatePath(output.pathTemplate, fallback.output.pathTemplate),
       heading: normalizeString(output.heading, fallback.output.heading),
-      writeMode: output.writeMode === "append" ? "append" : "replace_managed_block"
+      templatePath: normalizeOptionalVaultRelativePath(output.templatePath || output.template || fallback.output.templatePath || "")
     },
     semanticRecall: {
       enabled: normalizeBoolean(recall.enabled, fallback.semanticRecall.enabled),

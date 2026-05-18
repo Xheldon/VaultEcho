@@ -47,6 +47,8 @@ test("runtime config encrypts embedding api key and public config only exposes a
   assert.equal(publicConfig.reviews.enabled, false);
   assert.equal(publicConfig.reviews.tasks.length, 4);
   assert.equal(publicConfig.reviews.tasks[0].includeDailyNotes, true);
+  assert.equal(publicConfig.reviews.tasks[0].output.templatePath, "");
+  assert.equal(publicConfig.reviews.tasks[0].output.writeMode, undefined);
   assert.equal(publicConfig.dailyNote.templatePath, "");
   assert.equal(publicConfig.dailyNote.createIfMissing, true);
   assert.equal(publicConfig.dailyNote.blankLineBetweenEntries, true);

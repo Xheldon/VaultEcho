@@ -6,7 +6,7 @@ import test from "node:test";
 import { rebuildEmbeddingIndex } from "../src/embedding-index.js";
 import { runReviewTask } from "../src/review-tasks.js";
 
-test("review task summarizes period notes with semantic recall and writes a managed block", async () => {
+test("review task summarizes period notes with semantic recall and appends a review entry", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
   const config = testConfig(root);
   await fs.mkdir(path.join(root, "vault", "Daily"), { recursive: true });
@@ -58,14 +58,66 @@ test("review task summarizes period notes with semantic recall and writes a mana
   try {
     await rebuildEmbeddingIndex(config);
     const result = await runReviewTask(config, "weekly-review", {
-      now: new Date("2026-05-18T00:30:00.000Z")
+      now: new Date("2026-05-18T00:30:00.000Z"),
+      runAt: new Date("2026-05-18T06:33:21.000Z")
     });
 
     assert.equal(result.path, "Reviews/Weekly/2026-W20.md");
     assert.equal(result.semanticRecall.results > 0, true);
     const output = await fs.readFile(path.join(root, "vault", result.path), "utf8");
-    assert.match(output, /<!-- vaultecho:review task=weekly-review period=2026-W20 start -->/);
+    assert.doesNotMatch(output, /<!-- vaultecho:review/);
+    assert.match(output, /> Period: 2026-W20 \(2026-05-11 to 2026-05-18\)/);
+    assert.match(output, /> Generated At: 2026-05-18 14:33:21/);
     assert.match(output, /Automation kept recurring/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("review task applies a task-specific template once and appends repeated runs", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+  config.reviews.tasks[0].output.templatePath = "Templates/weekly-review";
+  await fs.mkdir(path.join(root, "vault", "Templates"), { recursive: true });
+  await fs.writeFile(
+    path.join(root, "vault", "Templates", "weekly-review.md"),
+    "---\ntype: weekly-review\nperiod: {{periodLabel}}\ncreated: {{generatedAt}}\n---\n",
+    "utf8"
+  );
+
+  let calls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/chat/completions")) {
+      calls += 1;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: `## Key themes\n\n- Template run ${calls}.` } }]
+        })
+      };
+    }
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  try {
+    await runReviewTask(config, "weekly-review", {
+      now: new Date("2026-05-18T00:30:00.000Z"),
+      runAt: new Date("2026-05-18T06:33:21.000Z")
+    });
+    await runReviewTask(config, "weekly-review", {
+      now: new Date("2026-05-18T00:30:00.000Z"),
+      runAt: new Date("2026-05-18T07:44:22.000Z")
+    });
+
+    const output = await fs.readFile(path.join(root, "vault", "Reviews", "Weekly", "2026-W20.md"), "utf8");
+    assert.match(output, /^---\ntype: weekly-review\nperiod: 2026-W20\ncreated: 2026-05-18 14:33:21\n---\n\n> \[!info\] VaultEcho Review/m);
+    assert.equal((output.match(/> \[!info\] VaultEcho Review/g) || []).length, 2);
+    assert.match(output, /> Generated At: 2026-05-18 14:33:21/);
+    assert.match(output, /> Generated At: 2026-05-18 15:44:22/);
+    assert.match(output, /Template run 1/);
+    assert.match(output, /Template run 2/);
+    assert.doesNotMatch(output, /> Run:/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -89,7 +141,7 @@ test("review task can include daily notes from the configured daily path templat
       output: {
         pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
         heading: "Weekly Review",
-        writeMode: "replace_managed_block"
+        templatePath: ""
       },
       semanticRecall: {
         enabled: false,
@@ -219,7 +271,7 @@ function testConfig(root) {
           output: {
             pathTemplate: "Reviews/Weekly/{{YYYY}}-W{{WW}}.md",
             heading: "Weekly Review",
-            writeMode: "replace_managed_block"
+            templatePath: ""
           },
           semanticRecall: {
             enabled: true,

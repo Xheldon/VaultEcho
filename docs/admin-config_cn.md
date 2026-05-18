@@ -68,7 +68,7 @@ Review Tasks 使用 OpenAI-compatible Chat API：
 
 ## Review Tasks
 
-Review Tasks 是定时 AI 回顾任务：读取一个周期内的笔记，按需做语义召回，调用 AI 模型，然后把结果写回 Vault 中一个受管理的 Markdown 块。
+Review Tasks 是定时 AI 回顾任务：读取一个周期内的笔记，按需做语义召回，调用 AI 模型，然后向配置好的 Markdown 回顾文件末尾追加一段回顾记录。
 
 管理页现在使用可编辑任务卡片。`Advanced JSON` 只是兜底入口，适合批量导入/导出，或者临时编辑卡片还没暴露的字段。手动改 JSON 后，先点击 `Apply JSON To Cards`，再保存配置。
 
@@ -85,7 +85,7 @@ Review Tasks 使用精确计时器，不是每分钟轮询。配置变化后，V
 
 - `Enable this task`: 是否让这个任务卡片参与自动调度。可以同时启用多个任务。
 - `Run Now`: 先保存当前管理页配置，再手动运行这个任务一次。它不会把定时任务标记为已完成。
-- `Task ID`: 稳定标识，用于手动运行、运行历史和 managed block 标记。建议保持小写且不要频繁改，例如 `weekly-review`。
+- `Task ID`: 稳定标识，用于手动运行和运行历史。建议保持小写且不要频繁改，例如 `weekly-review`。
 - `Name`: 展示名称。
 - `Period`: `weekly`、`monthly`、`quarterly` 或 `yearly`。
 - `Target Period`: 通常选择 `Previous completed period`，也可以选择 `Current period` 做进行中回顾。
@@ -100,12 +100,22 @@ Review Tasks 使用精确计时器，不是每分钟轮询。配置变化后，V
 - `Semantic Recall Query`: 固定召回查询。留空时会从周期笔记内容中派生召回语义。
 - `Semantic Recall Limit`: 召回条数。
 - `Semantic Recall Scope Dirs`: 允许出现在召回结果中的顶层目录。
-- `Output Path Template`: 回顾结果写入路径。
-- `Output Heading`: 输出 heading。
-- `Write Mode`: `Replace managed block` 会在重复运行时替换同一个受管理块；`Append` 只在块不存在时追加。
+- `Output Path Template`: 回顾文件路径。如果文件已存在，每次运行都会向文件末尾追加一段新的回顾记录。
+- `Review Template Path`: 这个任务首次创建输出文件时使用的 Vault 相对 Markdown 模板路径。适合固定 YAML/frontmatter；可以省略 `.md`。
+- `Output Heading`: 未配置回顾模板时使用的默认标题。
 - `Prompt`: 给 AI 的提示词。建议要求模型基于提供的笔记证据输出，避免泛泛建议。
 
-### 输出路径变量
+每次运行都会追加一段固定 callout，然后追加 AI 回顾正文：
+
+```md
+> [!info] VaultEcho Review
+> Period: 2026-W20 (2026-05-11 to 2026-05-18)
+> Generated At: 2026-05-18 14:33:21
+```
+
+`Generated At` 会按全局 `Time Zone` 格式化。
+
+### 输出路径和回顾模板变量
 
 所有周期都支持：
 
@@ -113,6 +123,12 @@ Review Tasks 使用精确计时器，不是每分钟轮询。配置变化后，V
 - `{{periodLabel}}`
 - `{{startDate}}`
 - `{{endDate}}`
+- `{{generatedAt}}`
+- `{{title}}`
+- `{{heading}}`
+- `{{taskId}}`
+- `{{taskName}}`
+- `{{outputPath}}`
 
 周期专属变量：
 
@@ -127,6 +143,20 @@ Review Tasks 使用精确计时器，不是每分钟轮询。配置变化后，V
 - `Reviews/Monthly/{{YYYY}}-{{MM}}.md`
 - `Reviews/Quarterly/{{YYYY}}-Q{{Q}}.md`
 - `Reviews/Yearly/{{YYYY}}.md`
+
+回顾模板示例：
+
+```md
+---
+type: weekly-review
+period: {{periodLabel}}
+created: {{generatedAt}}
+tags:
+  - review
+---
+```
+
+VaultEcho 总是把固定 callout 和 AI 回顾正文追加到已有文件内容后面。模板不需要写 `{{content}}`。
 
 ## 推荐配置顺序
 

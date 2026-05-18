@@ -68,7 +68,7 @@ Use `Rebuild Index` after the first setup, after changing embedding model/base U
 
 ## Review Tasks
 
-Review Tasks are scheduled AI jobs that read period notes, optionally add semantic recall, call the configured AI model, and write a managed Markdown block back to the Vault.
+Review Tasks are scheduled AI jobs that read period notes, optionally add semantic recall, call the configured AI model, and append review entries to a configured Markdown review file in the Vault.
 
 The UI now uses editable task cards. The `Advanced JSON` section is only an escape hatch for bulk import/export or fields not yet exposed by the card UI. If you edit JSON manually, click `Apply JSON To Cards` before saving.
 
@@ -85,7 +85,7 @@ Review tasks use exact timers, not a per-minute polling loop. When config change
 
 - `Enable this task`: enables this specific card for automatic scheduling. Multiple tasks can be enabled at the same time.
 - `Run Now`: saves the current admin config, then runs this specific task once. It does not mark the scheduled run as complete.
-- `Task ID`: stable identifier used by manual run, run history, and managed output block markers. Keep it lowercase and stable, for example `weekly-review`.
+- `Task ID`: stable identifier used by manual run and run history. Keep it lowercase and stable, for example `weekly-review`.
 - `Name`: display name only.
 - `Period`: `weekly`, `monthly`, `quarterly`, or `yearly`.
 - `Target Period`: usually `Previous completed period`. Use `Current period` for in-progress reviews.
@@ -100,12 +100,22 @@ Review tasks use exact timers, not a per-minute polling loop. When config change
 - `Semantic Recall Query`: optional fixed query. Leave blank to derive recall from the period notes.
 - `Semantic Recall Limit`: number of recall chunks.
 - `Semantic Recall Scope Dirs`: top-level directories allowed in recall results.
-- `Output Path Template`: where to write the review.
-- `Output Heading`: heading containing the managed block.
-- `Write Mode`: `Replace managed block` updates the same managed block on rerun; `Append` only appends when the block is missing.
+- `Output Path Template`: review file path. If the file already exists, each run appends a new review entry to the end.
+- `Review Template Path`: optional Vault-relative Markdown template used only when the output file is first created. Use it for stable YAML/frontmatter. `.md` may be omitted.
+- `Output Heading`: title used when no review template is configured.
 - `Prompt`: instructions for the AI model. Keep it specific and ask the model to ground claims in supplied notes.
 
-### Output Template Variables
+Each run appends a fixed callout followed by the AI review body:
+
+```md
+> [!info] VaultEcho Review
+> Period: 2026-W20 (2026-05-11 to 2026-05-18)
+> Generated At: 2026-05-18 14:33:21
+```
+
+`Generated At` is formatted in the global `Time Zone`.
+
+### Output And Review Template Variables
 
 All periods support:
 
@@ -113,6 +123,12 @@ All periods support:
 - `{{periodLabel}}`
 - `{{startDate}}`
 - `{{endDate}}`
+- `{{generatedAt}}`
+- `{{title}}`
+- `{{heading}}`
+- `{{taskId}}`
+- `{{taskName}}`
+- `{{outputPath}}`
 
 Period-specific variables:
 
@@ -127,6 +143,20 @@ Examples:
 - `Reviews/Monthly/{{YYYY}}-{{MM}}.md`
 - `Reviews/Quarterly/{{YYYY}}-Q{{Q}}.md`
 - `Reviews/Yearly/{{YYYY}}.md`
+
+Review template example:
+
+```md
+---
+type: weekly-review
+period: {{periodLabel}}
+created: {{generatedAt}}
+tags:
+  - review
+---
+```
+
+VaultEcho always appends the fixed callout and AI review body after the existing file content. The template does not need a `{{content}}` placeholder.
 
 ## Common Setup Pattern
 

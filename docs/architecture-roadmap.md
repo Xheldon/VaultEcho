@@ -21,7 +21,7 @@ VaultEcho is responsible for:
 - Treating Obsidian concepts such as templates, daily notes, headings, and YAML frontmatter as first-class API surfaces.
 - Maintaining a lightweight local index for future AI tasks.
 - Calling a remote embedding API and storing a local semantic index.
-- Running scheduled review tasks with semantic recall and writing managed Markdown output back to the Vault.
+- Running scheduled review tasks with semantic recall and appending entries to templated Markdown review files in the Vault.
 
 VaultEcho is not responsible for:
 
@@ -88,7 +88,7 @@ The first task model supports:
 - Source folders such as Daily, Inbox, Notes, Ideas, and Projects.
 - Optional semantic recall from the local embedding index.
 - User-editable prompts.
-- Managed output blocks written to configured Vault paths such as `Reviews/Weekly/{{YYYY}}-W{{WW}}.md`.
+- Templated review files at configured Vault paths such as `Reviews/Weekly/{{YYYY}}-W{{WW}}.md`, with each run appended as a new entry.
 
 The scheduler does not poll every minute. It computes the next enabled task run, sleeps until that time, runs due tasks once per period, records run history in `data/review-runs.json`, and then schedules the next wake-up.
 

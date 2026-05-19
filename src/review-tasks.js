@@ -560,7 +560,8 @@ function nextOccurrenceForTask(task, now, timeZone) {
 
 function occurrenceForLocalDate(task, local, timeZone) {
   if (task.period === "weekly") {
-    const start = addDays(local, -local.weekday);
+    const weekday = Number.isInteger(local.weekday) ? local.weekday : jsWeekday(local);
+    const start = addDays(local, -weekday);
     const date = addDays(start, task.schedule.weekday);
     return zonedDateTimeToUtc(date, task.schedule.time, timeZone);
   }
@@ -609,7 +610,11 @@ function localDateParts(date, timeZone) {
     month: Number(parts.month),
     day: Number(parts.day)
   };
-  return { ...result, weekday: new Date(Date.UTC(result.year, result.month - 1, result.day)).getUTCDay() };
+  return { ...result, weekday: jsWeekday(result) };
+}
+
+function jsWeekday(date) {
+  return new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
 }
 
 function zonedDateTimeToUtc(date, time, timeZone) {

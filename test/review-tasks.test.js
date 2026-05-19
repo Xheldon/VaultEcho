@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { rebuildEmbeddingIndex } from "../src/embedding-index.js";
-import { runReviewTask } from "../src/review-tasks.js";
+import { getReviewStatus, runReviewTask } from "../src/review-tasks.js";
 
 test("review task summarizes period notes with semantic recall and appends a review entry", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
@@ -378,6 +378,22 @@ test("review task can call the OpenAI Responses API mode", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("review status computes the next weekly run when the configured weekday already passed", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+  config.reviews.tasks[0].schedule = {
+    time: "23:00",
+    weekday: 0,
+    monthDay: 1,
+    quarterDayOffset: 1,
+    month: 1,
+    period: "weekly"
+  };
+
+  const status = await getReviewStatus(config, new Date("2026-05-19T08:00:00.000Z"));
+  assert.equal(status.tasks[0].nextRunAt, "2026-05-24T15:00:00.000Z");
 });
 
 test("review task rejects an unknown task id", async () => {

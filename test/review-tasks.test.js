@@ -380,6 +380,53 @@ test("review task can call the OpenAI Responses API mode", async () => {
   }
 });
 
+test("manual review task runs update the latest review status", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+  config.reviews.tasks[0].semanticRecall = {
+    enabled: false,
+    query: "",
+    limit: 3,
+    scopeDirs: []
+  };
+
+  await fs.mkdir(path.join(root, "vault", "Daily"), { recursive: true });
+  await fs.writeFile(
+    path.join(root, "vault", "Daily", "2026-05-13.md"),
+    "## Afternoon\n\n[16:21] Manual run status test.\n",
+    "utf8"
+  );
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/chat/completions")) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: "## Key themes\n\n- Manual run was recorded." } }]
+        })
+      };
+    }
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  try {
+    const runAt = new Date("2026-05-19T08:30:00.000Z");
+    await runReviewTask(config, "weekly-review", {
+      now: new Date("2026-05-18T00:30:00.000Z"),
+      runAt
+    });
+
+    const status = await getReviewStatus(config, new Date("2026-05-19T09:00:00.000Z"));
+    assert.equal(status.tasks[0].lastRun.ok, true);
+    assert.equal(status.tasks[0].lastRun.manual, true);
+    assert.equal(status.tasks[0].lastRun.path, "Reviews/Weekly/2026-W20.md");
+    assert.equal(status.tasks[0].lastRun.ranAt, "2026-05-19T08:30:00.000Z");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("review status computes the next weekly run when the configured weekday already passed", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
   const config = testConfig(root);

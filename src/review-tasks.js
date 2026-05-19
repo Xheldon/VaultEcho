@@ -89,7 +89,7 @@ export async function runDueReviewTasks(config, now = new Date()) {
     if (runs.runs[runKey]) continue;
 
     try {
-      const result = await runReviewTask(config, task.id, { now: occurrence, range });
+      const result = await runReviewTask(config, task.id, { now: occurrence, range, recordRun: false });
       await writeReviewRun(config, runKey, {
         taskId: task.id,
         period: range.label,
@@ -116,27 +116,54 @@ export async function runDueReviewTasks(config, now = new Date()) {
 export async function runReviewTask(config, taskId, options = {}) {
   const task = findReviewTask(config, taskId);
   const range = options.range || periodRangeForTask(task, options.now || new Date(), config.timeZone);
-  const sourceDocs = await collectPeriodDocuments(config, task, range);
-  const sourceText = buildSourceText(sourceDocs, config.reviews?.maxSourceChars || 60000);
-  const semanticRecall = await collectSemanticRecall(config, task, sourceText);
-  const messages = buildReviewMessages(task, range, sourceText, semanticRecall, config.reviews?.maxRecallChars || 16000);
-  const summary = await callAiModel(config, messages);
-  const written = await writeReviewOutput(config, task, range, summary, options.runAt || new Date());
+  const runAt = options.runAt || new Date();
+  const shouldRecordRun = options.recordRun !== false;
 
-  return {
-    ok: true,
-    operation: "reviews/run",
-    taskId: task.id,
-    name: task.name,
-    period: range.label,
-    path: written.path,
-    sourceDocuments: sourceDocs.length,
-    semanticRecall: {
-      enabled: Boolean(task.semanticRecall?.enabled),
-      results: semanticRecall.results.length,
-      warning: semanticRecall.warning || ""
+  try {
+    const sourceDocs = await collectPeriodDocuments(config, task, range);
+    const sourceText = buildSourceText(sourceDocs, config.reviews?.maxSourceChars || 60000);
+    const semanticRecall = await collectSemanticRecall(config, task, sourceText);
+    const messages = buildReviewMessages(task, range, sourceText, semanticRecall, config.reviews?.maxRecallChars || 16000);
+    const summary = await callAiModel(config, messages);
+    const written = await writeReviewOutput(config, task, range, summary, runAt);
+    const result = {
+      ok: true,
+      operation: "reviews/run",
+      taskId: task.id,
+      name: task.name,
+      period: range.label,
+      path: written.path,
+      sourceDocuments: sourceDocs.length,
+      semanticRecall: {
+        enabled: Boolean(task.semanticRecall?.enabled),
+        results: semanticRecall.results.length,
+        warning: semanticRecall.warning || ""
+      }
+    };
+    if (shouldRecordRun) {
+      await writeReviewRun(config, manualRunKey(task.id, range.label, runAt), {
+        taskId: task.id,
+        period: range.label,
+        ok: true,
+        manual: true,
+        path: written.path,
+        ranAt: runAt.toISOString()
+      });
     }
-  };
+    return result;
+  } catch (error) {
+    if (shouldRecordRun) {
+      await writeReviewRun(config, manualRunKey(task.id, range.label, runAt), {
+        taskId: task.id,
+        period: range.label,
+        ok: false,
+        manual: true,
+        error: error.message,
+        ranAt: runAt.toISOString()
+      });
+    }
+    throw error;
+  }
 }
 
 export function nextReviewRunAt(config, now = new Date()) {
@@ -729,6 +756,10 @@ function latestRunForTask(runs, taskId) {
   return Object.values(runs.runs || {})
     .filter((run) => run.taskId === taskId)
     .sort((left, right) => String(right.ranAt).localeCompare(String(left.ranAt)))[0] || null;
+}
+
+function manualRunKey(taskId, period, runAt) {
+  return `${taskId}:${period}:manual:${runAt.toISOString()}`;
 }
 
 function reviewRunsPath(config) {

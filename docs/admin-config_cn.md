@@ -25,7 +25,8 @@ English version: [admin-config.md](admin-config.md).
 - `Global Exclude Paths`: 全局排除的 Vault 相对目录或文件，会从语义索引和所有 Review Tasks 中排除；任务级排除路径会与这里合并。
 - `Vault Directory Picker`: 刷新当前 Vault 已有顶层目录，并渲染为可勾选项。如果某个目录还不存在但未来会创建，例如 `Reviews`，用 `Custom Dir` 添加。
 - `Max JSON Body Bytes`: 请求体大小限制。
-- `Image Attachment Dir` / `Audio Attachment Dir`: 后续附件写入的默认 Vault 相对目录。
+- `Image Attachment Dir` / `Audio Attachment Dir` / `Video Attachment Dir` / `File Attachment Dir`: `attachments/upload` 使用的 Vault 相对附件目录。如果希望所有附件都进同一个文件夹，把四个目录都填成同一路径。
+- `Max Attachment Upload Bytes`: `attachments/upload` 接受的 multipart 附件最大体积。
 
 `Allowed Top-Level Dirs` 不支持通配符，也不要用 `/` 作为全量放开。应该明确选择需要允许的顶层目录。Review Task 里的来源目录和语义召回范围也复用同一份勾选目录列表。
 
@@ -46,22 +47,26 @@ English version: [admin-config.md](admin-config.md).
 
 ## AI Model
 
-Review Tasks 使用 OpenAI-compatible Chat API：
+Review Tasks 可以调用 OpenAI-compatible Chat Completions API，也可以调用 OpenAI 官方 Responses API：
 
-- `Provider`: 固定为 `OpenAI Compatible`。填写其他名称不会切换协议；VaultEcho 调 AI 时调用 `Base URL + /chat/completions`，调 embedding 时调用 `Base URL + /embeddings`。
-- `Base URL`: Chat API 地址，例如 `https://api.openai.com/v1` 或其他兼容网关。
-- `Model`: Chat 模型名。
+- `Provider`: 固定为 `OpenAI Compatible`。它只表示鉴权和网关家族；真正的请求协议由 `API Mode` 决定。
+- `API Mode`: OpenRouter、Groq 和多数 OpenAI-compatible 网关使用 `Chat Completions`。OpenAI 官方强模型或要求 `/v1/responses` 的模型使用 `Responses API`。
+- `Base URL`: API 地址，例如 `https://api.openai.com/v1` 或其他兼容网关。
+- `Model`: 模型名。`Chat Completions` 模式下使用 `gpt-5-chat-latest` 这类 chat 模型；`Responses API` 模式下使用 `gpt-5.5` 这类支持 Responses 的模型。
 - `API Key`: 使用 `APP_ENCRYPTION_KEY` 加密保存。留空表示保留已有 key。
-- `Temperature` / `Max Output Tokens`: 传给 Chat Completion 的参数。
+- `Temperature`: 只在 `Chat Completions` 模式传递。`Responses API` 模式下 VaultEcho 会省略它，以兼容推理/前沿模型。
+- `Max Output Tokens`: 在 Chat Completions 中作为 `max_tokens` 发送，在 Responses 中作为 `max_output_tokens` 发送。
 
 ## Embedding
 
-第一版使用远程 OpenAI-compatible Embedding API，并把向量索引保存到 `data/index/embeddings.json`。
+VaultEcho 使用远程 OpenAI-compatible Embedding API，并把向量索引保存到 `data/index/embeddings.json`。
+
+Embedding 不走 Chat Completions，也不走 Responses API。OpenAI 当前的 embedding 模型，包括 `text-embedding-3-large` 和 `text-embedding-3-small`，仍然使用 `Base URL + /embeddings`。它们的新能力主要是可选的 `dimensions` 参数，VaultEcho 已经在管理页暴露。
 
 - `Enabled`: 是否启用 embedding 能力。
 - `Enable remote embeddings`: 语义搜索、自动索引和语义召回的全局开关。只有开启后才显示模型配置。
-- `Base URL` / `Model` / `API Key`: 远程 embedding API 配置。Provider 固定为 OpenAI-compatible 协议。
-- `Dimensions`: 期望维度。填 `0` 表示让 VaultEcho 自动推断。
+- `Base URL` / `Model` / `API Key`: 远程 embedding API 配置。VaultEcho 会调用 `Base URL + /embeddings`。
+- `Dimensions`: 期望维度。填 `0` 表示让 VaultEcho 自动推断。OpenAI `text-embedding-3-large` 默认是 3072 维，但如果服务商支持，也可以请求更小维度，例如 1024。
 - `Batch Size` / `Max Chunk Chars` / `Search Limit`: 控制索引和搜索。
 - `Auto Index After Write`: VaultEcho 通过 API 写入文件后，自动更新该文件索引。
 - `Auto Scan Interval Minutes`: 后台扫描 Headless Sync 拉下来的文件变化。`0` 表示关闭。

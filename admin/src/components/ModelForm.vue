@@ -4,7 +4,14 @@
       <el-select v-model="model.provider" class="full-width">
         <el-option label="OpenAI Compatible" value="openai-compatible" />
       </el-select>
-      <div class="form-hint">{{ labels.providerHint }}</div>
+      <div class="form-hint">{{ embedding ? labels.embeddingProviderHint : labels.providerHint }}</div>
+    </el-form-item>
+    <el-form-item v-if="!embedding" :label="labels.apiMode">
+      <el-select v-model="model.apiMode" class="full-width">
+        <el-option :label="labels.chatCompletions" value="chat-completions" />
+        <el-option :label="labels.responsesApi" value="responses" />
+      </el-select>
+      <div class="form-hint">{{ labels.apiModeHint }}</div>
     </el-form-item>
     <el-form-item :label="labels.baseUrl">
       <el-input v-model="model.baseUrl" placeholder="https://api.openai.com/v1" />

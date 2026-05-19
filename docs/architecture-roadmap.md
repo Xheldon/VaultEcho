@@ -41,7 +41,7 @@ The target deployment is a small personal VPS, often around 1C2G with 30G disk. 
 - An external Obsidian Headless Sync process.
 - A JSON or SQLite-sized local index.
 - Scheduled AI tasks.
-- Remote Claude/OpenAI-compatible API calls.
+- Remote OpenAI-compatible API calls, including Chat Completions for compatible gateways and Responses API for official OpenAI frontier models.
 
 It should not be expected to run:
 
@@ -52,7 +52,7 @@ It should not be expected to run:
 
 The first embedding design is therefore:
 
-- The user configures an OpenAI-compatible embedding API in the Web UI.
+- The user configures an OpenAI-compatible `/embeddings` API in the Web UI.
 - The server encrypts the API key with `APP_ENCRYPTION_KEY`.
 - Markdown is split into small chunks.
 - Each chunk is embedded through the remote API.

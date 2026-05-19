@@ -352,14 +352,19 @@ Auto Index After Write: on
 Auto Scan Interval Minutes: 0 或一个大于 0 的间隔
 ```
 
+Embedding 固定调用 `Base URL + /embeddings`。OpenAI `text-embedding-3` 系列也使用这个端点；Dimensions 可以填 `0` 使用模型默认维度，也可以填服务商支持的较小维度，例如 `1024`。
+
 如果要启用 Review Tasks，还需要在 AI Model 区域配置：
 
 ```text
 Provider: openai-compatible
+API Mode: chat-completions 或 responses
 Base URL: https://api.openai.com/v1
-Model: 你的 chat 模型名
+Model: 你的模型名
 API Key: 对应服务商的 API Key
 ```
+
+OpenRouter、Groq 和多数 OpenAI-compatible 网关使用 `chat-completions`。OpenAI 官方要求 `/v1/responses` 的前沿模型使用 `responses`。
 
 然后启用 Review Tasks 区域，选择需要开启的周、月、季、年任务。默认输出路径会写入 `Reviews`，所以需要把 `Reviews` 保留在 Allowed Dirs 中。可以用 Review Status 或 Run Now 验证。任务运行时间按全局 Time Zone 计算，不会每分钟轮询。
 

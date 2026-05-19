@@ -39,12 +39,16 @@ test("runtime config encrypts embedding api key and public config only exposes a
   assert.equal(publicConfig.embedding.apiKeySet, true);
   assert.deepEqual(publicConfig.attachments, {
     imageDir: "Attachments/Images",
-    audioDir: "Attachments/Audio"
+    audioDir: "Attachments/Audio",
+    videoDir: "Attachments/Video",
+    fileDir: "Attachments/Files",
+    maxUploadBytes: 10485760
   });
   assert.equal(publicConfig.includeRootMarkdownFiles, false);
   assert.deepEqual(publicConfig.excludePaths, []);
   assert.equal(publicConfig.timeZone, "Asia/Shanghai");
   assert.equal(publicConfig.dailyNote.timeZone, "Asia/Shanghai");
+  assert.equal(publicConfig.ai.apiMode, "chat-completions");
   assert.equal(publicConfig.ai.apiKeySet, false);
   assert.equal(publicConfig.reviews.enabled, false);
   assert.equal(publicConfig.reviews.tasks.length, 4);
@@ -66,6 +70,34 @@ test("runtime config encrypts embedding api key and public config only exposes a
 
   const preserved = await loadRuntimeConfig(serverConfig);
   assert.equal(preserved.embedding.apiKeyEncrypted, loaded.embedding.apiKeyEncrypted);
+});
+
+test("runtime config normalizes AI API mode", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
+  const serverConfig = loadServerConfig(
+    {
+      CONFIG_PATH: path.join(root, "data", "config.json")
+    },
+    root
+  );
+
+  await saveRuntimeConfig(serverConfig, {
+    ai: {
+      apiMode: "responses"
+    }
+  });
+
+  const loaded = await loadRuntimeConfig(serverConfig);
+  assert.equal(loaded.ai.apiMode, "responses");
+
+  await saveRuntimeConfig(serverConfig, {
+    ai: {
+      apiMode: "invalid"
+    }
+  });
+
+  const fallback = await loadRuntimeConfig(serverConfig);
+  assert.equal(fallback.ai.apiMode, "chat-completions");
 });
 
 test("runtime config normalizes review exclude paths", async () => {
@@ -144,14 +176,20 @@ test("runtime config normalizes attachment directories", async () => {
   await saveRuntimeConfig(serverConfig, {
     attachments: {
       imageDir: "/Attachments/Images/",
-      audioDir: "Attachments\\Audio"
+      audioDir: "Attachments\\Audio",
+      videoDir: "Media/Video",
+      fileDir: "Helper/附件",
+      maxUploadBytes: 2048
     }
   });
 
   const loaded = await loadRuntimeConfig(serverConfig);
   assert.deepEqual(loaded.attachments, {
     imageDir: "Attachments/Images",
-    audioDir: "Attachments/Audio"
+    audioDir: "Attachments/Audio",
+    videoDir: "Media/Video",
+    fileDir: "Helper/附件",
+    maxUploadBytes: 2048
   });
 
   await assert.rejects(

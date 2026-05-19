@@ -25,7 +25,8 @@ The admin UI defaults to English and includes a language toggle for Chinese. The
 - `Global Exclude Paths`: Vault-relative folders or files excluded from semantic indexing and all review tasks. Task-level exclude paths are merged with this global list.
 - `Vault Directory Picker`: refreshes existing top-level Vault folders and renders them as checkbox choices. Use `Custom Dir` only for folders that do not exist yet but should be allowed, such as `Reviews`.
 - `Max JSON Body Bytes`: request body size limit.
-- `Image Attachment Dir` and `Audio Attachment Dir`: Vault-relative defaults for future attachment write flows.
+- `Image Attachment Dir`, `Audio Attachment Dir`, `Video Attachment Dir`, and `File Attachment Dir`: Vault-relative target folders used by `attachments/upload`. Set all four to the same path if you want every attachment type in one folder.
+- `Max Attachment Upload Bytes`: maximum multipart upload size accepted by `attachments/upload`.
 
 `Allowed Top-Level Dirs` does not support wildcards. Add the exact top-level folders you want VaultEcho to touch. Do not use `/` as a catch-all. Review Task directory fields reuse the same checkbox directory list.
 
@@ -46,22 +47,26 @@ External callers usually should not send `at`; if they omit it, VaultEcho uses t
 
 ## AI Model
 
-Review tasks use an OpenAI-compatible chat API:
+Review tasks can call either the OpenAI-compatible Chat Completions API or the official OpenAI Responses API:
 
-- `Provider`: fixed to `OpenAI Compatible`. Other provider names do not switch protocols; VaultEcho calls `Base URL + /chat/completions` for AI and `Base URL + /embeddings` for embeddings.
-- `Base URL`: chat API base URL, for example `https://api.openai.com/v1` or another compatible gateway.
-- `Model`: chat model name.
+- `Provider`: fixed to `OpenAI Compatible`. This controls the credential and gateway family; `API Mode` controls the request protocol.
+- `API Mode`: use `Chat Completions` for OpenRouter, Groq, and most OpenAI-compatible gateways. Use `Responses API` for official OpenAI frontier models that require `/v1/responses`.
+- `Base URL`: API base URL, for example `https://api.openai.com/v1` or another compatible gateway.
+- `Model`: model name. In `Chat Completions` mode use a chat model such as `gpt-5-chat-latest`. In `Responses API` mode use a Responses-capable model such as `gpt-5.5`.
 - `API Key`: saved encrypted with `APP_ENCRYPTION_KEY`. Leave blank to keep the existing key.
-- `Temperature` and `Max Output Tokens`: passed to the chat completion call.
+- `Temperature`: passed only in `Chat Completions` mode. VaultEcho omits it in `Responses API` mode for better compatibility with reasoning/frontier models.
+- `Max Output Tokens`: sent as `max_tokens` for Chat Completions and `max_output_tokens` for Responses.
 
 ## Embedding
 
-The first version uses a remote OpenAI-compatible embedding API and stores vectors in `data/index/embeddings.json`.
+VaultEcho uses a remote OpenAI-compatible embedding API and stores vectors in `data/index/embeddings.json`.
+
+Embedding does not use Chat Completions or Responses API. OpenAI's current embedding models, including `text-embedding-3-large` and `text-embedding-3-small`, still use `Base URL + /embeddings`. Their newer capability is the optional `dimensions` parameter, which VaultEcho already exposes.
 
 - `Enabled`: turns embedding features on.
 - `Enable remote embeddings`: global switch for semantic search, auto-indexing, and semantic recall. The model settings are shown only when this is enabled.
-- `Base URL`, `Model`, `API Key`: remote embedding API settings. The provider is fixed to the OpenAI-compatible protocol.
-- `Dimensions`: optional expected vector dimensions. Use `0` to let VaultEcho infer it.
+- `Base URL`, `Model`, `API Key`: remote embedding API settings. VaultEcho calls `Base URL + /embeddings`.
+- `Dimensions`: optional expected vector dimensions. Use `0` to let VaultEcho infer it. For OpenAI `text-embedding-3-large`, the default is 3072 dimensions, but you may request a smaller dimension such as 1024 if your provider supports it.
 - `Batch Size`, `Max Chunk Chars`, `Search Limit`: indexing and search controls.
 - `Auto Index After Write`: update changed files after VaultEcho writes them.
 - `Auto Scan Interval Minutes`: optional background scan for files changed by Obsidian Headless Sync. Use `0` to disable.

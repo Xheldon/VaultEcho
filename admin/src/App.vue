@@ -91,6 +91,21 @@
                 <el-input v-model="form.attachments.audioDir" placeholder="Attachments/Audio" />
               </el-form-item>
             </el-col>
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('videoAttachmentDir')">
+                <el-input v-model="form.attachments.videoDir" placeholder="Attachments/Video" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('fileAttachmentDir')">
+                <el-input v-model="form.attachments.fileDir" placeholder="Attachments/Files" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('maxAttachmentBytes')">
+                <el-input-number v-model="form.attachments.maxUploadBytes" :min="1024" :step="1024" class="full-width" />
+              </el-form-item>
+            </el-col>
           </el-row>
         </el-form>
       </el-card>
@@ -310,12 +325,20 @@ const translations = {
     maxJsonBodyBytes: "最大 JSON 请求体字节数",
     imageAttachmentDir: "图片附件目录",
     audioAttachmentDir: "音频附件目录",
+    videoAttachmentDir: "视频附件目录",
+    fileAttachmentDir: "通用附件目录",
+    maxAttachmentBytes: "最大附件上传字节数",
     aiModel: "AI 模型",
-    aiModelDesc: "供内置回顾任务调用的 OpenAI-compatible Chat API。",
+    aiModelDesc: "供内置回顾任务调用的 AI 生成 API。",
     semanticIndex: "语义索引",
     semanticDesc: "远程 Embedding API + 本地 JSON 向量索引。",
     provider: "服务商",
-    providerHint: "当前版本固定使用 OpenAI-compatible 协议；请通过 Base URL 和模型名切换不同服务。",
+    providerHint: "Provider 代表鉴权和网关类型；协议由 API Mode 决定。",
+    embeddingProviderHint: "Embedding 固定调用 Base URL + /embeddings；OpenAI text-embedding-3 系列仍使用这个端点。",
+    apiMode: "API Mode",
+    apiModeHint: "Chat Completions 兼容 OpenRouter/Groq 等网关；Responses API 适合 OpenAI 官方强模型和长回顾。",
+    chatCompletions: "Chat Completions",
+    responsesApi: "Responses API",
     baseUrl: "Base URL",
     model: "模型",
     apiKey: "API Key",
@@ -415,6 +438,11 @@ const translations = {
 const labels = computed(() => ({
   provider: t("provider"),
   providerHint: t("providerHint"),
+  embeddingProviderHint: t("embeddingProviderHint"),
+  apiMode: t("apiMode"),
+  apiModeHint: t("apiModeHint"),
+  chatCompletions: t("chatCompletions"),
+  responsesApi: t("responsesApi"),
   baseUrl: t("baseUrl"),
   model: t("model"),
   apiKey: t("apiKey"),
@@ -528,12 +556,20 @@ const englishText = {
   maxJsonBodyBytes: "Max JSON Body Bytes",
   imageAttachmentDir: "Image Attachment Dir",
   audioAttachmentDir: "Audio Attachment Dir",
+  videoAttachmentDir: "Video Attachment Dir",
+  fileAttachmentDir: "File Attachment Dir",
+  maxAttachmentBytes: "Max Attachment Upload Bytes",
   aiModel: "AI Model",
-  aiModelDesc: "OpenAI-compatible Chat API used by built-in review tasks.",
+  aiModelDesc: "AI generation API used by built-in review tasks.",
   semanticIndex: "Semantic Index",
   semanticDesc: "Remote embedding API plus a local JSON vector index.",
   provider: "Provider",
-  providerHint: "This version only supports the OpenAI-compatible protocol. Use Base URL and Model to switch services.",
+  providerHint: "Provider controls the credential and gateway family; API Mode controls the request protocol.",
+  embeddingProviderHint: "Embeddings always call Base URL + /embeddings. OpenAI text-embedding-3 models still use this endpoint.",
+  apiMode: "API Mode",
+  apiModeHint: "Chat Completions works with OpenRouter, Groq, and compatible gateways. Responses API is for official OpenAI frontier models and long reviews.",
+  chatCompletions: "Chat Completions",
+  responsesApi: "Responses API",
   baseUrl: "Base URL",
   model: "Model",
   apiKey: "API Key",
@@ -638,8 +674,8 @@ function defaultForm() {
     includeRootMarkdownFiles: false,
     excludePaths: [],
     maxJsonBodyBytes: 1048576,
-    attachments: { imageDir: "Attachments/Images", audioDir: "Attachments/Audio" },
-    ai: { provider: "openai-compatible", baseUrl: "https://api.openai.com/v1", model: "", apiKey: "", apiKeySet: false, temperature: 0.2, maxOutputTokens: 1600 },
+    attachments: { imageDir: "Attachments/Images", audioDir: "Attachments/Audio", videoDir: "Attachments/Video", fileDir: "Attachments/Files", maxUploadBytes: 10485760 },
+    ai: { provider: "openai-compatible", apiMode: "chat-completions", baseUrl: "https://api.openai.com/v1", model: "", apiKey: "", apiKeySet: false, temperature: 0.2, maxOutputTokens: 1600 },
     embedding: { enabled: false, provider: "openai-compatible", baseUrl: "https://api.openai.com/v1", model: "", apiKey: "", apiKeySet: false, dimensions: 0, batchSize: 16, maxChunkChars: 1600, searchLimit: 8, autoIndexAfterWrite: true, autoScanIntervalMinutes: 0 },
     dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, slots: [] },
     reviews: { enabled: false, maxSourceChars: 60000, maxRecallChars: 16000, tasks: [] }
@@ -913,7 +949,8 @@ function normalizeTaskForForm(task) {
 function normalizeProviderForForm(config) {
   return {
     ...config,
-    provider: "openai-compatible"
+    provider: "openai-compatible",
+    apiMode: config.apiMode === "responses" ? "responses" : "chat-completions"
   };
 }
 

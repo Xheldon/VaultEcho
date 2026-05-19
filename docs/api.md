@@ -16,6 +16,7 @@ Authorization: Bearer <API_TOKEN>
 | `index/errors/clear` | POST | Clears the most recent local error records saved by automatic indexing. |
 | `files/create` | POST | Creates a new Markdown file inside the Vault. |
 | `files/read` | GET or POST | Reads a Markdown file from the Vault. Very large files are rejected to protect small VPS deployments. |
+| `attachments/upload` | POST multipart/form-data | Uploads one binary attachment into the configured Vault attachment folder and returns flat insertable link text fields. |
 | `files/write` | POST | Replaces a Markdown file with new content. |
 | `files/append` | POST | Appends content to the end of a file. The write is rejected when the final file would exceed the server limit. |
 | `files/prepend` | POST | Inserts content at the beginning of a file. |
@@ -158,6 +159,38 @@ Example:
 ```bash
 curl "http://localhost:8787/v1/api/files/read?path=Ideas/api-note.md" \
   -H "Authorization: Bearer change-me"
+```
+
+## attachments/upload
+
+**Upload Attachment**
+
+Uploads one binary attachment into the configured Vault attachment folder and returns flat insertable link text fields.
+
+Method: `POST multipart/form-data`
+
+Use cases:
+
+- Apple Shortcuts uploads a photo or voice memo, then inserts the returned wiki link into a daily note.
+- Coze uploads a processed attachment separately from Markdown creation to keep note-writing APIs simple.
+- A workflow needs to store arbitrary files such as images, audio, video, PDFs, RAW files, or archives in the Vault.
+
+Parameters:
+
+| Parameter | Description |
+|---|---|
+| `file` | Required multipart file field. |
+| `type` | Optional attachment type: image, audio, video, or file. If omitted, VaultEcho infers it from MIME type and falls back to file. |
+| `filename | name` | Optional filename override. Filename collisions automatically append a numeric suffix. |
+| `alt` | Optional alt text used in the returned Markdown image-style link. |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8787/v1/api/attachments/upload \
+  -H "Authorization: Bearer change-me" \
+  -F "type=image" \
+  -F "file=@/path/to/photo.png"
 ```
 
 ## files/write

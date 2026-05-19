@@ -352,14 +352,19 @@ Auto Index After Write: on
 Auto Scan Interval Minutes: 0 or a positive interval
 ```
 
+Embedding always uses `Base URL + /embeddings`. OpenAI `text-embedding-3` models also use this endpoint; set Dimensions to `0` for the model default or a smaller supported value such as `1024`.
+
 To enable Review Tasks, also configure AI Model:
 
 ```text
 Provider: openai-compatible
+API Mode: chat-completions or responses
 Base URL: https://api.openai.com/v1
-Model: your chat model name
+Model: your model name
 API Key: API key from the provider
 ```
+
+Use `chat-completions` for OpenRouter, Groq, and most OpenAI-compatible gateways. Use `responses` for official OpenAI frontier models that require `/v1/responses`.
 
 Then enable the Review Tasks section, choose the weekly/monthly/quarterly/yearly tasks you want, keep `Reviews` in Allowed Dirs for the default output paths, and click Review Status or Run Now to verify. Task schedules are computed in the global Time Zone; they do not run every minute.
 

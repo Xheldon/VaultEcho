@@ -16,6 +16,7 @@ Authorization: Bearer <API_TOKEN>
 | `index/errors/clear` | POST | 清空自动索引失败时保存在本地的最近错误记录。 |
 | `files/create` | POST | 在 Vault 中创建一个新的 Markdown 文件。 |
 | `files/read` | GET or POST | 从 Vault 中读取一个 Markdown 文件。为保护 1C2G 这类小 VPS，超大文件会被拒绝读取。 |
+| `attachments/upload` | POST multipart/form-data | 上传一个二进制附件到配置的 Vault 附件目录，并返回扁平的可插入链接字段。 |
 | `files/write` | POST | 用新内容覆盖一个 Markdown 文件。 |
 | `files/append` | POST | 把内容追加到文件末尾。追加后文件超过服务端上限时会拒绝写入，避免后续整文件 patch 失效。 |
 | `files/prepend` | POST | 把内容插入到文件开头。 |
@@ -158,6 +159,51 @@ curl -X POST http://localhost:8787/v1/api/files/create \
 ```bash
 curl "http://localhost:8787/v1/api/files/read?path=Ideas/api-note.md" \
   -H "Authorization: Bearer change-me"
+```
+
+## attachments/upload
+
+**上传附件**
+
+上传一个二进制附件到配置的 Vault 附件目录，并返回可直接插入正文的链接文本。
+
+方法：`POST multipart/form-data`
+
+适用场景：
+
+- Apple 快捷指令上传图片、录音或视频后，把返回的 wiki 链接插入日记。
+- Coze 把附件上传和 Markdown 写入分成两步，避免创建笔记接口变复杂。
+- 工作流需要保存任意文件，例如图片、音频、视频、PDF、RAW 或压缩包。
+
+参数：
+
+| 参数 | 说明 |
+|---|---|
+| `file` | 必填的 multipart 文件字段。 |
+| `type` | 可选附件类型：image、audio、video 或 file。不传时按 MIME 自动判断，无法判断则使用 file。 |
+| `filename | name` | 可选文件名覆盖。文件名冲突时会自动追加数字后缀。 |
+| `alt` | 可选 alt 文本，用于返回的 Markdown 图片样式链接。 |
+
+示例：
+
+```bash
+curl -X POST http://localhost:8787/v1/api/attachments/upload \
+  -H "Authorization: Bearer change-me" \
+  -F "type=image" \
+  -F "file=@/path/to/photo.png"
+```
+
+返回结果包含一级字段：
+
+```json
+{
+  "ok": true,
+  "route": "attachments/upload",
+  "operation": "attachments/upload",
+  "path": "Attachments/Images/photo.png",
+  "wiki": "![[Attachments/Images/photo.png]]",
+  "markdown": "![photo](<Attachments/Images/photo.png>)"
+}
 ```
 
 ## files/write

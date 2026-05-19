@@ -120,7 +120,7 @@ export async function runReviewTask(config, taskId, options = {}) {
   const sourceText = buildSourceText(sourceDocs, config.reviews?.maxSourceChars || 60000);
   const semanticRecall = await collectSemanticRecall(config, task, sourceText);
   const messages = buildReviewMessages(task, range, sourceText, semanticRecall, config.reviews?.maxRecallChars || 16000);
-  const summary = await callChatModel(config, messages);
+  const summary = await callAiModel(config, messages);
   const written = await writeReviewOutput(config, task, range, summary, options.runAt || new Date());
 
   return {
@@ -311,12 +311,18 @@ function buildReviewMessages(task, range, sourceText, semanticRecall, maxRecallC
   ];
 }
 
-async function callChatModel(config, messages) {
+async function callAiModel(config, messages) {
   const apiKey = readAiApiKey(config);
   if (!config.ai?.model || !config.ai?.baseUrl || !apiKey) {
     throw new Error("AI model is not configured. Set AI base URL, model, and API key in the Web UI.");
   }
 
+  return config.ai.apiMode === "responses"
+    ? callResponsesModel(config, messages, apiKey)
+    : callChatCompletionsModel(config, messages, apiKey);
+}
+
+async function callChatCompletionsModel(config, messages, apiKey) {
   const response = await fetch(`${String(config.ai.baseUrl).replace(/\/+$/g, "")}/chat/completions`, {
     method: "POST",
     headers: {
@@ -342,6 +348,55 @@ async function callChatModel(config, messages) {
     throw new Error("AI API response is missing message content");
   }
   return content.trim();
+}
+
+async function callResponsesModel(config, messages, apiKey) {
+  const response = await fetch(`${String(config.ai.baseUrl).replace(/\/+$/g, "")}/responses`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: config.ai.model,
+      instructions: messages.find((message) => message.role === "system")?.content || "",
+      input: messages
+        .filter((message) => message.role !== "system")
+        .map((message) => ({
+          role: message.role === "assistant" ? "assistant" : "user",
+          content: message.content
+        })),
+      max_output_tokens: config.ai.maxOutputTokens || 1600,
+      store: false
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`AI API failed with ${response.status}: ${text.slice(0, 500)}`);
+  }
+
+  const payload = await response.json();
+  const content = extractResponsesText(payload);
+  if (!content) {
+    throw new Error("AI API response is missing output text");
+  }
+  return content.trim();
+}
+
+function extractResponsesText(payload) {
+  if (typeof payload?.output_text === "string") return payload.output_text;
+
+  const parts = [];
+  for (const item of payload?.output || []) {
+    if (item?.type !== "message" || !Array.isArray(item.content)) continue;
+    for (const content of item.content) {
+      if (typeof content?.text === "string") {
+        parts.push(content.text);
+      }
+    }
+  }
+  return parts.join("\n").trim();
 }
 
 async function writeReviewOutput(config, task, range, summary, runAt) {

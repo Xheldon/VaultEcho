@@ -97,14 +97,14 @@ The config UI supports:
 - `Include Root Markdown Files`: optionally indexes and reviews `.md` files directly under the Vault root.
 - `Global Exclude Paths`: Vault-relative folders or files excluded from semantic indexing and all review tasks.
 - `Max JSON Body Bytes`: request body size limit.
-- `Image Attachment Dir`: default image attachment directory, default `Attachments/Images`.
-- `Audio Attachment Dir`: default audio attachment directory, default `Attachments/Audio`.
+- `Image Attachment Dir`, `Audio Attachment Dir`, `Video Attachment Dir`, and `File Attachment Dir`: target folders for `attachments/upload`. They can all point to the same Vault folder.
+- `Max Attachment Upload Bytes`: multipart upload size limit for attachments.
 - `Daily Timestamp Insertion Rules`: folded by default. Includes the daily file path template, optional daily template file, create-if-missing behavior, heading level, non-overlapping time slots, line format, line pattern, and blank-line spacing for endpoints such as `daily/append-by-time`.
-- `Embedding`: OpenAI-compatible embedding API base URL, model, API key, chunk size, batch size, and auto-scan interval.
-- `AI Model`: OpenAI-compatible chat API used by built-in review tasks.
+- `Embedding`: OpenAI-compatible `/embeddings` API base URL, model, API key, dimensions, chunk size, batch size, and auto-scan interval.
+- `AI Model`: Chat Completions mode for OpenAI-compatible gateways, or Responses API mode for official OpenAI frontier models used by built-in review tasks.
 - `Review Tasks`: folded by default. Configures weekly, monthly, quarterly, and yearly AI reviews with source folders, semantic recall, prompt, schedule, and output path.
 
-The first embedding version uses a remote API to generate vectors and stores the index at `data/index/embeddings.json`. This lets a 1C2G VPS run VaultEcho without a local model, Qdrant, Elasticsearch, or database extension. After API writes change a file, VaultEcho can automatically update that file's index. Changes pulled by Headless Sync can be compensated by the Rebuild Index button or by an auto-scan interval.
+Embedding uses a remote `/embeddings` API to generate vectors and stores the index at `data/index/embeddings.json`. OpenAI `text-embedding-3` models also use this endpoint; their newer capability is exposed through options such as `dimensions`. This lets a 1C2G VPS run VaultEcho without a local model, Qdrant, Elasticsearch, or database extension. After API writes change a file, VaultEcho can automatically update that file's index. Changes pulled by Headless Sync can be compensated by the Rebuild Index button or by an auto-scan interval.
 
 Review tasks use exact task schedules, not per-minute polling. The scheduler computes the next enabled task time in the configured user time zone, sleeps until then, gathers period source notes, optionally pulls semantic recall from the embedding index, calls the configured AI model, and writes a managed Markdown block to the configured output path.
 

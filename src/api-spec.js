@@ -86,6 +86,27 @@ export const API_ENDPOINTS = [
   -H "Authorization: Bearer change-me"`
   },
   {
+    route: "attachments/upload",
+    method: "POST multipart/form-data",
+    title: "Upload Attachment",
+    summary: "Uploads one binary attachment into the configured Vault attachment folder and returns flat insertable link text fields.",
+    scenarios: [
+      "Apple Shortcuts uploads a photo or voice memo, then inserts the returned wiki link into a daily note.",
+      "Coze uploads a processed attachment separately from Markdown creation to keep note-writing APIs simple.",
+      "A workflow needs to store arbitrary files such as images, audio, video, PDFs, RAW files, or archives in the Vault."
+    ],
+    params: [
+      ["file", "Required multipart file field."],
+      ["type", "Optional attachment type: image, audio, video, or file. If omitted, VaultEcho infers it from MIME type and falls back to file."],
+      ["filename | name", "Optional filename override. Filename collisions automatically append a numeric suffix."],
+      ["alt", "Optional alt text used in the returned Markdown image-style link."]
+    ],
+    curl: `curl -X POST http://localhost:8787/v1/api/attachments/upload \\
+  -H "Authorization: Bearer change-me" \\
+  -F "type=image" \\
+  -F "file=@/path/to/photo.png"`
+  },
+  {
     route: "files/write",
     method: "POST",
     title: "Overwrite File",

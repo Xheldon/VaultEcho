@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { executeApiAction } from "./api.js";
+import { uploadAttachmentFromRequest } from "./attachments.js";
 import {
   loadRuntimeConfig,
   loadServerConfig,
@@ -98,6 +99,14 @@ const server = http.createServer(async (request, response) => {
       }
       if (authScheme === "basic" && (ADMIN_INDEX_MUTATIONS.has(action) || ADMIN_REVIEW_MUTATIONS.has(action))) {
         requireAdminMutationProtection(request);
+      }
+      if (action === "attachments/upload") {
+        if (request.method !== "POST") {
+          return sendJson(response, 405, { ok: false, error: "attachments/upload requires POST" });
+        }
+        await ensureRuntimeDirs(runtimeConfigCache);
+        const result = await uploadAttachmentFromRequest(runtimeConfigCache, request, url.searchParams);
+        return sendJson(response, 200, { route: action, ...result });
       }
       const body = ["GET", "DELETE"].includes(request.method)
         ? { json: {}, text: "" }

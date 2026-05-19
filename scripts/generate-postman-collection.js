@@ -64,7 +64,10 @@ const collection = {
           maxJsonBodyBytes: 1048576,
           attachments: {
             imageDir: "Attachments/Images",
-            audioDir: "Attachments/Audio"
+            audioDir: "Attachments/Audio",
+            videoDir: "Attachments/Video",
+            fileDir: "Attachments/Files",
+            maxUploadBytes: 10485760
           },
           embedding: {
             enabled: false,
@@ -80,6 +83,7 @@ const collection = {
           },
           ai: {
             provider: "openai-compatible",
+            apiMode: "chat-completions",
             baseUrl: "https://api.openai.com/v1",
             model: "",
             temperature: 0.2,
@@ -222,7 +226,17 @@ const collection = {
       })
     ]),
 
-    folder("03 Headings", [
+    folder("03 Attachments", [
+      apiRequest("Upload Attachment - Multipart", "POST", "/v1/api/attachments/upload", {
+        description: "Uploads one binary attachment and returns flat path/wiki/markdown fields.",
+        formData: [
+          { key: "type", value: "image", type: "text" },
+          { key: "file", src: "", type: "file" }
+        ]
+      })
+    ]),
+
+    folder("04 Headings", [
       apiRequest("Heading Read - GET", "GET", "/v1/api/headings/read?path={{testNote}}&heading=Log", {
         description: "Reads content under a heading."
       }),
@@ -262,7 +276,7 @@ const collection = {
       })
     ]),
 
-    folder("04 Frontmatter", [
+    folder("05 Frontmatter", [
       apiRequest("Frontmatter Set - String", "POST", "/v1/api/frontmatter/set", {
         description: "Sets a single frontmatter field.",
         body: {
@@ -284,7 +298,7 @@ const collection = {
       })
     ]),
 
-    folder("05 Daily", [
+    folder("06 Daily", [
       apiRequest("Daily Append By Time - Body Content", "POST", "/v1/api/daily/append-by-time", {
         description: "Chooses heading by configured time slots and formats line using configured lineFormat.",
         body: {
@@ -306,7 +320,7 @@ const collection = {
       })
     ]),
 
-    folder("06 Search Tags And Index", [
+    folder("07 Search Tags And Index", [
       apiRequest("Search Simple - Query", "POST", "/v1/api/search/simple", {
         description: "Simple substring search over allowed Markdown files.",
         body: {
@@ -351,7 +365,7 @@ const collection = {
       })
     ]),
 
-    folder("07 Review Tasks", [
+    folder("08 Review Tasks", [
       apiRequest("Review Status", "GET", "/v1/api/reviews/status", {
         description: "Shows configured review tasks, whether scheduling is enabled, next run times, and last run records."
       }),
@@ -361,7 +375,7 @@ const collection = {
       })
     ]),
 
-    folder("08 Batch And Script", [
+    folder("09 Batch And Script", [
       apiRequest("Batch - Write Then Append Heading", "POST", "/v1/api/batch", {
         description: "Executes multiple API operations in one request.",
         body: {
@@ -399,7 +413,7 @@ const collection = {
       })
     ]),
 
-    folder("09 Obsidian URI Compatibility", [
+    folder("10 Obsidian URI Compatibility", [
       apiRequest("URI New", "POST", "/v1/api/uri/execute", {
         description: "Executes a supported obsidian://new URI.",
         body: {
@@ -425,7 +439,7 @@ const collection = {
       })
     ]),
 
-    folder("10 Aliases And Unsupported", [
+    folder("11 Aliases And Unsupported", [
       apiRequest("Alias - new", "POST", "/v1/api/new", {
         description: "Short alias for files/create.",
         body: {
@@ -505,6 +519,13 @@ function request(name, method, urlPath, options = {}) {
           language: "json"
         }
       }
+    };
+  }
+
+  if (options.formData !== undefined) {
+    item.request.body = {
+      mode: "formdata",
+      formdata: options.formData
     };
   }
 

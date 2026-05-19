@@ -40,6 +40,7 @@ export const API_HANDLER_ROUTES = [
   "files/prepend",
   "files/delete",
   "files/list",
+  "attachments/upload",
   "headings/read",
   "headings/append",
   "headings/prepend",
@@ -109,6 +110,8 @@ async function executePrimary(config, route, params) {
       return deleteFile(config, params);
     case "files/list":
       return listFiles(config, params);
+    case "attachments/upload":
+      return unsupported("attachments/upload", "Use multipart/form-data against /v1/api/attachments/upload.");
     case "headings/read":
       return readHeading(config, params);
     case "headings/append":

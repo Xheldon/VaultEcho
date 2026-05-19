@@ -327,6 +327,59 @@ test("review task can include daily notes from the configured daily path templat
   }
 });
 
+test("review task can call the OpenAI Responses API mode", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
+  const config = testConfig(root);
+  config.ai.apiMode = "responses";
+  config.ai.model = "gpt-5.5";
+  config.ai.maxOutputTokens = 64000;
+  config.reviews.tasks[0].semanticRecall = {
+    enabled: false,
+    query: "",
+    limit: 3,
+    scopeDirs: []
+  };
+
+  await fs.mkdir(path.join(root, "vault", "Daily"), { recursive: true });
+  await fs.writeFile(
+    path.join(root, "vault", "Daily", "2026-05-13.md"),
+    "## Afternoon\n\n[16:21] Long-form weekly review test.\n",
+    "utf8"
+  );
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith("/responses")) {
+      const body = JSON.parse(options.body);
+      assert.equal(body.model, "gpt-5.5");
+      assert.equal(body.max_output_tokens, 64000);
+      assert.equal(body.store, false);
+      assert.match(body.instructions, /Summarize the period/);
+      assert.match(body.input[0].content, /Long-form weekly review test/);
+      assert.equal(body.temperature, undefined);
+      return {
+        ok: true,
+        json: async () => ({
+          output_text: "## Key themes\n\n- Responses mode worked."
+        })
+      };
+    }
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  try {
+    const result = await runReviewTask(config, "weekly-review", {
+      now: new Date("2026-05-18T00:30:00.000Z")
+    });
+
+    assert.equal(result.path, "Reviews/Weekly/2026-W20.md");
+    const output = await fs.readFile(path.join(root, "vault", result.path), "utf8");
+    assert.match(output, /Responses mode worked/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("review task rejects an unknown task id", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-review-task-"));
   const config = testConfig(root);

@@ -35,11 +35,15 @@ const DEFAULT_EMBEDDING = {
 
 const DEFAULT_ATTACHMENTS = {
   imageDir: "Attachments/Images",
-  audioDir: "Attachments/Audio"
+  audioDir: "Attachments/Audio",
+  videoDir: "Attachments/Video",
+  fileDir: "Attachments/Files",
+  maxUploadBytes: 10 * 1024 * 1024
 };
 
 const DEFAULT_AI = {
   provider: "openai-compatible",
+  apiMode: "chat-completions",
   baseUrl: "https://api.openai.com/v1",
   model: "",
   temperature: 0.2,
@@ -315,7 +319,10 @@ function normalizeAttachmentConfig(input = {}) {
   const source = isPlainObject(input) ? input : {};
   return {
     imageDir: normalizeVaultRelativeDir(source.imageDir, DEFAULT_ATTACHMENTS.imageDir),
-    audioDir: normalizeVaultRelativeDir(source.audioDir, DEFAULT_ATTACHMENTS.audioDir)
+    audioDir: normalizeVaultRelativeDir(source.audioDir, DEFAULT_ATTACHMENTS.audioDir),
+    videoDir: normalizeVaultRelativeDir(source.videoDir, DEFAULT_ATTACHMENTS.videoDir),
+    fileDir: normalizeVaultRelativeDir(source.fileDir, DEFAULT_ATTACHMENTS.fileDir),
+    maxUploadBytes: normalizePositiveInteger(source.maxUploadBytes, DEFAULT_ATTACHMENTS.maxUploadBytes)
   };
 }
 
@@ -365,6 +372,7 @@ function normalizeAiConfig(input = {}, previous = {}, serverConfig) {
 
   return {
     provider: normalizeString(source.provider, DEFAULT_AI.provider),
+    apiMode: normalizeAiApiMode(source.apiMode, DEFAULT_AI.apiMode),
     baseUrl: normalizeString(source.baseUrl, DEFAULT_AI.baseUrl),
     model: typeof source.model === "string" ? source.model.trim() : DEFAULT_AI.model,
     temperature: normalizeNumber(source.temperature, DEFAULT_AI.temperature),
@@ -417,6 +425,11 @@ function normalizeReviewTask(task, index) {
     },
     prompt: normalizeString(task.prompt, fallback.prompt)
   };
+}
+
+function normalizeAiApiMode(value, fallback) {
+  if (value === "responses" || value === "chat-completions") return value;
+  return fallback;
 }
 
 function normalizeReviewSchedule(schedule, fallback, period) {

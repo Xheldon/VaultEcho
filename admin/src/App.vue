@@ -212,6 +212,97 @@
               </div>
             </div>
             <el-button :icon="Plus" @click="addSlot">{{ t("addSlot") }}</el-button>
+            <div class="subsection-title connector-subsection">{{ t("connectorData") }}</div>
+            <div class="connector-panel">
+              <div class="feature-toggle-panel connector-toggle-panel">
+                <div>
+                  <el-switch v-model="form.connectors.enabled" :active-text="t('enableConnectorScheduler')" />
+                  <div class="form-hint">{{ form.connectors.enabled ? t("connectorSchedulerEnabledHint") : t("connectorSchedulerDisabledHint") }}</div>
+                </div>
+                <div class="button-row">
+                  <el-button @click="loadConnectorStatus">{{ t("connectorStatus") }}</el-button>
+                  <el-button type="primary" plain :loading="runningConnector" @click="runXConnectorNow">{{ t("runConnectorNow") }}</el-button>
+                </div>
+              </div>
+              <div v-if="connectorStatus" class="connector-status-list">
+                <div v-for="item in connectorStatus.connectors" :key="item.id" class="connector-status-item">
+                  <strong>{{ item.platform.toUpperCase() }}</strong>
+                  <span>{{ item.scheduled ? `${t("nextRunAt")}: ${formatDateTime(item.nextRunAt)}` : t("connectorNotScheduled") }}</span>
+                  <span>{{ t("lastRun") }}: {{ formatConnectorRun(item.lastRun) }}</span>
+                </div>
+              </div>
+              <el-row :gutter="18">
+                <el-col :xs="24" :md="8">
+                  <el-form-item :label="t('connectorPlatform')">
+                    <el-select v-model="form.connectors.x.platform" disabled class="full-width">
+                      <el-option label="X" value="x" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :md="16">
+                  <el-form-item :label="t('connectorEnabled')">
+                    <el-switch v-model="form.connectors.x.enabled" :active-text="t('enableXConnector')" />
+                    <div class="form-hint">{{ t("xConnectorHint") }}</div>
+                  </el-form-item>
+                </el-col>
+                <template v-if="form.connectors.x.enabled">
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('xBaseUrl')">
+                      <el-input v-model="form.connectors.x.baseUrl" placeholder="https://api.x.com/2" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('xBearerToken')">
+                      <el-input v-model="form.connectors.x.bearerToken" type="password" show-password autocomplete="off" />
+                      <div class="form-hint">{{ xTokenHint() }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('xUserId')">
+                      <el-input v-model="form.connectors.x.userId" placeholder="2244994945" />
+                      <div class="form-hint">{{ t("xUserIdHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('xUsername')">
+                      <el-input v-model="form.connectors.x.username" placeholder="xdevelopers" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('pollTime')">
+                      <el-time-picker v-model="form.connectors.x.schedule.time" value-format="HH:mm" format="HH:mm" class="full-width" />
+                      <div class="form-hint">{{ t("pollTimeHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('maxPostsPerRun')">
+                      <el-input-number v-model="form.connectors.x.maxPostsPerRun" :min="5" :max="100" class="full-width" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24">
+                    <el-checkbox v-model="form.connectors.x.includeReplies">{{ t("includeReplies") }}</el-checkbox>
+                    <el-checkbox v-model="form.connectors.x.includeRetweets">{{ t("includeRetweets") }}</el-checkbox>
+                  </el-col>
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('connectorHeadingMarkdown')">
+                      <el-input v-model="form.connectors.x.output.headingMarkdown" placeholder="## Twitter" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('connectorLineFormat')">
+                      <el-input v-model="form.connectors.x.output.lineFormat" placeholder="[{{HH:mm}}] {{content}}" />
+                      <div class="form-hint">{{ t("connectorLineFormatHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24">
+                    <el-form-item :label="t('connectorContentTemplate')">
+                      <el-input v-model="form.connectors.x.output.contentTemplate" type="textarea" :rows="2" />
+                      <div class="form-hint">{{ t("connectorContentTemplateHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                </template>
+              </el-row>
+            </div>
           </el-form>
         </el-collapse-item>
 
@@ -372,6 +463,35 @@ const translations = {
     start: "开始",
     end: "结束",
     addSlot: "添加时间段",
+    connectorData: "连接器数据",
+    enableConnectorScheduler: "启用每日连接器轮询",
+    connectorSchedulerEnabledHint: "保存后，VaultEcho 会按本地时区每天轮询一次已启用的连接器。",
+    connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步当天内容。",
+    connectorStatus: "连接器状态",
+    runConnectorNow: "立即查找",
+    connectorNotScheduled: "未启用自动轮询",
+    connectorPlatform: "连接器平台",
+    connectorEnabled: "平台开关",
+    enableXConnector: "启用 X",
+    xConnectorHint: "当前只支持 X；每次只读取目标日期当天的帖子，再写入当天日记。",
+    xBaseUrl: "X API Base URL",
+    xBearerToken: "X Bearer / User Access Token",
+    xTokenSaved: "Token 已保存，留空表示不修改。",
+    xTokenMissing: "尚未保存 Token。新 Token 会用 APP_ENCRYPTION_KEY 加密。",
+    xUserId: "X User ID",
+    xUserIdHint: "推荐填写 User ID；只填 Username 时会先查询一次 User ID。",
+    xUsername: "X Username",
+    pollTime: "每日轮询时间",
+    pollTimeHint: "默认接近当天结束，避免漏掉白天发布的帖子。",
+    maxPostsPerRun: "单次最多帖子数",
+    includeReplies: "包含回复",
+    includeRetweets: "包含转帖",
+    connectorHeadingMarkdown: "目标 Heading Markdown",
+    connectorLineFormat: "连接器行格式",
+    connectorLineFormatHint: "留空则使用上方日记 Line Format。",
+    connectorContentTemplate: "帖子内容模板",
+    connectorContentTemplateHint: "可用变量：{{text}}、{{url}}、{{id}}、{{username}}、{{created_at}}。",
+    connectorStatusLoaded: "连接器状态已更新",
     reviewTasks: "回顾任务",
     reviewDesc: "周、月、季、年 AI 回顾，支持语义召回和模板化输出文件。",
     enableReviewTasks: "启用定时回顾任务",
@@ -500,6 +620,8 @@ const loadingDirs = ref(false);
 const customAllowedDir = ref("");
 const reviewTasksJson = ref("[]");
 const reviewStatus = ref(null);
+const connectorStatus = ref(null);
+const runningConnector = ref(false);
 const form = reactive(defaultForm());
 
 const timeZoneOptions = computed(() => {
@@ -603,6 +725,35 @@ const englishText = {
   start: "Start",
   end: "End",
   addSlot: "Add Slot",
+  connectorData: "Connector Data",
+  enableConnectorScheduler: "Enable daily connector polling",
+  connectorSchedulerEnabledHint: "After saving, VaultEcho polls enabled connectors once per local day.",
+  connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync today's content manually.",
+  connectorStatus: "Connector Status",
+  runConnectorNow: "Run Now",
+  connectorNotScheduled: "Automatic polling is off",
+  connectorPlatform: "Connector Platform",
+  connectorEnabled: "Platform Toggle",
+  enableXConnector: "Enable X",
+  xConnectorHint: "Only X is supported for now. Each run reads the target local day and writes into that daily note.",
+  xBaseUrl: "X API Base URL",
+  xBearerToken: "X Bearer / User Access Token",
+  xTokenSaved: "Token is saved; leave blank to keep it unchanged.",
+  xTokenMissing: "No token is saved. New tokens are encrypted with APP_ENCRYPTION_KEY.",
+  xUserId: "X User ID",
+  xUserIdHint: "User ID is recommended. Username-only config performs one extra user lookup.",
+  xUsername: "X Username",
+  pollTime: "Daily Poll Time",
+  pollTimeHint: "Defaults near the end of the day so daytime posts are not missed.",
+  maxPostsPerRun: "Max Posts Per Run",
+  includeReplies: "Include replies",
+  includeRetweets: "Include reposts",
+  connectorHeadingMarkdown: "Target Heading Markdown",
+  connectorLineFormat: "Connector Line Format",
+  connectorLineFormatHint: "Leave blank to use the Daily Line Format above.",
+  connectorContentTemplate: "Post Content Template",
+  connectorContentTemplateHint: "Available variables: {{text}}, {{url}}, {{id}}, {{username}}, {{created_at}}.",
+  connectorStatusLoaded: "Connector status updated",
   reviewTasks: "Review Tasks",
   reviewDesc: "Weekly, monthly, quarterly, and yearly AI reviews with semantic recall.",
   enableReviewTasks: "Enable scheduled review tasks",
@@ -677,6 +828,23 @@ function defaultForm() {
     attachments: { imageDir: "Attachments/Images", audioDir: "Attachments/Audio", videoDir: "Attachments/Video", fileDir: "Attachments/Files", maxUploadBytes: 10485760 },
     ai: { provider: "openai-compatible", apiMode: "chat-completions", baseUrl: "https://api.openai.com/v1", model: "", apiKey: "", apiKeySet: false, temperature: 0.2, maxOutputTokens: 1600 },
     embedding: { enabled: false, provider: "openai-compatible", baseUrl: "https://api.openai.com/v1", model: "", apiKey: "", apiKeySet: false, dimensions: 0, batchSize: 16, maxChunkChars: 1600, searchLimit: 8, autoIndexAfterWrite: true, autoScanIntervalMinutes: 0 },
+    connectors: {
+      enabled: false,
+      x: {
+        enabled: false,
+        platform: "x",
+        baseUrl: "https://api.x.com/2",
+        userId: "",
+        username: "",
+        bearerToken: "",
+        bearerTokenSet: false,
+        schedule: { time: "23:55" },
+        includeReplies: true,
+        includeRetweets: false,
+        maxPostsPerRun: 50,
+        output: { headingMarkdown: "## Twitter", lineFormat: "", contentTemplate: "{{text}}" }
+      }
+    },
     dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, slots: [] },
     reviews: { enabled: false, maxSourceChars: 60000, maxRecallChars: 16000, tasks: [] }
   };
@@ -735,6 +903,7 @@ function applyConfig(config) {
   form.attachments = { ...defaults.attachments, ...(config.attachments || {}) };
   form.ai = normalizeProviderForForm({ ...defaults.ai, ...(config.ai || {}), apiKey: "" });
   form.embedding = normalizeProviderForForm({ ...defaults.embedding, ...(config.embedding || {}), apiKey: "" });
+  form.connectors = normalizeConnectorsForForm({ ...defaults.connectors, ...(config.connectors || {}) });
   form.dailyNote = { ...defaults.dailyNote, ...(config.dailyNote || {}) };
   form.reviews = {
     ...defaults.reviews,
@@ -742,6 +911,7 @@ function applyConfig(config) {
     tasks: (config.reviews?.tasks || []).map(normalizeTaskForForm)
   };
   reviewStatus.value = null;
+  connectorStatus.value = null;
   syncReviewJsonFromTasks();
 }
 
@@ -757,6 +927,7 @@ function toPayload() {
     attachments: form.attachments,
     ai: { ...form.ai, provider: "openai-compatible" },
     embedding: { ...form.embedding, provider: "openai-compatible" },
+    connectors: form.connectors,
     dailyNote: { ...form.dailyNote, timeZone: form.timeZone },
     reviews: {
       ...form.reviews,
@@ -857,6 +1028,32 @@ async function runReviewTask(taskId) {
   }
 }
 
+async function loadConnectorStatus() {
+  try {
+    const payload = await request("/v1/api/connectors/status", { method: "POST", body: "{}" });
+    connectorStatus.value = payload.result;
+    setStatus(t("connectorStatusLoaded"), "success");
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
+}
+
+async function runXConnectorNow() {
+  try {
+    runningConnector.value = true;
+    setStatus(t("savingBeforeRun"));
+    await persistConfig();
+    const payload = await request("/v1/api/connectors/run", { method: "POST", body: JSON.stringify({ connectorId: "x" }) });
+    const result = payload.result;
+    setStatus(`X: ${result.postsWritten}/${result.postsFound} posts written`, "success");
+    await loadConnectorStatus();
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    runningConnector.value = false;
+  }
+}
+
 function addReviewTask() {
   form.reviews.tasks.push(createDefaultReviewTask(`custom-review-${form.reviews.tasks.length + 1}`));
 }
@@ -898,6 +1095,10 @@ function apiKeyHint(saved) {
   return saved ? t("apiKeySaved") : t("apiKeyMissing");
 }
 
+function xTokenHint() {
+  return form.connectors.x.bearerTokenSet ? t("xTokenSaved") : t("xTokenMissing");
+}
+
 function setStatus(message, type = "info") {
   ElMessage({
     message,
@@ -931,6 +1132,14 @@ function formatReviewRun(run) {
   return `${formatDateTime(run.ranAt)} · ${status}`;
 }
 
+function formatConnectorRun(run) {
+  if (!run) return t("noLastRun");
+  const status = run.ok === false
+    ? `Failed: ${run.error || ""}`
+    : `${run.postsWritten || 0}/${run.postsFound || 0} posts`;
+  return `${formatDateTime(run.ranAt)} · ${status}`;
+}
+
 function normalizeTaskForForm(task) {
   const fallback = createDefaultReviewTask("weekly-review");
   return {
@@ -951,6 +1160,22 @@ function normalizeProviderForForm(config) {
     ...config,
     provider: "openai-compatible",
     apiMode: config.apiMode === "responses" ? "responses" : "chat-completions"
+  };
+}
+
+function normalizeConnectorsForForm(config) {
+  const defaults = defaultForm().connectors;
+  const x = {
+    ...defaults.x,
+    ...(config.x || {}),
+    bearerToken: "",
+    schedule: { ...defaults.x.schedule, ...(config.x?.schedule || {}) },
+    output: { ...defaults.x.output, ...(config.x?.output || {}) }
+  };
+  return {
+    ...defaults,
+    ...config,
+    x
   };
 }
 

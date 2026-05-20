@@ -12,12 +12,14 @@ import {
   publicRuntimeConfig,
   saveRuntimeConfig
 } from "./config.js";
+import { startConnectorScheduler } from "./connectors.js";
 import { startEmbeddingAutoScan } from "./embedding-index.js";
 import { startReviewTaskScheduler } from "./review-tasks.js";
 import { startIdempotencyCleanup } from "./vault.js";
 
 const ADMIN_INDEX_MUTATIONS = new Set(["index/errors/clear", "index/rebuild"]);
 const ADMIN_REVIEW_MUTATIONS = new Set(["reviews/run"]);
+const ADMIN_CONNECTOR_MUTATIONS = new Set(["connectors/run"]);
 const ADMIN_DIST_ROOT = path.resolve(fileURLToPath(new URL("../public/admin/", import.meta.url)));
 const ADMIN_INDEX_FILE = path.join(ADMIN_DIST_ROOT, "index.html");
 const STATIC_CONTENT_TYPES = {
@@ -34,6 +36,7 @@ const STATIC_CONTENT_TYPES = {
 const serverConfig = loadServerConfig();
 let runtimeConfigCache = await loadRuntimeConfig(serverConfig);
 let reviewScheduler;
+let connectorScheduler;
 await ensureRuntimeDirs(runtimeConfigCache);
 
 const server = http.createServer(async (request, response) => {
@@ -86,18 +89,22 @@ const server = http.createServer(async (request, response) => {
       await saveRuntimeConfig(serverConfig, runtimeConfig);
       runtimeConfigCache = runtimeConfig;
       reviewScheduler?.reschedule();
+      connectorScheduler?.reschedule();
       return sendJson(response, 200, publicRuntimeConfig(runtimeConfig));
     }
 
     if (url.pathname.startsWith("/v1/api/")) {
       const action = decodeURIComponent(url.pathname.slice("/v1/api/".length));
       let authScheme;
-      if (action.startsWith("index/") || action.startsWith("reviews/")) {
+      if (action.startsWith("index/") || action.startsWith("reviews/") || action.startsWith("connectors/")) {
         authScheme = requireApiOrAdminAuth(serverConfig, request);
       } else {
         authScheme = requireApiAuth(serverConfig, request);
       }
-      if (authScheme === "basic" && (ADMIN_INDEX_MUTATIONS.has(action) || ADMIN_REVIEW_MUTATIONS.has(action))) {
+      if (
+        authScheme === "basic" &&
+        (ADMIN_INDEX_MUTATIONS.has(action) || ADMIN_REVIEW_MUTATIONS.has(action) || ADMIN_CONNECTOR_MUTATIONS.has(action))
+      ) {
         requireAdminMutationProtection(request);
       }
       if (action === "attachments/upload") {
@@ -138,6 +145,7 @@ server.listen(serverConfig.port, serverConfig.bindHost, () => {
 startEmbeddingAutoScan(() => Promise.resolve(runtimeConfigCache));
 startIdempotencyCleanup(() => Promise.resolve(runtimeConfigCache));
 reviewScheduler = startReviewTaskScheduler(() => Promise.resolve(runtimeConfigCache));
+connectorScheduler = startConnectorScheduler(() => Promise.resolve(runtimeConfigCache));
 
 async function ensureRuntimeDirs(config) {
   await fs.mkdir(config.vaultRoot, { recursive: true });

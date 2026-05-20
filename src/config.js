@@ -152,6 +152,27 @@ const DEFAULT_REVIEWS = {
   tasks: DEFAULT_REVIEW_TASKS
 };
 
+const DEFAULT_CONNECTORS = {
+  enabled: false,
+  x: {
+    enabled: false,
+    platform: "x",
+    baseUrl: "https://api.x.com/2",
+    userId: "",
+    username: "",
+    bearerTokenEncrypted: "",
+    schedule: { time: "23:55" },
+    includeReplies: true,
+    includeRetweets: false,
+    maxPostsPerRun: 50,
+    output: {
+      headingMarkdown: "## Twitter",
+      lineFormat: "",
+      contentTemplate: "{{text}}"
+    }
+  }
+};
+
 export function loadServerConfig(env = process.env, cwd = process.cwd()) {
   const isContainerDefault = cwd === "/app";
   const defaultDataDir = isContainerDefault ? "/data" : path.join(cwd, "data");
@@ -212,6 +233,7 @@ export function normalizeRuntimeConfig(input = {}, serverConfig, previous = {}) 
     attachments: normalizeAttachmentConfig(input.attachments),
     embedding: normalizeEmbeddingConfig(input.embedding, previous.embedding, serverConfig),
     ai: normalizeAiConfig(input.ai, previous.ai, serverConfig),
+    connectors: normalizeConnectorsConfig(input.connectors, previous.connectors, serverConfig),
     reviews: normalizeReviewsConfig(input.reviews),
     dailyNote: {
       pathTemplate: normalizeString(dailyNote.pathTemplate, DEFAULT_DAILY_NOTE.pathTemplate),
@@ -262,6 +284,7 @@ export function publicRuntimeConfig(config) {
       ...ai,
       apiKeySet: aiApiKeySet
     },
+    connectors: publicConnectorsConfig(config.connectors),
     reviews: config.reviews,
     dailyNote: config.dailyNote
   };
@@ -381,6 +404,77 @@ function normalizeAiConfig(input = {}, previous = {}, serverConfig) {
   };
 }
 
+function normalizeConnectorsConfig(input = {}, previous = {}, serverConfig) {
+  const source = isPlainObject(input) ? input : {};
+  const previousSource = isPlainObject(previous) ? previous : {};
+  return {
+    enabled: normalizeBoolean(source.enabled, DEFAULT_CONNECTORS.enabled),
+    x: normalizeXConnectorConfig(source.x, previousSource.x, serverConfig)
+  };
+}
+
+function normalizeXConnectorConfig(input = {}, previous = {}, serverConfig) {
+  const source = isPlainObject(input) ? input : {};
+  const previousSource = isPlainObject(previous) ? previous : {};
+  const output = isPlainObject(source.output) ? source.output : {};
+  const fallbackOutput = DEFAULT_CONNECTORS.x.output;
+  const token = normalizeOptionalString(
+    source.bearerToken || source.apiToken || source.accessToken || "",
+    ""
+  );
+  const clearToken = normalizeBoolean(source.clearBearerToken || source.clearApiToken, false);
+  let bearerTokenEncrypted = clearToken
+    ? ""
+    : normalizeOptionalString(source.bearerTokenEncrypted || previousSource.bearerTokenEncrypted, "");
+
+  if (token) {
+    bearerTokenEncrypted = encryptSecret(token, serverConfig.appEncryptionKey);
+  }
+
+  return {
+    enabled: normalizeBoolean(source.enabled, DEFAULT_CONNECTORS.x.enabled),
+    platform: "x",
+    baseUrl: normalizeUrlBase(source.baseUrl, DEFAULT_CONNECTORS.x.baseUrl),
+    userId: normalizeOptionalString(source.userId, ""),
+    username: normalizeXUsername(source.username),
+    bearerTokenEncrypted,
+    schedule: {
+      time: isTime(source.schedule?.time || source.pollTime || source.time)
+        ? String(source.schedule?.time || source.pollTime || source.time)
+        : DEFAULT_CONNECTORS.x.schedule.time
+    },
+    includeReplies: normalizeBoolean(source.includeReplies, DEFAULT_CONNECTORS.x.includeReplies),
+    includeRetweets: normalizeBoolean(source.includeRetweets, DEFAULT_CONNECTORS.x.includeRetweets),
+    maxPostsPerRun: normalizeIntegerRange(
+      source.maxPostsPerRun,
+      5,
+      100,
+      DEFAULT_CONNECTORS.x.maxPostsPerRun
+    ),
+    output: {
+      headingMarkdown: normalizeHeadingMarkdown(output.headingMarkdown, fallbackOutput.headingMarkdown),
+      lineFormat: normalizeOptionalString(output.lineFormat, fallbackOutput.lineFormat),
+      contentTemplate: normalizeOptionalString(output.contentTemplate, fallbackOutput.contentTemplate)
+    }
+  };
+}
+
+function publicConnectorsConfig(config = {}) {
+  const x = { ...(config.x || {}) };
+  const bearerTokenSet = Boolean(x.bearerTokenEncrypted);
+  delete x.bearerTokenEncrypted;
+  delete x.bearerToken;
+  delete x.apiToken;
+  delete x.accessToken;
+  return {
+    enabled: Boolean(config.enabled),
+    x: {
+      ...x,
+      bearerTokenSet
+    }
+  };
+}
+
 function normalizeReviewsConfig(input = {}) {
   const source = isPlainObject(input) ? input : {};
   const tasks = Array.isArray(source.tasks) ? source.tasks : DEFAULT_REVIEWS.tasks;
@@ -477,6 +571,30 @@ function normalizeString(value, fallback) {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
   return trimmed || fallback;
+}
+
+function normalizeOptionalString(value, fallback = "") {
+  return typeof value === "string" ? value.trim() : fallback;
+}
+
+function normalizeUrlBase(value, fallback) {
+  const raw = normalizeString(value, fallback).replace(/\/+$/g, "");
+  if (!/^https?:\/\//i.test(raw)) {
+    throw new Error("Connector base URL must start with http:// or https://");
+  }
+  return raw;
+}
+
+function normalizeXUsername(value) {
+  return normalizeOptionalString(value, "").replace(/^@+/, "");
+}
+
+function normalizeHeadingMarkdown(value, fallback) {
+  const raw = normalizeString(value, fallback);
+  const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(raw);
+  if (match && match[2].trim()) return `${match[1]} ${match[2].trim()}`;
+  if (!raw.trim()) return fallback;
+  return raw.trim();
 }
 
 function normalizeStringList(value, fallback) {

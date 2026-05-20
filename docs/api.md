@@ -38,6 +38,8 @@ Authorization: Bearer <API_TOKEN>
 | `index/file` | POST | Rebuilds the embedding index for one Markdown file; removes it from the index when the file no longer exists. |
 | `reviews/status` | GET or POST | Shows configured review tasks, whether scheduling is enabled, next run times, and last run records. |
 | `reviews/run` | POST | Runs one configured review task immediately, using period sources, semantic recall, the configured AI model, and the task output path. |
+| `connectors/status` | GET or POST | Shows configured connector scheduling state, next run time, and the last connector run record. |
+| `connectors/run` | POST | Runs one configured connector immediately; currently supports X posts for the current local day. |
 | `tags/list` | GET | Counts Markdown hashtags under allowed directories. |
 | `batch` | POST | Executes multiple API operations in one request. |
 | `uri/execute` | POST | Parses an Obsidian URI and executes the parts that can be mapped to Vault filesystem operations. |
@@ -65,6 +67,8 @@ Authorization: Bearer <API_TOKEN>
 | `index` | `index/status` |
 | `review` | `reviews/run` |
 | `reviews` | `reviews/status` |
+| `connector` | `connectors/run` |
+| `connectors` | `connectors/status` |
 | `script` | `batch` |
 | `uri` | `uri/execute` |
 | `active` | `unsupported/active` |
@@ -790,6 +794,54 @@ curl -X POST http://localhost:8787/v1/api/reviews/run \
   -H "Authorization: Bearer change-me" \
   -H "Content-Type: application/json" \
   -d '{ "taskId": "weekly-review" }'
+```
+
+## connectors/status
+
+**Get Connector Status**
+
+Shows configured connector scheduling state, next run time, and the last connector run record.
+
+Method: `GET or POST`
+
+Use cases:
+
+- Confirm whether the X connector is enabled and scheduled after changing Web UI config.
+- Check the last manual or scheduled X sync result.
+
+Example:
+
+```bash
+curl http://localhost:8787/v1/api/connectors/status \
+  -H "Authorization: Bearer change-me"
+```
+
+## connectors/run
+
+**Run Connector Now**
+
+Runs one configured connector immediately; currently supports X posts for the current local day.
+
+Method: `POST`
+
+Use cases:
+
+- Manually sync today's X posts into the configured daily-note heading.
+- Test X API credentials and Markdown insertion before enabling daily polling.
+
+Parameters:
+
+| Parameter | Description |
+|---|---|
+| `connectorId | id | platform` | Connector id. Currently only `x` is supported. |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8787/v1/api/connectors/run \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{ "connectorId": "x" }'
 ```
 
 ## tags/list

@@ -42,6 +42,12 @@ This section controls `daily/append-by-time`.
 - `Line Format`: format for new entries. The default is `[{{HH:mm}}] {{content}}`.
 - `Keep a blank line between timestamp entries`: also keeps one blank line between the heading and the first timestamp entry.
 - Time slots: add any number of non-overlapping slots. The request time is evaluated in `Time Zone`, then the matching slot decides the target heading.
+- `Connector Data`: internal daily-note sources. The first supported source is X. It polls the X User Posts timeline once per local day, and `Run Now` fetches the current local day immediately.
+- X auth uses a Bearer or User Access Token from the X developer platform. The token is encrypted with `APP_ENCRYPTION_KEY`; leave the field blank to keep the existing token.
+- `X User ID` is preferred. If only `X Username` is set, VaultEcho does one extra user lookup before reading posts.
+- `Daily Poll Time`: wall-clock time in `Time Zone`. The default `23:55` runs near the end of the day so the request can see most posts from that local date.
+- `Target Heading Markdown`: full Markdown heading such as `## Twitter`. Connector entries are inserted into that heading in the daily note resolved from each post's `created_at`.
+- `Post Content Template`: controls the body before it is wrapped by the timestamp line format. Supported variables are `{{text}}`, `{{url}}`, `{{id}}`, `{{username}}`, and `{{created_at}}`.
 
 External callers usually should not send `at`; if they omit it, VaultEcho uses the current server time and converts it into the configured user timezone. Send `at` only when replaying a captured event from a known historical time.
 

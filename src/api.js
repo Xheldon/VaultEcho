@@ -26,6 +26,7 @@ import {
   rebuildEmbeddingIndex,
   searchEmbeddingIndex
 } from "./embedding-index.js";
+import { getConnectorStatus, runConnector } from "./connectors.js";
 import { buildDailyPath, getDateTimeParts, renderTemplate } from "./time.js";
 import { executeOperation, resolveVaultPath } from "./vault.js";
 import { getReviewStatus, runReviewTask } from "./review-tasks.js";
@@ -59,6 +60,8 @@ export const API_HANDLER_ROUTES = [
   "index/file",
   "reviews/status",
   "reviews/run",
+  "connectors/status",
+  "connectors/run",
   "batch",
   "uri/execute",
   "unsupported/active",
@@ -148,6 +151,10 @@ async function executePrimary(config, route, params) {
       return getReviewStatus(config);
     case "reviews/run":
       return runReviewTask(config, params.taskId || params.id || params.task);
+    case "connectors/status":
+      return getConnectorStatus(config);
+    case "connectors/run":
+      return runConnector(config, params.connectorId || params.id || params.platform || "x");
     case "batch":
       return executeBatch(config, params);
     case "uri/execute":

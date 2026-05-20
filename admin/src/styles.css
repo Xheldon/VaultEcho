@@ -222,6 +222,19 @@ code {
   font-weight: 800;
 }
 
+.connector-subsection {
+  margin-top: 22px;
+}
+
+.connector-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--ve-border);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
 .slot-list {
   display: grid;
   gap: 10px;
@@ -253,7 +266,8 @@ code {
   margin-bottom: 16px;
 }
 
-.review-status-item {
+.review-status-item,
+.connector-status-item {
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) minmax(220px, 2fr);
   gap: 10px;
@@ -266,6 +280,15 @@ code {
 }
 
 .review-status-item strong {
+  color: var(--ve-text);
+}
+
+.connector-status-list {
+  display: grid;
+  gap: 8px;
+}
+
+.connector-status-item strong {
   color: var(--ve-text);
 }
 
@@ -338,7 +361,8 @@ code {
     justify-content: flex-start;
   }
 
-  .review-status-item {
+  .review-status-item,
+  .connector-status-item {
     grid-template-columns: 1fr;
   }
 }

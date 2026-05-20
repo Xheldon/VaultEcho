@@ -16,6 +16,8 @@ export const API_ALIASES = {
   index: "index/status",
   review: "reviews/run",
   reviews: "reviews/status",
+  connector: "connectors/run",
+  connectors: "connectors/status",
   script: "batch",
   uri: "uri/execute",
   active: "unsupported/active",
@@ -481,6 +483,36 @@ export const API_ENDPOINTS = [
   -H "Authorization: Bearer change-me" \\
   -H "Content-Type: application/json" \\
   -d '{ "taskId": "weekly-review" }'`
+  },
+  {
+    route: "connectors/status",
+    method: "GET or POST",
+    title: "Get Connector Status",
+    summary: "Shows configured connector scheduling state, next run time, and the last connector run record.",
+    scenarios: [
+      "Confirm whether the X connector is enabled and scheduled after changing Web UI config.",
+      "Check the last manual or scheduled X sync result."
+    ],
+    params: [],
+    curl: `curl http://localhost:8787/v1/api/connectors/status \\
+  -H "Authorization: Bearer change-me"`
+  },
+  {
+    route: "connectors/run",
+    method: "POST",
+    title: "Run Connector Now",
+    summary: "Runs one configured connector immediately; currently supports X posts for the current local day.",
+    scenarios: [
+      "Manually sync today's X posts into the configured daily-note heading.",
+      "Test X API credentials and Markdown insertion before enabling daily polling."
+    ],
+    params: [
+      ["connectorId | id | platform", "Connector id. Currently only `x` is supported."]
+    ],
+    curl: `curl -X POST http://localhost:8787/v1/api/connectors/run \\
+  -H "Authorization: Bearer change-me" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "connectorId": "x" }'`
   },
   {
     route: "tags/list",

@@ -73,6 +73,29 @@ test("append_daily_by_time inserts below the last timestamp in the matching time
   );
 });
 
+test("append_daily_by_time inserts after multiline timestamp entry blocks", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const config = testConfig(root);
+  const dailyPath = path.join(root, "vault", "Daily", "2026-05-13.md");
+  await fs.mkdir(path.dirname(dailyPath), { recursive: true });
+  await fs.writeFile(
+    dailyPath,
+    "## Evening\n[23:22] First line\ncontinued line\nfinal line\n",
+    "utf8"
+  );
+
+  await executeOperation(config, {
+    operation: "append_daily_by_time",
+    at: "2026-05-13T23:40:00+08:00",
+    content: "Next entry"
+  });
+
+  assert.equal(
+    await fs.readFile(dailyPath, "utf8"),
+    "## Evening\n[23:22] First line\ncontinued line\nfinal line\n\n[23:40] Next entry\n"
+  );
+});
+
 test("append_daily_by_time creates a missing daily note from the configured template", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
   const baseConfig = testConfig(root);

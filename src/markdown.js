@@ -102,17 +102,28 @@ export function insertAfterLastMatchingLine(markdown, options) {
 
   let insertAt = section.start + 1;
   let previousEntryAt = section.start;
+  let hasPreviousEntry = false;
+  let existingSeparatorBeforeInsertion = false;
   for (let index = section.start + 1; index < section.end; index += 1) {
     if (regex.test(lines[index].slice(0, 1000))) {
-      insertAt = index + 1;
       previousEntryAt = index;
+      hasPreviousEntry = true;
     }
+  }
+  if (hasPreviousEntry) {
+    const insertionPoint = findEntryBlockInsertionPoint(lines, previousEntryAt, section.end, regex, {
+      insertAfterBlankSeparator: blankLineBetweenEntries
+    });
+    insertAt = insertionPoint.insertAt;
+    existingSeparatorBeforeInsertion = insertionPoint.hasExistingSeparator;
   }
 
   const next = [...lines];
-  const insertion = blankLineBetweenEntries && insertAt === previousEntryAt + 1
-    ? ["", content]
-    : [content];
+  const insertion = buildLineInsertion(lines, insertAt, content, {
+    blankLineBetweenEntries,
+    needsSeparatorBefore: hasPreviousEntry || insertAt === previousEntryAt + 1,
+    existingSeparatorBeforeInsertion
+  });
   next.splice(insertAt, 0, ...insertion);
   return joinLines(next);
 }
@@ -243,6 +254,51 @@ function findSectionAppendIndex(lines, section) {
     index -= 1;
   }
   return index;
+}
+
+function findEntryBlockInsertionPoint(lines, entryStart, sectionEnd, regex, options = {}) {
+  const { insertAfterBlankSeparator = false } = options;
+  let index = entryStart + 1;
+  while (index < sectionEnd) {
+    const line = lines[index] || "";
+    if (line.trim() === "") {
+      if (!insertAfterBlankSeparator) {
+        return { insertAt: index, hasExistingSeparator: false };
+      }
+
+      let insertAt = index + 1;
+      while (
+        insertAt < sectionEnd &&
+        (lines[insertAt] || "").trim() === "" &&
+        !isTrailingLineTerminator(lines, insertAt, sectionEnd)
+      ) {
+        insertAt += 1;
+      }
+      return { insertAt, hasExistingSeparator: true };
+    }
+    if (regex.test(line.slice(0, 1000))) {
+      return { insertAt: index, hasExistingSeparator: false };
+    }
+    index += 1;
+  }
+  return { insertAt: index, hasExistingSeparator: false };
+}
+
+function isTrailingLineTerminator(lines, index, sectionEnd) {
+  return sectionEnd === lines.length && index === lines.length - 1 && lines[index] === "";
+}
+
+function buildLineInsertion(lines, insertAt, content, options) {
+  const {
+    blankLineBetweenEntries,
+    needsSeparatorBefore,
+    existingSeparatorBeforeInsertion
+  } = options;
+
+  if (!blankLineBetweenEntries) return [content];
+  if (!existingSeparatorBeforeInsertion && needsSeparatorBefore) return ["", content];
+  if (existingSeparatorBeforeInsertion && lines[insertAt]?.trim()) return [content, ""];
+  return [content];
 }
 
 function parseFrontmatter(markdown) {

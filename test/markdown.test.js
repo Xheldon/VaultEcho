@@ -46,6 +46,63 @@ test("insertAfterLastMatchingLine can keep blank lines around timestamp entries"
   assert.equal(output, "# Daily\n\n## Afternoon\n[16:18] A\n\n[16:21] B\n");
 });
 
+test("insertAfterLastMatchingLine inserts after a multiline timestamp entry", () => {
+  const input = "# Daily\n\n## Evening\n[23:22] First line\ncontinued line\nfinal line\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Evening",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[23:40] Next entry",
+    blankLineBetweenEntries: true
+  });
+
+  assert.equal(
+    output,
+    "# Daily\n\n## Evening\n[23:22] First line\ncontinued line\nfinal line\n\n[23:40] Next entry\n"
+  );
+});
+
+test("insertAfterLastMatchingLine inserts below an existing blank after multiline content", () => {
+  const input = "# Daily\n\n## Noon\n[12:23] 内容带换行\n换行后的内容\n\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Noon",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[12:45] 新内容",
+    blankLineBetweenEntries: true
+  });
+
+  assert.equal(output, "# Daily\n\n## Noon\n[12:23] 内容带换行\n换行后的内容\n\n[12:45] 新内容\n");
+});
+
+test("insertAfterLastMatchingLine stops multiline entry blocks at a blank line", () => {
+  const input = "# Daily\n\n## Noon\n[12:23] 内容带换行\n换行后的内容\n\n没有时间戳的后续内容\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Noon",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[12:45] 新内容",
+    blankLineBetweenEntries: true
+  });
+
+  assert.equal(
+    output,
+    "# Daily\n\n## Noon\n[12:23] 内容带换行\n换行后的内容\n\n[12:45] 新内容\n\n没有时间戳的后续内容\n"
+  );
+});
+
+test("insertAfterLastMatchingLine keeps multiline entries before the next heading", () => {
+  const input = "# Daily\n\n## Evening\n[23:22] First line\ncontinued line\n\n## Next\nText\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Evening",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[23:40] Next entry",
+    blankLineBetweenEntries: true
+  });
+
+  assert.equal(
+    output,
+    "# Daily\n\n## Evening\n[23:22] First line\ncontinued line\n\n[23:40] Next entry\n\n## Next\nText\n"
+  );
+});
+
 test("createSafeLineRegex rejects nested repetition patterns", () => {
   assert.throws(() => createSafeLineRegex("(a+)+$"), /nested repetition/);
 });

@@ -40,6 +40,7 @@ This section controls `daily/append-by-time`.
 - `Heading Level`: heading level for the time-slot headings, such as `2` for `## Afternoon`.
 - `Line Pattern`: backend-owned single-line regex used to find existing timestamp lines.
 - `Line Format`: format for new entries. The default is `[{{HH:mm}}] {{content}}`.
+- Multiline entries are supported. When inserting the next entry, VaultEcho treats the previous timestamp line and its following consecutive non-empty, non-timestamp lines as one entry block. A blank line terminates that block.
 - `Keep a blank line between timestamp entries`: also keeps one blank line between the heading and the first timestamp entry.
 - Time slots: add any number of non-overlapping slots. The request time is evaluated in `Time Zone`, then the matching slot decides the target heading.
 - `Connector Data`: internal daily-note sources. The first supported platform is X, and you can add multiple X sources for different accounts or output rules.

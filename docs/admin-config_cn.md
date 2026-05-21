@@ -40,6 +40,7 @@ English version: [admin-config.md](admin-config.md).
 - `Heading Level`: 时间段标题的 heading 层级，例如 `2` 表示 `## 下午`。
 - `Line Pattern`: 后端固定使用的单行正则，用于识别已有时间戳行。
 - `Line Format`: 新条目的格式，默认 `[{{HH:mm}}] {{content}}`。
+- 支持多行条目。插入下一条内容时，VaultEcho 会把上一条时间戳行以及它后面连续的非空、非时间戳内容视为同一个条目块；遇到空行即视为该条目结束。
 - `Keep a blank line between timestamp entries`: 时间戳条目之间保留一个空行，同时 heading 和第一条时间戳之间也保留一个空行。
 - 时间段：可以添加任意多个不重叠时间段。请求时间会按全局 `Time Zone` 计算，然后落到对应 heading 下。
 - `连接器数据`: 内部日记数据源。当前平台只支持 X，但可以新增多个 X 来源，用于不同账号或不同写入规则。

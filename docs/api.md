@@ -38,8 +38,8 @@ Authorization: Bearer <API_TOKEN>
 | `index/file` | POST | Rebuilds the embedding index for one Markdown file; removes it from the index when the file no longer exists. |
 | `reviews/status` | GET or POST | Shows configured review tasks, whether scheduling is enabled, next run times, and last run records. |
 | `reviews/run` | POST | Runs one configured review task immediately, using period sources, semantic recall, the configured AI model, and the task output path. |
-| `connectors/status` | GET or POST | Shows configured connector scheduling state, next run time, and the last connector run record. |
-| `connectors/run` | POST | Runs one configured connector immediately; currently supports X posts for the current local day. |
+| `connectors/status` | GET or POST | Shows configured connector source scheduling state, next run time, and the last connector run record for each source. |
+| `connectors/run` | POST | Runs one configured connector source immediately; currently supports X posts for the current local day. |
 | `tags/list` | GET | Counts Markdown hashtags under allowed directories. |
 | `batch` | POST | Executes multiple API operations in one request. |
 | `uri/execute` | POST | Parses an Obsidian URI and executes the parts that can be mapped to Vault filesystem operations. |
@@ -800,14 +800,14 @@ curl -X POST http://localhost:8787/v1/api/reviews/run \
 
 **Get Connector Status**
 
-Shows configured connector scheduling state, next run time, and the last connector run record.
+Shows configured connector source scheduling state, next run time, and the last connector run record for each source.
 
 Method: `GET or POST`
 
 Use cases:
 
-- Confirm whether the X connector is enabled and scheduled after changing Web UI config.
-- Check the last manual or scheduled X sync result.
+- Confirm which X sources are enabled and scheduled after changing Web UI config.
+- Check the last manual or scheduled X sync result for each source.
 
 Example:
 
@@ -820,20 +820,20 @@ curl http://localhost:8787/v1/api/connectors/status \
 
 **Run Connector Now**
 
-Runs one configured connector immediately; currently supports X posts for the current local day.
+Runs one configured connector source immediately; currently supports X posts for the current local day.
 
 Method: `POST`
 
 Use cases:
 
-- Manually sync today's X posts into the configured daily-note heading.
-- Test X API credentials and Markdown insertion before enabling daily polling.
+- Manually sync today's X posts from one configured X source.
+- Test one source's X API credentials and Markdown insertion before enabling polling.
 
 Parameters:
 
 | Parameter | Description |
 |---|---|
-| `connectorId | id | platform` | Connector id. Currently only `x` is supported. |
+| `connectorId | id | platform` | Connector source id. The migrated default source is `x`; additional sources use their generated ids. |
 
 Example:
 

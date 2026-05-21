@@ -1,5 +1,6 @@
 services:
   vaultecho:
+    platform: linux/amd64
     build: .
     image: vaultecho:latest
     ports:

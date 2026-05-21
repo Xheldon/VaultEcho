@@ -152,25 +152,32 @@ const DEFAULT_REVIEWS = {
   tasks: DEFAULT_REVIEW_TASKS
 };
 
+const CONNECTOR_POLL_INTERVAL_MINUTES = [15, 30, 60, 120, 360, 720, 1440];
+
+const DEFAULT_X_CONNECTOR_SOURCE = {
+  id: "x",
+  name: "X",
+  enabled: false,
+  platform: "x",
+  baseUrl: "https://api.x.com/2",
+  userId: "",
+  username: "",
+  bearerTokenEncrypted: "",
+  includeReplies: true,
+  includeRetweets: false,
+  maxPostsPerRun: 50,
+  output: {
+    target: "heading",
+    headingMarkdown: "## Twitter",
+    lineFormat: "",
+    contentTemplate: "{{text}}"
+  }
+};
+
 const DEFAULT_CONNECTORS = {
   enabled: false,
-  x: {
-    enabled: false,
-    platform: "x",
-    baseUrl: "https://api.x.com/2",
-    userId: "",
-    username: "",
-    bearerTokenEncrypted: "",
-    schedule: { time: "23:55" },
-    includeReplies: true,
-    includeRetweets: false,
-    maxPostsPerRun: 50,
-    output: {
-      headingMarkdown: "## Twitter",
-      lineFormat: "",
-      contentTemplate: "{{text}}"
-    }
-  }
+  schedule: { intervalMinutes: 1440 },
+  sources: []
 };
 
 export function loadServerConfig(env = process.env, cwd = process.cwd()) {
@@ -407,17 +414,58 @@ function normalizeAiConfig(input = {}, previous = {}, serverConfig) {
 function normalizeConnectorsConfig(input = {}, previous = {}, serverConfig) {
   const source = isPlainObject(input) ? input : {};
   const previousSource = isPlainObject(previous) ? previous : {};
+  const scheduleFallback =
+    previousSource.schedule?.intervalMinutes ??
+    previousSource.x?.schedule?.intervalMinutes ??
+    DEFAULT_CONNECTORS.schedule.intervalMinutes;
+  const rawSources = Array.isArray(source.sources)
+    ? source.sources
+    : isPlainObject(source.x)
+      ? [{ id: "x", name: "X", ...source.x }]
+      : [];
+
   return {
     enabled: normalizeBoolean(source.enabled, DEFAULT_CONNECTORS.enabled),
-    x: normalizeXConnectorConfig(source.x, previousSource.x, serverConfig)
+    schedule: {
+      intervalMinutes: normalizeConnectorPollIntervalMinutes(
+        source.schedule?.intervalMinutes ??
+          source.pollIntervalMinutes ??
+          source.intervalMinutes ??
+          source.x?.schedule?.intervalMinutes,
+        scheduleFallback
+      )
+    },
+    sources: normalizeConnectorSources(rawSources, previousSource, serverConfig)
   };
 }
 
-function normalizeXConnectorConfig(input = {}, previous = {}, serverConfig) {
+function normalizeConnectorSources(rawSources, previousConnectors, serverConfig) {
+  const previousSources = Array.isArray(previousConnectors.sources)
+    ? previousConnectors.sources
+    : isPlainObject(previousConnectors.x)
+      ? [{ id: "x", name: "X", ...previousConnectors.x }]
+      : [];
+  const previousById = new Map(previousSources.map((source) => [source.id, source]));
+  const usedIds = new Set();
+  const normalized = [];
+
+  for (const [index, source] of rawSources.entries()) {
+    if (!isPlainObject(source)) continue;
+    const fallbackId = index === 0 ? DEFAULT_X_CONNECTOR_SOURCE.id : `x-${index + 1}`;
+    const preferredId = normalizeId(source.id, fallbackId);
+    const id = uniqueConnectorId(preferredId, usedIds);
+    usedIds.add(id);
+    normalized.push(normalizeXConnectorSourceConfig({ ...source, id }, previousById.get(id), serverConfig, index));
+  }
+
+  return normalized;
+}
+
+function normalizeXConnectorSourceConfig(input = {}, previous = {}, serverConfig, index = 0) {
   const source = isPlainObject(input) ? input : {};
   const previousSource = isPlainObject(previous) ? previous : {};
   const output = isPlainObject(source.output) ? source.output : {};
-  const fallbackOutput = DEFAULT_CONNECTORS.x.output;
+  const fallbackOutput = DEFAULT_X_CONNECTOR_SOURCE.output;
   const token = normalizeOptionalString(
     source.bearerToken || source.apiToken || source.accessToken || "",
     ""
@@ -432,26 +480,27 @@ function normalizeXConnectorConfig(input = {}, previous = {}, serverConfig) {
   }
 
   return {
-    enabled: normalizeBoolean(source.enabled, DEFAULT_CONNECTORS.x.enabled),
+    id: normalizeId(source.id, index === 0 ? DEFAULT_X_CONNECTOR_SOURCE.id : `x-${index + 1}`),
+    name: normalizeString(
+      source.name,
+      previousSource.name || (source.username ? `X @${normalizeXUsername(source.username)}` : DEFAULT_X_CONNECTOR_SOURCE.name)
+    ),
+    enabled: normalizeBoolean(source.enabled, DEFAULT_X_CONNECTOR_SOURCE.enabled),
     platform: "x",
-    baseUrl: normalizeUrlBase(source.baseUrl, DEFAULT_CONNECTORS.x.baseUrl),
+    baseUrl: normalizeUrlBase(source.baseUrl, DEFAULT_X_CONNECTOR_SOURCE.baseUrl),
     userId: normalizeOptionalString(source.userId, ""),
     username: normalizeXUsername(source.username),
     bearerTokenEncrypted,
-    schedule: {
-      time: isTime(source.schedule?.time || source.pollTime || source.time)
-        ? String(source.schedule?.time || source.pollTime || source.time)
-        : DEFAULT_CONNECTORS.x.schedule.time
-    },
-    includeReplies: normalizeBoolean(source.includeReplies, DEFAULT_CONNECTORS.x.includeReplies),
-    includeRetweets: normalizeBoolean(source.includeRetweets, DEFAULT_CONNECTORS.x.includeRetweets),
+    includeReplies: normalizeBoolean(source.includeReplies, DEFAULT_X_CONNECTOR_SOURCE.includeReplies),
+    includeRetweets: normalizeBoolean(source.includeRetweets, DEFAULT_X_CONNECTOR_SOURCE.includeRetweets),
     maxPostsPerRun: normalizeIntegerRange(
       source.maxPostsPerRun,
       5,
       100,
-      DEFAULT_CONNECTORS.x.maxPostsPerRun
+      DEFAULT_X_CONNECTOR_SOURCE.maxPostsPerRun
     ),
     output: {
+      target: normalizeConnectorOutputTarget(output.target, fallbackOutput.target),
       headingMarkdown: normalizeHeadingMarkdown(output.headingMarkdown, fallbackOutput.headingMarkdown),
       lineFormat: normalizeOptionalString(output.lineFormat, fallbackOutput.lineFormat),
       contentTemplate: normalizeOptionalString(output.contentTemplate, fallbackOutput.contentTemplate)
@@ -460,18 +509,28 @@ function normalizeXConnectorConfig(input = {}, previous = {}, serverConfig) {
 }
 
 function publicConnectorsConfig(config = {}) {
-  const x = { ...(config.x || {}) };
-  const bearerTokenSet = Boolean(x.bearerTokenEncrypted);
-  delete x.bearerTokenEncrypted;
-  delete x.bearerToken;
-  delete x.apiToken;
-  delete x.accessToken;
   return {
     enabled: Boolean(config.enabled),
-    x: {
-      ...x,
-      bearerTokenSet
-    }
+    schedule: {
+      intervalMinutes: normalizeConnectorPollIntervalMinutes(
+        config.schedule?.intervalMinutes,
+        DEFAULT_CONNECTORS.schedule.intervalMinutes
+      )
+    },
+    sources: (Array.isArray(config.sources) ? config.sources : []).map(publicConnectorSourceConfig)
+  };
+}
+
+function publicConnectorSourceConfig(source = {}) {
+  const publicSource = { ...source };
+  const bearerTokenSet = Boolean(publicSource.bearerTokenEncrypted);
+  delete publicSource.bearerTokenEncrypted;
+  delete publicSource.bearerToken;
+  delete publicSource.apiToken;
+  delete publicSource.accessToken;
+  return {
+    ...publicSource,
+    bearerTokenSet
   };
 }
 
@@ -595,6 +654,24 @@ function normalizeHeadingMarkdown(value, fallback) {
   if (match && match[2].trim()) return `${match[1]} ${match[2].trim()}`;
   if (!raw.trim()) return fallback;
   return raw.trim();
+}
+
+function normalizeConnectorOutputTarget(value, fallback) {
+  return value === "time-slot" || value === "heading" ? value : fallback;
+}
+
+function normalizeConnectorPollIntervalMinutes(value, fallback) {
+  const parsed = Number(value);
+  return CONNECTOR_POLL_INTERVAL_MINUTES.includes(parsed) ? parsed : fallback;
+}
+
+function uniqueConnectorId(preferredId, usedIds) {
+  if (!usedIds.has(preferredId)) return preferredId;
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${preferredId}-${index}`;
+    if (!usedIds.has(candidate)) return candidate;
+  }
+  throw new Error("Unable to generate a unique connector id");
 }
 
 function normalizeStringList(value, fallback) {

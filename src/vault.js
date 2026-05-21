@@ -6,7 +6,7 @@ import { buildDailyWrite, renderTemplate } from "./time.js";
 import { MAX_MARKDOWN_APPEND_BYTES, MAX_MARKDOWN_PATCH_BYTES } from "./limits.js";
 
 const fileQueues = new Map();
-const IDEMPOTENCY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 let lastIdempotencyCleanupAt = 0;
 
 export async function executeOperation(config, operation) {
@@ -15,7 +15,11 @@ export async function executeOperation(config, operation) {
 
   if (idempotencyKey) {
     const existing = await readIdempotencyRecord(config, idempotencyKey);
-    if (existing) {
+    if (
+      existing &&
+      !operation.forceReplayIdempotent &&
+      !(await shouldReplayMissingIdempotentResult(config, operation, existing.result))
+    ) {
       return { ...existing.result, idempotent: true };
     }
   }
@@ -361,6 +365,17 @@ async function writeIdempotencyRecord(config, key, result) {
   );
 }
 
+async function shouldReplayMissingIdempotentResult(config, operation, result) {
+  if (!operation.replayIfResultMissing || !result?.path) return false;
+  let absolutePath;
+  try {
+    absolutePath = resolveVaultReadPath(config, result.path, "idempotency result");
+  } catch {
+    return false;
+  }
+  return !(await exists(absolutePath));
+}
+
 async function cleanupIdempotencyRecords(config) {
   const now = Date.now();
   if (now - lastIdempotencyCleanupAt < 60 * 60 * 1000) return;
@@ -377,7 +392,9 @@ async function cleanupIdempotencyRecords(config) {
 
   const cutoff = now - IDEMPOTENCY_TTL_MS;
   for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    if (!entry.isFile()) continue;
+    const shouldCheck = entry.name.endsWith(".json") || entry.name.endsWith(".tmp");
+    if (!shouldCheck) continue;
     const filePath = path.join(dir, entry.name);
     const stat = await fs.stat(filePath);
     if (stat.mtimeMs < cutoff) {

@@ -1,14 +1,37 @@
 <template>
   <el-config-provider :locale="elementLocale">
-    <main class="app-shell">
-      <header class="app-header">
-        <div>
-          <h1>VaultEcho</h1>
+    <main class="app-layout">
+      <aside class="app-sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">VE</div>
+          <div>
+            <strong>VaultEcho</strong>
+            <span>Admin</span>
+          </div>
+        </div>
+        <nav class="sidebar-nav" aria-label="Admin sections">
+          <a href="#vault-section">{{ t("vault") }}</a>
+          <a href="#model-section">{{ t("aiModel") }}</a>
+          <a href="#daily-section">{{ t("dailyRules") }}</a>
+          <a href="#reviews-section">{{ t("reviewTasks") }}</a>
+        </nav>
+        <div class="sidebar-note">
+          <strong>{{ t("accessTitle") }}</strong>
+          <p>{{ t("sidebarAccessNote") }}</p>
+        </div>
+      </aside>
+
+      <section class="app-main">
+        <header class="app-header">
+          <div class="topbar-title">
+            <span class="eyebrow">{{ t("adminConsole") }}</span>
+            <h1>VaultEcho</h1>
           <p>{{ t("tagline") }}</p>
         </div>
         <div class="header-actions">
           <el-button @click="toggleLanguage">{{ language === "zh" ? "English" : "中文" }}</el-button>
           <el-button :icon="Refresh" @click="loadConfig">{{ t("loadConfig") }}</el-button>
+          <el-button type="primary" :icon="Check" @click="saveConfig">{{ t("saveConfig") }}</el-button>
         </div>
       </header>
 
@@ -19,7 +42,7 @@
         </template>
       </el-alert>
 
-      <el-card class="section-card" shadow="never">
+      <el-card id="vault-section" class="section-card" shadow="never">
         <template #header>
           <SectionTitle icon="FolderOpened" :title="t('vault')" :description="t('vaultDesc')" />
         </template>
@@ -110,7 +133,7 @@
         </el-form>
       </el-card>
 
-      <el-row :gutter="18">
+      <el-row id="model-section" :gutter="18" class="model-grid">
         <el-col :xs="24" :lg="12">
           <el-card class="section-card equal-card" shadow="never">
             <template #header>
@@ -166,7 +189,7 @@
       </el-row>
 
       <el-collapse v-model="activePanels" class="panel-collapse">
-        <el-collapse-item name="daily">
+        <el-collapse-item id="daily-section" name="daily">
           <template #title>
             <SectionTitle icon="Clock" :title="t('dailyRules')" :description="t('dailyDesc')" inline />
           </template>
@@ -221,92 +244,122 @@
                 </div>
                 <div class="button-row">
                   <el-button @click="loadConnectorStatus">{{ t("connectorStatus") }}</el-button>
-                  <el-button type="primary" plain :loading="runningConnector" @click="runXConnectorNow">{{ t("runConnectorNow") }}</el-button>
+                  <el-button :icon="Plus" type="primary" plain @click="addConnectorSource">{{ t("addConnectorSource") }}</el-button>
                 </div>
               </div>
+              <el-row :gutter="18">
+                <el-col :xs="24" :md="12">
+                  <el-form-item :label="t('pollInterval')">
+                    <el-select v-model="form.connectors.schedule.intervalMinutes" class="full-width">
+                      <el-option v-for="option in connectorPollIntervalOptions" :key="option.value" :label="option.label" :value="option.value" />
+                    </el-select>
+                    <div class="form-hint">{{ t("pollIntervalHint") }}</div>
+                  </el-form-item>
+                </el-col>
+              </el-row>
               <div v-if="connectorStatus" class="connector-status-list">
                 <div v-for="item in connectorStatus.connectors" :key="item.id" class="connector-status-item">
-                  <strong>{{ item.platform.toUpperCase() }}</strong>
+                  <strong>{{ item.name || item.id }}</strong>
                   <span>{{ item.scheduled ? `${t("nextRunAt")}: ${formatDateTime(item.nextRunAt)}` : t("connectorNotScheduled") }}</span>
                   <span>{{ t("lastRun") }}: {{ formatConnectorRun(item.lastRun) }}</span>
                 </div>
               </div>
-              <el-row :gutter="18">
-                <el-col :xs="24" :md="8">
-                  <el-form-item :label="t('connectorPlatform')">
-                    <el-select v-model="form.connectors.x.platform" disabled class="full-width">
-                      <el-option label="X" value="x" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-                <el-col :xs="24" :md="16">
-                  <el-form-item :label="t('connectorEnabled')">
-                    <el-switch v-model="form.connectors.x.enabled" :active-text="t('enableXConnector')" />
-                    <div class="form-hint">{{ t("xConnectorHint") }}</div>
-                  </el-form-item>
-                </el-col>
-                <template v-if="form.connectors.x.enabled">
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('xBaseUrl')">
-                      <el-input v-model="form.connectors.x.baseUrl" placeholder="https://api.x.com/2" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('xBearerToken')">
-                      <el-input v-model="form.connectors.x.bearerToken" type="password" show-password autocomplete="off" />
-                      <div class="form-hint">{{ xTokenHint() }}</div>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('xUserId')">
-                      <el-input v-model="form.connectors.x.userId" placeholder="2244994945" />
-                      <div class="form-hint">{{ t("xUserIdHint") }}</div>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('xUsername')">
-                      <el-input v-model="form.connectors.x.username" placeholder="xdevelopers" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('pollTime')">
-                      <el-time-picker v-model="form.connectors.x.schedule.time" value-format="HH:mm" format="HH:mm" class="full-width" />
-                      <div class="form-hint">{{ t("pollTimeHint") }}</div>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('maxPostsPerRun')">
-                      <el-input-number v-model="form.connectors.x.maxPostsPerRun" :min="5" :max="100" class="full-width" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24">
-                    <el-checkbox v-model="form.connectors.x.includeReplies">{{ t("includeReplies") }}</el-checkbox>
-                    <el-checkbox v-model="form.connectors.x.includeRetweets">{{ t("includeRetweets") }}</el-checkbox>
-                  </el-col>
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('connectorHeadingMarkdown')">
-                      <el-input v-model="form.connectors.x.output.headingMarkdown" placeholder="## Twitter" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24" :md="12">
-                    <el-form-item :label="t('connectorLineFormat')">
-                      <el-input v-model="form.connectors.x.output.lineFormat" placeholder="[{{HH:mm}}] {{content}}" />
-                      <div class="form-hint">{{ t("connectorLineFormatHint") }}</div>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :xs="24">
-                    <el-form-item :label="t('connectorContentTemplate')">
-                      <el-input v-model="form.connectors.x.output.contentTemplate" type="textarea" :rows="2" />
-                      <div class="form-hint">{{ t("connectorContentTemplateHint") }}</div>
-                    </el-form-item>
-                  </el-col>
-                </template>
-              </el-row>
+              <div v-if="!form.connectors.sources.length" class="connector-empty">
+                <p>{{ t("connectorEmptyHint") }}</p>
+                <el-button :icon="Plus" @click="addConnectorSource">{{ t("addConnectorSource") }}</el-button>
+              </div>
+              <div v-else class="connector-source-list">
+                <section v-for="(source, index) in form.connectors.sources" :key="source.__key" class="connector-source-card">
+                  <div class="connector-source-header">
+                    <div>
+                      <strong>{{ source.name || source.username || source.id }}</strong>
+                      <span>{{ source.platform.toUpperCase() }} · {{ source.enabled ? t("enabled") : t("disabled") }}</span>
+                    </div>
+                    <div class="button-row">
+                      <el-switch v-model="source.enabled" :active-text="t('enableXConnector')" />
+                      <el-button type="primary" plain :loading="runningConnectorId === source.id" @click="runConnectorNow(source)">{{ t("runConnectorNow") }}</el-button>
+                      <el-button :icon="Delete" text type="danger" @click="removeConnectorSource(index)" />
+                    </div>
+                  </div>
+                  <div v-if="connectorStatusForSource(source)" class="connector-source-status">
+                    <span>{{ connectorStatusForSource(source).scheduled ? `${t("nextRunAt")}: ${formatDateTime(connectorStatusForSource(source).nextRunAt)}` : t("connectorNotScheduled") }}</span>
+                    <span>{{ t("lastRun") }}: {{ formatConnectorRun(connectorStatusForSource(source).lastRun) }}</span>
+                  </div>
+                  <el-row :gutter="18">
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('connectorName')">
+                        <el-input v-model="source.name" :placeholder="t('connectorNamePlaceholder')" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('connectorPlatform')">
+                        <el-select v-model="source.platform" disabled class="full-width">
+                          <el-option label="X" value="x" />
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('xBaseUrl')">
+                        <el-input v-model="source.baseUrl" placeholder="https://api.x.com/2" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('xBearerToken')">
+                        <el-input v-model="source.bearerToken" type="password" show-password autocomplete="off" />
+                        <div class="form-hint">{{ xTokenHint(source) }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('xUserId')">
+                        <el-input v-model="source.userId" placeholder="2244994945" />
+                        <div class="form-hint">{{ t("xUserIdHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('xUsername')">
+                        <el-input v-model="source.username" placeholder="xdevelopers" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('maxPostsPerRun')">
+                        <el-input-number v-model="source.maxPostsPerRun" :min="5" :max="100" class="full-width" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12" class="connector-checkboxes">
+                      <el-checkbox v-model="source.includeReplies">{{ t("includeReplies") }}</el-checkbox>
+                      <el-checkbox v-model="source.includeRetweets">{{ t("includeRetweets") }}</el-checkbox>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('connectorOutputTarget')">
+                        <el-segmented v-model="source.output.target" :options="connectorOutputTargetOptions" class="full-width" />
+                        <div class="form-hint">{{ source.output.target === 'time-slot' ? t("connectorTimeSlotTargetHint") : t("connectorHeadingTargetHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col v-if="source.output.target === 'heading'" :xs="24" :md="12">
+                      <el-form-item :label="t('connectorHeadingMarkdown')">
+                        <el-input v-model="source.output.headingMarkdown" placeholder="## Twitter" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('connectorLineFormat')">
+                        <el-input v-model="source.output.lineFormat" placeholder="[{{HH:mm}}] {{content}}" />
+                        <div class="form-hint">{{ t("connectorLineFormatHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24">
+                      <el-form-item :label="t('connectorContentTemplate')">
+                        <el-input v-model="source.output.contentTemplate" type="textarea" :rows="2" />
+                        <div class="form-hint">{{ t("connectorContentTemplateHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </section>
+              </div>
             </div>
           </el-form>
         </el-collapse-item>
 
-        <el-collapse-item name="reviews">
+        <el-collapse-item id="reviews-section" name="reviews">
           <template #title>
             <SectionTitle icon="Notebook" :title="t('reviewTasks')" :description="t('reviewDesc')" inline />
           </template>
@@ -370,6 +423,7 @@
       <div class="footer-actions">
         <el-button size="large" type="primary" :icon="Check" @click="saveConfig">{{ t("saveConfig") }}</el-button>
       </div>
+      </section>
     </main>
   </el-config-provider>
 </template>
@@ -391,10 +445,12 @@ const legacyRecallDirs = ["Daily", "Notes", "Ideas", "Projects"];
 
 const translations = {
   zh: {
+    adminConsole: "管理控制台",
     tagline: "捕捉任意内容，让你的 Vault 回应你。管理页使用 Basic Auth；外部 API 使用 Bearer Token。",
     loadConfig: "加载配置",
     saveConfig: "保存配置",
     accessTitle: "访问权限",
+    sidebarAccessNote: "管理页使用 Basic Auth，外部写入 API 使用 Bearer Token。",
     accessBody: "本页面由 <code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD</code> 保护。<code>API_TOKEN</code> 只给 Coze、快捷指令等外部系统调用 <code>/v1/api/...</code> 使用。",
     vault: "Vault",
     vaultDesc: "路径、安全边界、附件目录和全局时区。",
@@ -464,16 +520,21 @@ const translations = {
     end: "结束",
     addSlot: "添加时间段",
     connectorData: "连接器数据",
-    enableConnectorScheduler: "启用每日连接器轮询",
-    connectorSchedulerEnabledHint: "保存后，VaultEcho 会按本地时区每天轮询一次已启用的连接器。",
+    enableConnectorScheduler: "启用连接器轮询",
+    connectorSchedulerEnabledHint: "保存后，VaultEcho 会按固定间隔轮询所有已启用的连接器来源。",
     connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步当天内容。",
     connectorStatus: "连接器状态",
     runConnectorNow: "立即查找",
+    addConnectorSource: "添加来源",
+    connectorEmptyHint: "还没有连接器来源。添加一个 X 来源后即可配置账号、Token 和写入方式。",
+    connectorName: "来源名称",
+    connectorNamePlaceholder: "例如：个人 X",
+    disabled: "停用",
     connectorNotScheduled: "未启用自动轮询",
     connectorPlatform: "连接器平台",
     connectorEnabled: "平台开关",
     enableXConnector: "启用 X",
-    xConnectorHint: "当前只支持 X；每次只读取目标日期当天的帖子，再写入当天日记。",
+    xConnectorHint: "当前只支持 X；每个来源只读取当天 00:00 到当前时间的帖子，再写入当天日记。",
     xBaseUrl: "X API Base URL",
     xBearerToken: "X Bearer / User Access Token",
     xTokenSaved: "Token 已保存，留空表示不修改。",
@@ -481,11 +542,23 @@ const translations = {
     xUserId: "X User ID",
     xUserIdHint: "推荐填写 User ID；只填 Username 时会先查询一次 User ID。",
     xUsername: "X Username",
-    pollTime: "每日轮询时间",
-    pollTimeHint: "默认接近当天结束，避免漏掉白天发布的帖子。",
+    pollInterval: "轮询间隔",
+    pollIntervalHint: "所有来源共用这个轮询间隔；每次都会查询当天 00:00 到当前时间的帖子，并用来源 + 帖子 ID 去重写入。",
+    pollEvery15: "15分钟",
+    pollEvery30: "30分钟",
+    pollEvery60: "1小时",
+    pollEvery120: "2小时",
+    pollEvery360: "6小时",
+    pollEvery720: "12小时",
+    pollEvery1440: "24小时",
     maxPostsPerRun: "单次最多帖子数",
     includeReplies: "包含回复",
     includeRetweets: "包含转帖",
+    connectorOutputTarget: "插入位置",
+    targetHeading: "单独 Heading",
+    targetTimeSlot: "日记时间块",
+    connectorHeadingTargetHint: "写入指定 Heading；如果当天日记里没有该 Heading，会在页面底部新建。",
+    connectorTimeSlotTargetHint: "按帖子发布时间匹配上方时间段，例如 12:20 会写入下午时间块。",
     connectorHeadingMarkdown: "目标 Heading Markdown",
     connectorLineFormat: "连接器行格式",
     connectorLineFormatHint: "留空则使用上方日记 Line Format。",
@@ -621,7 +694,7 @@ const customAllowedDir = ref("");
 const reviewTasksJson = ref("[]");
 const reviewStatus = ref(null);
 const connectorStatus = ref(null);
-const runningConnector = ref(false);
+const runningConnectorId = ref("");
 const form = reactive(defaultForm());
 
 const timeZoneOptions = computed(() => {
@@ -631,6 +704,19 @@ const timeZoneOptions = computed(() => {
 });
 
 const allowedDirOptions = computed(() => mergeUnique(vaultDirs.value, form.allowedDirs));
+const connectorOutputTargetOptions = computed(() => [
+  { label: t("targetHeading"), value: "heading" },
+  { label: t("targetTimeSlot"), value: "time-slot" }
+]);
+const connectorPollIntervalOptions = computed(() => [
+  { label: t("pollEvery15"), value: 15 },
+  { label: t("pollEvery30"), value: 30 },
+  { label: t("pollEvery60"), value: 60 },
+  { label: t("pollEvery120"), value: 120 },
+  { label: t("pollEvery360"), value: 360 },
+  { label: t("pollEvery720"), value: 720 },
+  { label: t("pollEvery1440"), value: 1440 }
+]);
 
 watch(language, (value) => {
   localStorage.setItem("vaultecho.uiLanguage", value);
@@ -653,10 +739,12 @@ function t(key) {
 }
 
 const englishText = {
+  adminConsole: "Admin Console",
   tagline: "Capture anything. Let your vault answer back. Admin pages use Basic Auth; external API calls use Bearer tokens.",
   loadConfig: "Load Config",
   saveConfig: "Save Config",
   accessTitle: "Access",
+  sidebarAccessNote: "Admin pages use Basic Auth. External write APIs use Bearer tokens.",
   accessBody: "This page is protected by <code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD</code>. <code>API_TOKEN</code> is only for external systems such as Coze or Shortcuts calling <code>/v1/api/...</code>.",
   vault: "Vault",
   vaultDesc: "Paths, safety boundary, attachment folders, and global timezone.",
@@ -726,16 +814,21 @@ const englishText = {
   end: "End",
   addSlot: "Add Slot",
   connectorData: "Connector Data",
-  enableConnectorScheduler: "Enable daily connector polling",
-  connectorSchedulerEnabledHint: "After saving, VaultEcho polls enabled connectors once per local day.",
+  enableConnectorScheduler: "Enable connector polling",
+  connectorSchedulerEnabledHint: "After saving, VaultEcho polls all enabled connector sources at the configured interval.",
   connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync today's content manually.",
   connectorStatus: "Connector Status",
   runConnectorNow: "Run Now",
+  addConnectorSource: "Add Source",
+  connectorEmptyHint: "No connector sources yet. Add an X source to configure its account, token, and insertion rules.",
+  connectorName: "Source Name",
+  connectorNamePlaceholder: "For example: Personal X",
+  disabled: "Disabled",
   connectorNotScheduled: "Automatic polling is off",
   connectorPlatform: "Connector Platform",
   connectorEnabled: "Platform Toggle",
   enableXConnector: "Enable X",
-  xConnectorHint: "Only X is supported for now. Each run reads the target local day and writes into that daily note.",
+  xConnectorHint: "Only X is supported for now. Each source reads today's posts from 00:00 to now and writes into that daily note.",
   xBaseUrl: "X API Base URL",
   xBearerToken: "X Bearer / User Access Token",
   xTokenSaved: "Token is saved; leave blank to keep it unchanged.",
@@ -743,11 +836,23 @@ const englishText = {
   xUserId: "X User ID",
   xUserIdHint: "User ID is recommended. Username-only config performs one extra user lookup.",
   xUsername: "X Username",
-  pollTime: "Daily Poll Time",
-  pollTimeHint: "Defaults near the end of the day so daytime posts are not missed.",
+  pollInterval: "Poll Interval",
+  pollIntervalHint: "All sources share this interval. Each poll reads today's posts from 00:00 to now and deduplicates writes by source plus post ID.",
+  pollEvery15: "15 min",
+  pollEvery30: "30 min",
+  pollEvery60: "1 hour",
+  pollEvery120: "2 hours",
+  pollEvery360: "6 hours",
+  pollEvery720: "12 hours",
+  pollEvery1440: "24 hours",
   maxPostsPerRun: "Max Posts Per Run",
   includeReplies: "Include replies",
   includeRetweets: "Include reposts",
+  connectorOutputTarget: "Insertion Target",
+  targetHeading: "Separate Heading",
+  targetTimeSlot: "Daily Time Slot",
+  connectorHeadingTargetHint: "Write into the configured heading. If it is missing, it is created at the bottom of the daily note.",
+  connectorTimeSlotTargetHint: "Match the post time against the daily time slots above, for example 12:20 writes into Afternoon.",
   connectorHeadingMarkdown: "Target Heading Markdown",
   connectorLineFormat: "Connector Line Format",
   connectorLineFormatHint: "Leave blank to use the Daily Line Format above.",
@@ -830,20 +935,8 @@ function defaultForm() {
     embedding: { enabled: false, provider: "openai-compatible", baseUrl: "https://api.openai.com/v1", model: "", apiKey: "", apiKeySet: false, dimensions: 0, batchSize: 16, maxChunkChars: 1600, searchLimit: 8, autoIndexAfterWrite: true, autoScanIntervalMinutes: 0 },
     connectors: {
       enabled: false,
-      x: {
-        enabled: false,
-        platform: "x",
-        baseUrl: "https://api.x.com/2",
-        userId: "",
-        username: "",
-        bearerToken: "",
-        bearerTokenSet: false,
-        schedule: { time: "23:55" },
-        includeReplies: true,
-        includeRetweets: false,
-        maxPostsPerRun: 50,
-        output: { headingMarkdown: "## Twitter", lineFormat: "", contentTemplate: "{{text}}" }
-      }
+      schedule: { intervalMinutes: 1440 },
+      sources: []
     },
     dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, slots: [] },
     reviews: { enabled: false, maxSourceChars: 60000, maxRecallChars: 16000, tasks: [] }
@@ -927,7 +1020,7 @@ function toPayload() {
     attachments: form.attachments,
     ai: { ...form.ai, provider: "openai-compatible" },
     embedding: { ...form.embedding, provider: "openai-compatible" },
-    connectors: form.connectors,
+    connectors: stripConnectorsForSave(form.connectors),
     dailyNote: { ...form.dailyNote, timeZone: form.timeZone },
     reviews: {
       ...form.reviews,
@@ -1038,20 +1131,34 @@ async function loadConnectorStatus() {
   }
 }
 
-async function runXConnectorNow() {
+async function runConnectorNow(source) {
   try {
-    runningConnector.value = true;
+    if (!source?.id) throw new Error("Connector source id is required");
+    runningConnectorId.value = source.id;
     setStatus(t("savingBeforeRun"));
     await persistConfig();
-    const payload = await request("/v1/api/connectors/run", { method: "POST", body: JSON.stringify({ connectorId: "x" }) });
+    const payload = await request("/v1/api/connectors/run", { method: "POST", body: JSON.stringify({ connectorId: source.id }) });
     const result = payload.result;
-    setStatus(`X: ${result.postsWritten}/${result.postsFound} posts written`, "success");
+    setStatus(`${result.connectorName || result.connectorId}: ${result.postsWritten}/${result.postsFound} posts written`, "success");
     await loadConnectorStatus();
   } catch (error) {
     setStatus(error.message, "error");
   } finally {
-    runningConnector.value = false;
+    runningConnectorId.value = "";
   }
+}
+
+function addConnectorSource() {
+  form.connectors.sources.push(createDefaultConnectorSource());
+}
+
+function removeConnectorSource(index) {
+  form.connectors.sources.splice(index, 1);
+}
+
+function connectorStatusForSource(source) {
+  if (!connectorStatus.value?.connectors || !source?.id) return null;
+  return connectorStatus.value.connectors.find((item) => item.id === source.id) || null;
 }
 
 function addReviewTask() {
@@ -1095,8 +1202,8 @@ function apiKeyHint(saved) {
   return saved ? t("apiKeySaved") : t("apiKeyMissing");
 }
 
-function xTokenHint() {
-  return form.connectors.x.bearerTokenSet ? t("xTokenSaved") : t("xTokenMissing");
+function xTokenHint(source) {
+  return source?.bearerTokenSet ? t("xTokenSaved") : t("xTokenMissing");
 }
 
 function setStatus(message, type = "info") {
@@ -1165,18 +1272,66 @@ function normalizeProviderForForm(config) {
 
 function normalizeConnectorsForForm(config) {
   const defaults = defaultForm().connectors;
-  const x = {
-    ...defaults.x,
-    ...(config.x || {}),
-    bearerToken: "",
-    schedule: { ...defaults.x.schedule, ...(config.x?.schedule || {}) },
-    output: { ...defaults.x.output, ...(config.x?.output || {}) }
-  };
+  const rawSources = Array.isArray(config.sources)
+    ? config.sources
+    : config.x
+      ? [{ id: "x", name: "X", ...config.x }]
+      : [];
   return {
     ...defaults,
     ...config,
-    x
+    schedule: { ...defaults.schedule, ...(config.schedule || {}) },
+    sources: rawSources.map(normalizeConnectorSourceForForm)
   };
+}
+
+function normalizeConnectorSourceForForm(source, index) {
+  const fallback = createDefaultConnectorSource(index === 0 ? "x" : `x-${index + 1}`);
+  return {
+    ...fallback,
+    ...source,
+    __key: source.__key || crypto.randomUUID(),
+    id: source.id || fallback.id,
+    platform: "x",
+    bearerToken: "",
+    bearerTokenSet: Boolean(source.bearerTokenSet),
+    output: { ...fallback.output, ...(source.output || {}) }
+  };
+}
+
+function createDefaultConnectorSource(id) {
+  const sourceId = id || uniqueConnectorSourceId("x-source");
+  return {
+    __key: crypto.randomUUID(),
+    id: sourceId,
+    name: "",
+    enabled: true,
+    platform: "x",
+    baseUrl: "https://api.x.com/2",
+    userId: "",
+    username: "",
+    bearerToken: "",
+    bearerTokenSet: false,
+    includeReplies: true,
+    includeRetweets: false,
+    maxPostsPerRun: 50,
+    output: { target: "heading", headingMarkdown: "## Twitter", lineFormat: "", contentTemplate: "{{text}}" }
+  };
+}
+
+function stripConnectorsForSave(connectors) {
+  return {
+    enabled: Boolean(connectors.enabled),
+    schedule: { ...(connectors.schedule || {}) },
+    sources: (connectors.sources || []).map(stripConnectorSourceForSave)
+  };
+}
+
+function stripConnectorSourceForSave(source) {
+  const copy = JSON.parse(JSON.stringify(source));
+  delete copy.__key;
+  delete copy.bearerTokenSet;
+  return copy;
 }
 
 function createDefaultReviewTask(id) {
@@ -1207,6 +1362,18 @@ function stripTaskForSave(task) {
 function uniqueTaskId(base) {
   const existing = new Set(form.reviews.tasks.map((task) => task.id));
   const normalizedBase = base.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "review-task";
+  let candidate = normalizedBase;
+  let index = 2;
+  while (existing.has(candidate)) {
+    candidate = `${normalizedBase}-${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function uniqueConnectorSourceId(base) {
+  const existing = new Set(form.connectors.sources.map((source) => source.id));
+  const normalizedBase = base.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "x-source";
   let candidate = normalizedBase;
   let index = 2;
   while (existing.has(candidate)) {

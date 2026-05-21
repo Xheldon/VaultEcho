@@ -488,10 +488,10 @@ export const API_ENDPOINTS = [
     route: "connectors/status",
     method: "GET or POST",
     title: "Get Connector Status",
-    summary: "Shows configured connector scheduling state, next run time, and the last connector run record.",
+    summary: "Shows configured connector source scheduling state, next run time, and the last connector run record for each source.",
     scenarios: [
-      "Confirm whether the X connector is enabled and scheduled after changing Web UI config.",
-      "Check the last manual or scheduled X sync result."
+      "Confirm which X sources are enabled and scheduled after changing Web UI config.",
+      "Check the last manual or scheduled X sync result for each source."
     ],
     params: [],
     curl: `curl http://localhost:8787/v1/api/connectors/status \\
@@ -501,13 +501,13 @@ export const API_ENDPOINTS = [
     route: "connectors/run",
     method: "POST",
     title: "Run Connector Now",
-    summary: "Runs one configured connector immediately; currently supports X posts for the current local day.",
+    summary: "Runs one configured connector source immediately; currently supports X posts for the current local day.",
     scenarios: [
-      "Manually sync today's X posts into the configured daily-note heading.",
-      "Test X API credentials and Markdown insertion before enabling daily polling."
+      "Manually sync today's X posts from one configured X source.",
+      "Test one source's X API credentials and Markdown insertion before enabling polling."
     ],
     params: [
-      ["connectorId | id | platform", "Connector id. Currently only `x` is supported."]
+      ["connectorId | id | platform", "Connector source id. The migrated default source is `x`; additional sources use their generated ids."]
     ],
     curl: `curl -X POST http://localhost:8787/v1/api/connectors/run \\
   -H "Authorization: Bearer change-me" \\

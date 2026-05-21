@@ -42,12 +42,17 @@ English version: [admin-config.md](admin-config.md).
 - `Line Format`: 新条目的格式，默认 `[{{HH:mm}}] {{content}}`。
 - `Keep a blank line between timestamp entries`: 时间戳条目之间保留一个空行，同时 heading 和第一条时间戳之间也保留一个空行。
 - 时间段：可以添加任意多个不重叠时间段。请求时间会按全局 `Time Zone` 计算，然后落到对应 heading 下。
-- `连接器数据`: 内部日记数据源。第一版只支持 X。开启后每天按本地日期轮询一次 X User Posts timeline，`立即查找` 会立刻抓取当前本地日期。
-- X 鉴权使用开发者平台里的 Bearer 或 User Access Token。Token 会用 `APP_ENCRYPTION_KEY` 加密保存；留空表示保留已有 Token。
+- `连接器数据`: 内部日记数据源。当前平台只支持 X，但可以新增多个 X 来源，用于不同账号或不同写入规则。
+- `轮询间隔`: 自动轮询的全局固定间隔。可选 15 分钟、30 分钟、1 小时、2 小时、6 小时、12 小时、24 小时。定时轮询失败后会在 15 分钟后重试。
+- 每个来源都有自己的名称、启用开关、X 账号鉴权、读取选项和输出模板。来源卡片上的 `立即查找` 会先保存当前配置，再读取该来源当天的帖子。
+- X 鉴权使用开发者平台里的 Bearer 或 User Access Token。Token 会用 `APP_ENCRYPTION_KEY` 加密保存；留空表示保留该来源已有 Token。
 - 推荐填写 `X User ID`。如果只填 `X Username`，VaultEcho 会先额外查询一次 User ID。
-- `每日轮询时间`: 按全局 `Time Zone` 解释。默认 `23:55`，接近当天结束，避免漏掉白天发布的帖子。
-- `目标 Heading Markdown`: 完整 Markdown heading，例如 `## Twitter`。连接器条目会根据每条帖子的 `created_at` 写入对应当天日记的这个 heading 下。
+- 每次轮询都会读取本地当天 `00:00` 到当前时间的帖子，并按来源 + 帖子 ID 做幂等写入。默认迁移来的来源会继续使用旧的 `x-post-<id>` key 格式以兼容已有记录。
+- `插入位置`: 可选 `单独 Heading` 或 `日记时间块`。`单独 Heading` 会写入固定 heading，如果当天日记里没有该 heading，会在页面底部新建。`日记时间块` 会按每条帖子的 `created_at` 匹配上方时间段，例如 12:20 写入下午时间块。
+- `目标 Heading Markdown`: 完整 Markdown heading，例如 `## Twitter`。只在 `插入位置` 为 `单独 Heading` 时使用。
 - `帖子内容模板`: 控制被时间戳行包裹之前的正文。支持 `{{text}}`、`{{url}}`、`{{id}}`、`{{username}}`、`{{created_at}}`。
+
+连接器运行历史、连接器临时状态文件、写入幂等记录都会在一周后清理，避免 `/data` 目录长期增长，同时保留重试和当天重复轮询所需的保护。
 
 外部调用方通常不需要传 `at`；不传时 VaultEcho 会用服务器当前时间并转换成全局用户时区。只有在补录历史事件时才建议显式传 `at`。
 

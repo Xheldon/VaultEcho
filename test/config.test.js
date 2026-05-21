@@ -44,13 +44,16 @@ test("runtime config encrypts embedding api key and public config only exposes a
   assert.equal(raw.includes("secret-api-key"), false);
   assert.equal(raw.includes("secret-x-token"), false);
   assert.equal(Boolean(loaded.embedding.apiKeyEncrypted), true);
-  assert.equal(Boolean(loaded.connectors.x.bearerTokenEncrypted), true);
+  assert.equal(loaded.connectors.sources.length, 1);
+  assert.equal(loaded.connectors.sources[0].id, "x");
+  assert.equal(Boolean(loaded.connectors.sources[0].bearerTokenEncrypted), true);
   assert.equal(publicConfig.embedding.apiKeyEncrypted, undefined);
   assert.equal(publicConfig.embedding.apiKeySet, true);
   assert.equal(publicConfig.connectors.enabled, true);
-  assert.equal(publicConfig.connectors.x.username, "xdevelopers");
-  assert.equal(publicConfig.connectors.x.bearerTokenEncrypted, undefined);
-  assert.equal(publicConfig.connectors.x.bearerTokenSet, true);
+  assert.equal(publicConfig.connectors.schedule.intervalMinutes, 1440);
+  assert.equal(publicConfig.connectors.sources[0].username, "xdevelopers");
+  assert.equal(publicConfig.connectors.sources[0].bearerTokenEncrypted, undefined);
+  assert.equal(publicConfig.connectors.sources[0].bearerTokenSet, true);
   assert.deepEqual(publicConfig.attachments, {
     imageDir: "Attachments/Images",
     audioDir: "Attachments/Audio",
@@ -84,7 +87,7 @@ test("runtime config encrypts embedding api key and public config only exposes a
 
   const preserved = await loadRuntimeConfig(serverConfig);
   assert.equal(preserved.embedding.apiKeyEncrypted, loaded.embedding.apiKeyEncrypted);
-  assert.equal(preserved.connectors.x.bearerTokenEncrypted, loaded.connectors.x.bearerTokenEncrypted);
+  assert.equal(preserved.connectors.sources[0].bearerTokenEncrypted, loaded.connectors.sources[0].bearerTokenEncrypted);
 });
 
 test("runtime config normalizes AI API mode", async () => {

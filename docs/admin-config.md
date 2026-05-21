@@ -42,12 +42,17 @@ This section controls `daily/append-by-time`.
 - `Line Format`: format for new entries. The default is `[{{HH:mm}}] {{content}}`.
 - `Keep a blank line between timestamp entries`: also keeps one blank line between the heading and the first timestamp entry.
 - Time slots: add any number of non-overlapping slots. The request time is evaluated in `Time Zone`, then the matching slot decides the target heading.
-- `Connector Data`: internal daily-note sources. The first supported source is X. It polls the X User Posts timeline once per local day, and `Run Now` fetches the current local day immediately.
-- X auth uses a Bearer or User Access Token from the X developer platform. The token is encrypted with `APP_ENCRYPTION_KEY`; leave the field blank to keep the existing token.
+- `Connector Data`: internal daily-note sources. The first supported platform is X, and you can add multiple X sources for different accounts or output rules.
+- `Poll Interval`: global fixed interval for automatic polling. Available values are 15 minutes, 30 minutes, 1 hour, 2 hours, 6 hours, 12 hours, and 24 hours. Failed scheduled polls are retried after 15 minutes.
+- Each source has its own name, enable switch, X account credentials, read options, and output template. `Run Now` on a source saves the current config, then reads that source's posts for the current local day.
+- X auth uses a Bearer or User Access Token from the X developer platform. The token is encrypted with `APP_ENCRYPTION_KEY`; leave the field blank to keep the existing token for that source.
 - `X User ID` is preferred. If only `X Username` is set, VaultEcho does one extra user lookup before reading posts.
-- `Daily Poll Time`: wall-clock time in `Time Zone`. The default `23:55` runs near the end of the day so the request can see most posts from that local date.
-- `Target Heading Markdown`: full Markdown heading such as `## Twitter`. Connector entries are inserted into that heading in the daily note resolved from each post's `created_at`.
+- Each poll reads posts from local `00:00` to the current time and writes idempotently by source plus post ID. The default migrated source keeps the previous `x-post-<id>` key format for compatibility.
+- `Insertion Target`: choose `Separate Heading` or `Daily Time Slot`. `Separate Heading` writes into a fixed heading and creates it at the bottom of the daily note if missing. `Daily Time Slot` matches each post's `created_at` against the time slots above, so a 12:20 post goes into the configured afternoon heading.
+- `Target Heading Markdown`: full Markdown heading such as `## Twitter`. This is used only when `Insertion Target` is `Separate Heading`.
 - `Post Content Template`: controls the body before it is wrapped by the timestamp line format. Supported variables are `{{text}}`, `{{url}}`, `{{id}}`, `{{username}}`, and `{{created_at}}`.
+
+Connector run history, connector temporary state files, and write idempotency records are pruned after one week. This keeps `/data` bounded while still protecting retries and repeated same-day polls.
 
 External callers usually should not send `at`; if they omit it, VaultEcho uses the current server time and converts it into the configured user timezone. Send `at` only when replaying a captured event from a known historical time.
 

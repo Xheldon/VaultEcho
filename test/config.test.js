@@ -29,11 +29,28 @@ test("runtime config encrypts embedding api key and public config only exposes a
     },
     connectors: {
       enabled: true,
-      x: {
-        enabled: true,
-        username: "@xdevelopers",
-        bearerToken: "secret-x-token"
-      }
+      sources: [
+        {
+          id: "x",
+          enabled: true,
+          platform: "x",
+          username: "@xdevelopers",
+          bearerToken: "secret-x-token"
+        },
+        {
+          id: "strava",
+          enabled: true,
+          platform: "strava",
+          clientId: "128619",
+          clientSecret: "secret-strava-client-secret",
+          refreshToken: "secret-strava-refresh-token",
+          authorizationCode: "secret-strava-authorization-code",
+          output: {
+            headingMarkdown: "# 运动",
+            insertAfterHeadingMarkdown: "## Evening"
+          }
+        }
+      ]
     }
   });
 
@@ -43,10 +60,18 @@ test("runtime config encrypts embedding api key and public config only exposes a
 
   assert.equal(raw.includes("secret-api-key"), false);
   assert.equal(raw.includes("secret-x-token"), false);
+  assert.equal(raw.includes("secret-strava-client-secret"), false);
+  assert.equal(raw.includes("secret-strava-refresh-token"), false);
+  assert.equal(raw.includes("secret-strava-authorization-code"), false);
   assert.equal(Boolean(loaded.embedding.apiKeyEncrypted), true);
-  assert.equal(loaded.connectors.sources.length, 1);
+  assert.equal(loaded.connectors.sources.length, 2);
   assert.equal(loaded.connectors.sources[0].id, "x");
   assert.equal(Boolean(loaded.connectors.sources[0].bearerTokenEncrypted), true);
+  assert.equal(loaded.connectors.sources[1].platform, "strava");
+  assert.equal(Boolean(loaded.connectors.sources[1].clientSecretEncrypted), true);
+  assert.equal(Boolean(loaded.connectors.sources[1].refreshTokenEncrypted), true);
+  assert.equal(Boolean(loaded.connectors.sources[1].authorizationCodeEncrypted), true);
+  assert.equal(loaded.connectors.sources[1].output.headingMarkdown, "# 运动");
   assert.equal(publicConfig.embedding.apiKeyEncrypted, undefined);
   assert.equal(publicConfig.embedding.apiKeySet, true);
   assert.equal(publicConfig.connectors.enabled, true);
@@ -54,6 +79,12 @@ test("runtime config encrypts embedding api key and public config only exposes a
   assert.equal(publicConfig.connectors.sources[0].username, "xdevelopers");
   assert.equal(publicConfig.connectors.sources[0].bearerTokenEncrypted, undefined);
   assert.equal(publicConfig.connectors.sources[0].bearerTokenSet, true);
+  assert.equal(publicConfig.connectors.sources[1].clientSecretEncrypted, undefined);
+  assert.equal(publicConfig.connectors.sources[1].refreshTokenEncrypted, undefined);
+  assert.equal(publicConfig.connectors.sources[1].authorizationCodeEncrypted, undefined);
+  assert.equal(publicConfig.connectors.sources[1].clientSecretSet, true);
+  assert.equal(publicConfig.connectors.sources[1].refreshTokenSet, true);
+  assert.equal(publicConfig.connectors.sources[1].authorizationCodeSet, true);
   assert.deepEqual(publicConfig.attachments, {
     imageDir: "Attachments/Images",
     audioDir: "Attachments/Audio",
@@ -88,6 +119,8 @@ test("runtime config encrypts embedding api key and public config only exposes a
   const preserved = await loadRuntimeConfig(serverConfig);
   assert.equal(preserved.embedding.apiKeyEncrypted, loaded.embedding.apiKeyEncrypted);
   assert.equal(preserved.connectors.sources[0].bearerTokenEncrypted, loaded.connectors.sources[0].bearerTokenEncrypted);
+  assert.equal(preserved.connectors.sources[1].clientSecretEncrypted, loaded.connectors.sources[1].clientSecretEncrypted);
+  assert.equal(preserved.connectors.sources[1].refreshTokenEncrypted, loaded.connectors.sources[1].refreshTokenEncrypted);
 });
 
 test("runtime config normalizes AI API mode", async () => {

@@ -43,17 +43,35 @@ English version: [admin-config.md](admin-config.md).
 - 支持多行条目。插入下一条内容时，VaultEcho 会把上一条时间戳行以及它后面连续的非空、非时间戳内容视为同一个条目块；遇到空行即视为该条目结束。
 - `Keep a blank line between timestamp entries`: 时间戳条目之间保留一个空行，同时 heading 和第一条时间戳之间也保留一个空行。
 - 时间段：可以添加任意多个不重叠时间段。请求时间会按全局 `Time Zone` 计算，然后落到对应 heading 下。
-- `连接器数据`: 内部日记数据源。当前平台只支持 X，但可以新增多个 X 来源，用于不同账号或不同写入规则。
+- `连接器数据`: 内部日记数据源。当前支持 X 和 Strava，也可以新增多个来源，用于不同账号或不同写入规则。
 - `轮询间隔`: 自动轮询的全局固定间隔。可选 15 分钟、30 分钟、1 小时、2 小时、6 小时、12 小时、24 小时。定时轮询失败后会在 15 分钟后重试。
-- 每个来源都有自己的名称、启用开关、X 账号鉴权、读取选项和输出模板。来源卡片上的 `立即查找` 会先保存当前配置，再读取该来源当天的帖子。
+- 每个来源都有自己的名称、启用开关、平台鉴权、读取选项和输出设置。来源卡片上的 `立即查找` 会先保存当前配置，再读取该来源最近的滑动回看窗口。
 - X 鉴权使用开发者平台里的 Bearer 或 User Access Token。Token 会用 `APP_ENCRYPTION_KEY` 加密保存；留空表示保留该来源已有 Token。
 - 推荐填写 `X User ID`。如果只填 `X Username`，VaultEcho 会先额外查询一次 User ID。
-- 每次轮询都会读取本地当天 `00:00` 到当前时间的帖子，并按来源 + 帖子 ID 做幂等写入。默认迁移来的来源会继续使用旧的 `x-post-<id>` key 格式以兼容已有记录。
+- Strava 鉴权使用 `Client ID`、`Client Secret` 和 `Refresh Token`；Secret 会用 `APP_ENCRYPTION_KEY` 加密。`Redirect URI` 默认使用当前 Admin UI 地址，例如 `https://your-vps.example/admin`；需要在 Strava App 设置里把 Authorization Callback Domain 配成同一个 VPS 域名。VaultEcho 会自动刷新 access token，并把刷新后的 token 状态存到 `/data`。如果看到 `activity:read_permission missing`，说明当前授权缺少活动读取 scope，需要用后台里的 Strava 授权链接重新授权 `read,activity:read_all`；Strava 回跳到 Admin UI 后会自动填入 authorization code，也可以手动填入新的 refresh token。
+- Strava 来源默认单次最多处理 10 条活动，并在每条活动详情请求之间等待 1000 ms。建议保持保守；历史回填继续使用本地导入脚本，不要靠高频连接器轮询补历史。
+- 每次定时轮询都会按轮询间隔使用滑动回看窗口：15 分钟 -> 30 分钟、30 分钟 -> 1 小时、1 小时 -> 2 小时、2 小时 -> 6 小时、6 小时 -> 12 小时、12 小时 -> 24 小时、24 小时 -> 48 小时。每天本地 23:59 还会额外兜底读取当天 `00:00` 到兜底运行时刻的数据。写入会按来源 + 帖子/活动 ID 做幂等去重。默认迁移来的 X 来源会继续使用旧的 `x-post-<id>` key 格式以兼容已有记录。
 - `插入位置`: 可选 `单独 Heading` 或 `日记时间块`。`单独 Heading` 会写入固定 heading，如果当天日记里没有该 heading，会在页面底部新建。`日记时间块` 会按每条帖子的 `created_at` 匹配上方时间段，例如 12:20 写入下午时间块。
 - `目标 Heading Markdown`: 完整 Markdown heading，例如 `## Twitter`。只在 `插入位置` 为 `单独 Heading` 时使用。
 - `帖子内容模板`: 控制被时间戳行包裹之前的正文。支持 `{{text}}`、`{{url}}`、`{{id}}`、`{{username}}`、`{{created_at}}`。
+- Strava 会写入可配置的运动 heading，例如 `## 今日运动` 或 `# 运动`。如果目标 heading 不存在，VaultEcho 会用 `---` 在运动块前后分隔。默认会把新块插到 Daily Time Slots 配置里的最后一个时间段 heading 之后；只有想覆盖默认位置时才填写 `缺失时插入到此 Heading 后`。已有运动条目会按 `[HH:mm]` 合并排序。
 
 连接器运行历史、连接器临时状态文件、写入幂等记录都会在一周后清理，避免 `/data` 目录长期增长，同时保留重试和当天重复轮询所需的保护。
+
+### Strava 授权操作顺序
+
+先配置 Strava 端，再回到 VaultEcho 配置连接器：
+
+1. 打开 [Strava API 设置](https://www.strava.com/settings/api)，进入 `My API Application`。不要在 `My Apps` 页面找，那里只是撤销已授权应用的入口，不是开发者应用配置。
+2. 在 Strava 的 `Authorization Callback Domain` 填 Admin UI 的域名本身，例如 `b.bojiapp.com`。这里只填域名，不要填 `https://`，不要填端口，也不要填 `/admin`。错误示例：`https://b.bojiapp.com`、`b.bojiapp.com:58702`、`https://b.bojiapp.com/admin`。
+3. 如果 VaultEcho 现在通过非标准端口访问，例如 `https://b.bojiapp.com:58702`，建议先用反向代理把 Admin UI 暴露到标准 HTTPS 443，例如 `https://b.bojiapp.com/admin`。Strava 对公网 `redirect_uri` 的端口匹配比较严格；`localhost` 和 `127.0.0.1` 是本地测试特例。
+4. 回到 VaultEcho Admin，Strava 来源里填写 `Client ID`、`Client Secret`，并把 `Strava Redirect URI` 设为 Admin UI 地址，例如 `https://b.bojiapp.com/admin`。这一步必须与 Strava 端的 callback domain 属于同一个域名。
+5. 点击 `打开 Strava 授权链接`，授权页里保留活动读取权限，尤其是 `activity:read_all`。授权完成后 Strava 会回跳到 VaultEcho Admin，页面会自动捕获 authorization code。
+6. 回到该 Strava 来源点击 `立即查找`。VaultEcho 会保存当前配置，用 authorization code 换取 refresh token，并在后续定时轮询中自动刷新短期 access token。
+
+如果打开授权链接后直接看到 `{"message":"Bad Request","errors":[{"resource":"Application","field":"redirect_uri","code":"invalid"}]}`，优先检查 Strava 端的 `Authorization Callback Domain` 是否只填了裸域名，并确认 VaultEcho 的 `Redirect URI` 没有使用公网非标准端口。
+
+VaultEcho 不会缓存 Strava 活动详情。`/data` 中只保存必要的 token 状态、运行历史和幂等记录；运行历史、临时状态文件、幂等记录最多保留一周。
 
 外部调用方通常不需要传 `at`；不传时 VaultEcho 会用服务器当前时间并转换成全局用户时区。只有在补录历史事件时才建议显式传 `at`。
 

@@ -141,6 +141,61 @@ test("append_daily_by_time can reject missing daily notes", async () => {
   );
 });
 
+test("upsert_daily_separated_heading creates a configurable separated daily section before base block", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const config = testConfig(root);
+  const dailyPath = path.join(root, "vault", "Daily", "2026-05-21.md");
+  await fs.mkdir(path.dirname(dailyPath), { recursive: true });
+  await fs.writeFile(
+    dailyPath,
+    "## Evening\n\n[23:54] Existing entry\n\nInline note that should stay below the timestamp block.\n\n> 下方的 Base 汇总了今天创建的所有笔记。\n\n![[日记.base]]\n",
+    "utf8"
+  );
+
+  await executeOperation(config, {
+    operation: "upsert_daily_separated_heading",
+    at: "2026-05-21T09:47:00+08:00",
+    heading: "运动",
+    headingLevel: 1,
+    insertAfterHeading: "Evening",
+    insertAfterHeadingLevel: 2,
+    content: "[09:47] Ride，运动时间 16分39秒。",
+    idempotencyKey: "strava-demo"
+  });
+
+  assert.equal(
+    await fs.readFile(dailyPath, "utf8"),
+    "## Evening\n\n[23:54] Existing entry\n\n---\n\n# 运动\n\n[09:47] Ride，运动时间 16分39秒。\n\n---\n\nInline note that should stay below the timestamp block.\n\n> 下方的 Base 汇总了今天创建的所有笔记。\n\n![[日记.base]]\n"
+  );
+});
+
+test("upsert_daily_separated_heading merges existing entries under the configured heading chronologically", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const config = testConfig(root);
+  const dailyPath = path.join(root, "vault", "Daily", "2026-05-21.md");
+  await fs.mkdir(path.dirname(dailyPath), { recursive: true });
+  await fs.writeFile(
+    dailyPath,
+    "## Evening\n\n[23:54] Existing entry\n\n---\n\n## 今日运动\n\n[20:15] Evening ride。\n\n---\n\n> 下方的 Base 汇总了今天创建的所有笔记。\n",
+    "utf8"
+  );
+
+  await executeOperation(config, {
+    operation: "upsert_daily_separated_heading",
+    at: "2026-05-21T09:47:00+08:00",
+    heading: "今日运动",
+    headingLevel: 2,
+    insertAfterHeading: "Evening",
+    insertAfterHeadingLevel: 2,
+    content: "[09:47] Morning ride。"
+  });
+
+  assert.equal(
+    await fs.readFile(dailyPath, "utf8"),
+    "## Evening\n\n[23:54] Existing entry\n\n---\n\n## 今日运动\n\n[09:47] Morning ride。\n\n[20:15] Evening ride。\n\n---\n\n> 下方的 Base 汇总了今天创建的所有笔记。\n"
+  );
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

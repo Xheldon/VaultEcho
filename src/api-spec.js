@@ -501,13 +501,14 @@ export const API_ENDPOINTS = [
     route: "connectors/run",
     method: "POST",
     title: "Run Connector Now",
-    summary: "Runs one configured connector source immediately; currently supports X posts for the current local day.",
+    summary: "Runs one configured connector source immediately; supports X posts and Strava activities in the source's sliding lookback window.",
     scenarios: [
-      "Manually sync today's X posts from one configured X source.",
-      "Test one source's X API credentials and Markdown insertion before enabling polling."
+      "Manually sync recent X posts from one configured X source.",
+      "Manually sync recent Strava activities into a configured daily-note activity heading.",
+      "Test one source's API credentials and Markdown insertion before enabling polling."
     ],
     params: [
-      ["connectorId | id | platform", "Connector source id. The migrated default source is `x`; additional sources use their generated ids."]
+      ["connectorId | id | platform", "Connector source id. The migrated default source is `x`; Strava sources commonly use `strava` or their generated ids."]
     ],
     curl: `curl -X POST http://localhost:8787/v1/api/connectors/run \\
   -H "Authorization: Bearer change-me" \\

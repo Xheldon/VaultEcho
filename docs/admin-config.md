@@ -43,17 +43,35 @@ This section controls `daily/append-by-time`.
 - Multiline entries are supported. When inserting the next entry, VaultEcho treats the previous timestamp line and its following consecutive non-empty, non-timestamp lines as one entry block. A blank line terminates that block.
 - `Keep a blank line between timestamp entries`: also keeps one blank line between the heading and the first timestamp entry.
 - Time slots: add any number of non-overlapping slots. The request time is evaluated in `Time Zone`, then the matching slot decides the target heading.
-- `Connector Data`: internal daily-note sources. The first supported platform is X, and you can add multiple X sources for different accounts or output rules.
+- `Connector Data`: internal daily-note sources. Supported platforms are X and Strava, and you can add multiple sources for different accounts or output rules.
 - `Poll Interval`: global fixed interval for automatic polling. Available values are 15 minutes, 30 minutes, 1 hour, 2 hours, 6 hours, 12 hours, and 24 hours. Failed scheduled polls are retried after 15 minutes.
-- Each source has its own name, enable switch, X account credentials, read options, and output template. `Run Now` on a source saves the current config, then reads that source's posts for the current local day.
+- Each source has its own name, enable switch, platform credentials, read options, and output settings. `Run Now` on a source saves the current config, then reads that source's recent sliding lookback window.
 - X auth uses a Bearer or User Access Token from the X developer platform. The token is encrypted with `APP_ENCRYPTION_KEY`; leave the field blank to keep the existing token for that source.
 - `X User ID` is preferred. If only `X Username` is set, VaultEcho does one extra user lookup before reading posts.
-- Each poll reads posts from local `00:00` to the current time and writes idempotently by source plus post ID. The default migrated source keeps the previous `x-post-<id>` key format for compatibility.
+- Strava auth uses `Client ID`, `Client Secret`, and `Refresh Token`; secrets are encrypted with `APP_ENCRYPTION_KEY`. `Redirect URI` defaults to the current Admin UI URL, such as `https://your-vps.example/admin`; set the Strava app Authorization Callback Domain to the same VPS domain. VaultEcho refreshes the access token and stores the refreshed token state under `/data`. If you see `activity:read_permission missing`, the current authorization is missing the activity-read scope. Reauthorize from the Strava authorization link in Admin with `read,activity:read_all`; when Strava redirects back to Admin UI, the authorization code is filled automatically. You can also provide the new refresh token manually.
+- Strava sources default to at most 10 activities per run and a 1000 ms delay between activity-detail requests. Keep these values conservative; historical backfills should use the local import script rather than frequent connector polling.
+- Each scheduled poll uses a sliding lookback window based on the poll interval: 15 minutes -> 30 minutes, 30 minutes -> 1 hour, 1 hour -> 2 hours, 2 hours -> 6 hours, 6 hours -> 12 hours, 12 hours -> 24 hours, and 24 hours -> 48 hours. A daily 23:59 local catchup also reads the current local day from `00:00` to the catchup run time. Writes are idempotent by source plus post/activity ID. The default migrated X source keeps the previous `x-post-<id>` key format for compatibility.
 - `Insertion Target`: choose `Separate Heading` or `Daily Time Slot`. `Separate Heading` writes into a fixed heading and creates it at the bottom of the daily note if missing. `Daily Time Slot` matches each post's `created_at` against the time slots above, so a 12:20 post goes into the configured afternoon heading.
 - `Target Heading Markdown`: full Markdown heading such as `## Twitter`. This is used only when `Insertion Target` is `Separate Heading`.
 - `Post Content Template`: controls the body before it is wrapped by the timestamp line format. Supported variables are `{{text}}`, `{{url}}`, `{{id}}`, `{{username}}`, and `{{created_at}}`.
+- Strava writes into a configurable activity heading such as `## 今日运动` or `# 运动`. If the heading is missing, VaultEcho creates a separated block using `---` before and after the activity section. By default the block is inserted after the last configured Daily Time Slot heading; fill `Create After Heading` only when you want to override that default. Existing activity entries are merged and sorted by `[HH:mm]`.
 
 Connector run history, connector temporary state files, and write idempotency records are pruned after one week. This keeps `/data` bounded while still protecting retries and repeated same-day polls.
+
+### Strava Authorization Flow
+
+Configure Strava first, then configure the VaultEcho connector:
+
+1. Open [Strava API settings](https://www.strava.com/settings/api) and edit `My API Application`. Do not use the `My Apps` page for this; that page is for revoking apps you have authorized, not for developer app settings.
+2. In Strava, set `Authorization Callback Domain` to the Admin UI domain only, for example `b.bojiapp.com`. Enter only the bare domain. Do not include `https://`, a port, or `/admin`. Invalid examples: `https://b.bojiapp.com`, `b.bojiapp.com:58702`, and `https://b.bojiapp.com/admin`.
+3. If VaultEcho is currently exposed on a non-standard public port, such as `https://b.bojiapp.com:58702`, put it behind a reverse proxy on standard HTTPS 443 first, for example `https://b.bojiapp.com/admin`. Strava is strict about public `redirect_uri` port matching; `localhost` and `127.0.0.1` are special local-test exceptions.
+4. Back in VaultEcho Admin, fill `Client ID` and `Client Secret` on the Strava source, then set `Strava Redirect URI` to the Admin UI URL, for example `https://b.bojiapp.com/admin`. This URL must be under the callback domain configured in Strava.
+5. Click `Open Strava authorization URL`. On the Strava authorization page, keep activity read permission enabled, especially `activity:read_all`. After authorization, Strava redirects back to VaultEcho Admin and the page captures the authorization code automatically.
+6. Click `Run Now` on that Strava source. VaultEcho saves the current config, exchanges the authorization code for a refresh token, and uses that refresh token to renew short-lived access tokens during scheduled polling.
+
+If the authorization URL immediately returns `{"message":"Bad Request","errors":[{"resource":"Application","field":"redirect_uri","code":"invalid"}]}`, first check that Strava's `Authorization Callback Domain` is only the bare domain and that VaultEcho's `Redirect URI` is not using a non-standard public port.
+
+VaultEcho does not cache Strava activity details. `/data` only stores necessary token state, run history, and idempotency records; run history, temporary state files, and idempotency records are retained for at most one week.
 
 External callers usually should not send `at`; if they omit it, VaultEcho uses the current server time and converts it into the configured user timezone. Send `at` only when replaying a captured event from a known historical time.
 

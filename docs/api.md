@@ -39,7 +39,7 @@ Authorization: Bearer <API_TOKEN>
 | `reviews/status` | GET or POST | Shows configured review tasks, whether scheduling is enabled, next run times, and last run records. |
 | `reviews/run` | POST | Runs one configured review task immediately, using period sources, semantic recall, the configured AI model, and the task output path. |
 | `connectors/status` | GET or POST | Shows configured connector source scheduling state, next run time, and the last connector run record for each source. |
-| `connectors/run` | POST | Runs one configured connector source immediately; currently supports X posts for the current local day. |
+| `connectors/run` | POST | Runs one configured connector source immediately; supports X posts and Strava activities in the source's sliding lookback window. |
 | `tags/list` | GET | Counts Markdown hashtags under allowed directories. |
 | `batch` | POST | Executes multiple API operations in one request. |
 | `uri/execute` | POST | Parses an Obsidian URI and executes the parts that can be mapped to Vault filesystem operations. |
@@ -820,20 +820,21 @@ curl http://localhost:8787/v1/api/connectors/status \
 
 **Run Connector Now**
 
-Runs one configured connector source immediately; currently supports X posts for the current local day.
+Runs one configured connector source immediately; supports X posts and Strava activities in the source's sliding lookback window.
 
 Method: `POST`
 
 Use cases:
 
-- Manually sync today's X posts from one configured X source.
-- Test one source's X API credentials and Markdown insertion before enabling polling.
+- Manually sync recent X posts from one configured X source.
+- Manually sync recent Strava activities into a configured daily-note activity heading.
+- Test one source's API credentials and Markdown insertion before enabling polling.
 
 Parameters:
 
 | Parameter | Description |
 |---|---|
-| `connectorId | id | platform` | Connector source id. The migrated default source is `x`; additional sources use their generated ids. |
+| `connectorId | id | platform` | Connector source id. The migrated default source is `x`; Strava sources commonly use `strava` or their generated ids. |
 
 Example:
 

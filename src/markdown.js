@@ -128,6 +128,51 @@ export function insertAfterLastMatchingLine(markdown, options) {
   return joinLines(next);
 }
 
+export function upsertSeparatedHeadingEntries(markdown, options) {
+  const {
+    heading,
+    headingLevel = 2,
+    entries,
+    linePattern,
+    separator = "---",
+    insertAfterHeading = "",
+    insertAfterHeadingLevel = headingLevel
+  } = options;
+  const contentEntries = Array.isArray(entries)
+    ? entries.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [String(options.content || "").trim()].filter(Boolean);
+  if (!contentEntries.length) {
+    throw new Error("entries are required");
+  }
+
+  const regex = createSafeLineRegex(linePattern);
+  const lines = splitLines(markdown);
+  const section = findDelimitedHeadingSection(lines, heading, headingLevel, separator);
+
+  if (section) {
+    return rewriteSeparatedHeading(lines, section, contentEntries, regex, separator);
+  }
+
+  const insertionIndex = findSeparatedHeadingInsertIndex(lines, {
+    insertAfterHeading,
+    insertAfterHeadingLevel,
+    linePattern: regex
+  });
+  const insertion = buildSeparatedHeadingLines(contentEntries, {
+    heading,
+    headingLevel,
+    separator,
+    includeHeading: true
+  });
+  const next = [...lines];
+  let replaceCount = 0;
+  while (insertionIndex + replaceCount < next.length && next[insertionIndex + replaceCount].trim() === "") {
+    replaceCount += 1;
+  }
+  next.splice(insertionIndex, replaceCount, ...insertion);
+  return joinLines(next);
+}
+
 export function createSafeLineRegex(pattern) {
   if (typeof pattern !== "string" || !pattern) {
     throw new Error("linePattern is required");
@@ -224,6 +269,162 @@ export function findHeadingSection(lines, heading, headingLevel) {
   }
 
   return null;
+}
+
+function findDelimitedHeadingSection(lines, heading, headingLevel, separator) {
+  const baseIndex = findBaseBlockIndex(lines);
+  const section = findHeadingSectionBeforeIndex(
+    lines,
+    heading,
+    headingLevel,
+    baseIndex === -1 ? lines.length : baseIndex
+  );
+  if (!section) return null;
+
+  const hardEnd = section.end;
+  let contentEnd = hardEnd;
+  let replaceEnd = hardEnd;
+  for (let index = section.start + 1; index < hardEnd; index += 1) {
+    if (lines[index]?.trim() !== separator) continue;
+    contentEnd = index;
+    replaceEnd = index + 1;
+    while (replaceEnd < hardEnd && lines[replaceEnd]?.trim() === "") replaceEnd += 1;
+    break;
+  }
+
+  return {
+    start: section.start,
+    contentEnd,
+    replaceEnd
+  };
+}
+
+function rewriteSeparatedHeading(lines, section, entries, regex, separator) {
+  const existingEntries = lines
+    .slice(section.start + 1, section.contentEnd)
+    .filter((line) => regex.test(line.slice(0, 1000)));
+  const allEntries = uniqueSortedEntries([...existingEntries, ...entries]);
+  const replacement = buildSeparatedHeadingLines(allEntries, {
+    separator,
+    includeHeading: false
+  });
+  const next = [...lines];
+  next.splice(section.start + 1, section.replaceEnd - (section.start + 1), ...replacement);
+  return joinLines(next);
+}
+
+function buildSeparatedHeadingLines(entries, options = {}) {
+  const { heading, headingLevel = 2, separator = "---", includeHeading = true } = options;
+  const body = [
+    "",
+    ...interleaveBlankLines(uniqueSortedEntries(entries)),
+    "",
+    separator,
+    ""
+  ];
+  if (!includeHeading) return body;
+  return [
+    "",
+    separator,
+    "",
+    `${"#".repeat(headingLevel)} ${heading}`,
+    ...body
+  ];
+}
+
+function interleaveBlankLines(entries) {
+  return entries.flatMap((entry, index) => {
+    if (index === entries.length - 1) return [entry];
+    return [entry, ""];
+  });
+}
+
+function uniqueSortedEntries(entries) {
+  const seen = new Set();
+  const result = [];
+  for (const entry of entries) {
+    const normalized = entry.replace(/\s+/g, " ").trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(entry);
+  }
+  return result.sort((left, right) => entryMinutes(left) - entryMinutes(right));
+}
+
+function entryMinutes(entry) {
+  const match = /^\[(\d{2}):(\d{2})\]/.exec(entry);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function findSeparatedHeadingInsertIndex(lines, options) {
+  const { insertAfterHeading, insertAfterHeadingLevel, linePattern } = options;
+  const baseIndex = findBaseBlockIndex(lines);
+  const limit = baseIndex === -1 ? lines.length : baseIndex;
+  const target = insertAfterHeading
+    ? findHeadingSectionBeforeIndex(lines, insertAfterHeading, insertAfterHeadingLevel, limit)
+    : findLastHeadingSectionBeforeIndex(lines, insertAfterHeadingLevel, limit);
+  if (!target) return trimTrailingIndex(lines, limit);
+
+  let lastTimestamp = -1;
+  for (let index = target.start + 1; index < target.end; index += 1) {
+    if (linePattern.test(lines[index].slice(0, 1000))) lastTimestamp = index;
+  }
+  if (lastTimestamp === -1) return target.start + 1;
+
+  let insertAt = lastTimestamp + 1;
+  while (insertAt < target.end) {
+    const line = lines[insertAt] || "";
+    if (line.trim() === "") break;
+    if (/^(#{1,6})\s+/.test(line)) break;
+    if (linePattern.test(line.slice(0, 1000))) break;
+    insertAt += 1;
+  }
+  return insertAt;
+}
+
+function findHeadingSectionBeforeIndex(lines, heading, headingLevel, limit) {
+  const target = normalizeHeadingText(heading);
+  const marker = "#".repeat(headingLevel);
+  for (let index = 0; index < limit; index += 1) {
+    const line = lines[index];
+    if (!line.startsWith(`${marker} `)) continue;
+
+    const text = normalizeHeadingText(line.slice(marker.length).trim());
+    if (text !== target) continue;
+
+    let end = limit;
+    for (let next = index + 1; next < limit; next += 1) {
+      const match = /^(#{1,6})\s+/.exec(lines[next]);
+      if (match && match[1].length <= headingLevel) {
+        end = next;
+        break;
+      }
+    }
+    return { start: index, end };
+  }
+  return null;
+}
+
+function findLastHeadingSectionBeforeIndex(lines, headingLevel, limit) {
+  const marker = "#".repeat(headingLevel);
+  for (let index = limit - 1; index >= 0; index -= 1) {
+    if (!lines[index].startsWith(`${marker} `)) continue;
+    return { start: index, end: limit };
+  }
+  return null;
+}
+
+function findBaseBlockIndex(lines) {
+  const quoteIndex = lines.findIndex((line) => line.startsWith("> 下方的 Base 汇总"));
+  if (quoteIndex !== -1) return quoteIndex;
+  return lines.findIndex((line) => line.includes("![[日记.base]]"));
+}
+
+function trimTrailingIndex(lines, limit = lines.length) {
+  let index = limit;
+  while (index > 0 && lines[index - 1].trim() === "") index -= 1;
+  return index;
 }
 
 function splitLines(markdown) {

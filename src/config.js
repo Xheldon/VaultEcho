@@ -174,6 +174,30 @@ const DEFAULT_X_CONNECTOR_SOURCE = {
   }
 };
 
+const DEFAULT_STRAVA_CONNECTOR_SOURCE = {
+  id: "strava",
+  name: "Strava",
+  enabled: false,
+  platform: "strava",
+  baseUrl: "https://www.strava.com/api/v3",
+  clientId: "",
+  redirectUri: "",
+  clientSecretEncrypted: "",
+  refreshTokenEncrypted: "",
+  accessTokenEncrypted: "",
+  authorizationCodeEncrypted: "",
+  accessTokenExpiresAt: 0,
+  scope: "",
+  maxActivitiesPerRun: 10,
+  requestDelayMs: 1000,
+  minMovingTimeMinutes: 5,
+  requireRequiredMetrics: true,
+  output: {
+    headingMarkdown: "## 今日运动",
+    insertAfterHeadingMarkdown: ""
+  }
+};
+
 const DEFAULT_CONNECTORS = {
   enabled: false,
   schedule: { intervalMinutes: 1440 },
@@ -451,11 +475,19 @@ function normalizeConnectorSources(rawSources, previousConnectors, serverConfig)
 
   for (const [index, source] of rawSources.entries()) {
     if (!isPlainObject(source)) continue;
-    const fallbackId = index === 0 ? DEFAULT_X_CONNECTOR_SOURCE.id : `x-${index + 1}`;
+    const platform = normalizeConnectorPlatform(source.platform);
+    const fallbackId = index === 0
+      ? (platform === "strava" ? DEFAULT_STRAVA_CONNECTOR_SOURCE.id : DEFAULT_X_CONNECTOR_SOURCE.id)
+      : `${platform}-${index + 1}`;
     const preferredId = normalizeId(source.id, fallbackId);
     const id = uniqueConnectorId(preferredId, usedIds);
     usedIds.add(id);
-    normalized.push(normalizeXConnectorSourceConfig({ ...source, id }, previousById.get(id), serverConfig, index));
+    const previous = previousById.get(id);
+    normalized.push(
+      platform === "strava"
+        ? normalizeStravaConnectorSourceConfig({ ...source, id }, previous, serverConfig, index)
+        : normalizeXConnectorSourceConfig({ ...source, id }, previous, serverConfig, index)
+    );
   }
 
   return normalized;
@@ -508,6 +540,91 @@ function normalizeXConnectorSourceConfig(input = {}, previous = {}, serverConfig
   };
 }
 
+function normalizeStravaConnectorSourceConfig(input = {}, previous = {}, serverConfig, index = 0) {
+  const source = isPlainObject(input) ? input : {};
+  const previousSource = isPlainObject(previous) ? previous : {};
+  const output = isPlainObject(source.output) ? source.output : {};
+  const fallbackOutput = DEFAULT_STRAVA_CONNECTOR_SOURCE.output;
+  const clientSecret = normalizeOptionalString(source.clientSecret || "", "");
+  const refreshToken = normalizeOptionalString(source.refreshToken || "", "");
+  const accessToken = normalizeOptionalString(source.accessToken || "", "");
+  const authorizationCode = normalizeOptionalString(source.authorizationCode || "", "");
+  let clientSecretEncrypted = normalizeSecretField(
+    clientSecret,
+    source.clientSecretEncrypted || previousSource.clientSecretEncrypted,
+    source.clearClientSecret,
+    serverConfig
+  );
+  let refreshTokenEncrypted = normalizeSecretField(
+    refreshToken,
+    source.refreshTokenEncrypted || previousSource.refreshTokenEncrypted,
+    source.clearRefreshToken,
+    serverConfig
+  );
+  let accessTokenEncrypted = normalizeSecretField(
+    accessToken,
+    source.accessTokenEncrypted || previousSource.accessTokenEncrypted,
+    source.clearAccessToken,
+    serverConfig
+  );
+  let authorizationCodeEncrypted = normalizeSecretField(
+    authorizationCode,
+    source.authorizationCodeEncrypted || previousSource.authorizationCodeEncrypted,
+    source.clearAuthorizationCode,
+    serverConfig
+  );
+  return {
+    id: normalizeId(source.id, index === 0 ? DEFAULT_STRAVA_CONNECTOR_SOURCE.id : `strava-${index + 1}`),
+    name: normalizeString(source.name, previousSource.name || DEFAULT_STRAVA_CONNECTOR_SOURCE.name),
+    enabled: normalizeBoolean(source.enabled, DEFAULT_STRAVA_CONNECTOR_SOURCE.enabled),
+    platform: "strava",
+    baseUrl: normalizeUrlBase(source.baseUrl, DEFAULT_STRAVA_CONNECTOR_SOURCE.baseUrl),
+    clientId: normalizeOptionalString(source.clientId, previousSource.clientId || DEFAULT_STRAVA_CONNECTOR_SOURCE.clientId),
+    redirectUri: normalizeString(
+      source.redirectUri,
+      previousSource.redirectUri || DEFAULT_STRAVA_CONNECTOR_SOURCE.redirectUri
+    ),
+    clientSecretEncrypted,
+    refreshTokenEncrypted,
+    accessTokenEncrypted,
+    authorizationCodeEncrypted,
+    accessTokenExpiresAt: normalizeNonNegativeInteger(
+      source.accessTokenExpiresAt ?? previousSource.accessTokenExpiresAt,
+      DEFAULT_STRAVA_CONNECTOR_SOURCE.accessTokenExpiresAt
+    ),
+    scope: normalizeOptionalString(source.scope, previousSource.scope || DEFAULT_STRAVA_CONNECTOR_SOURCE.scope),
+    maxActivitiesPerRun: normalizeIntegerRange(
+      source.maxActivitiesPerRun,
+      1,
+      30,
+      previousSource.maxActivitiesPerRun || DEFAULT_STRAVA_CONNECTOR_SOURCE.maxActivitiesPerRun
+    ),
+    requestDelayMs: normalizeIntegerRange(
+      source.requestDelayMs,
+      0,
+      30000,
+      previousSource.requestDelayMs ?? DEFAULT_STRAVA_CONNECTOR_SOURCE.requestDelayMs
+    ),
+    minMovingTimeMinutes: normalizeIntegerRange(
+      source.minMovingTimeMinutes,
+      0,
+      240,
+      previousSource.minMovingTimeMinutes ?? DEFAULT_STRAVA_CONNECTOR_SOURCE.minMovingTimeMinutes
+    ),
+    requireRequiredMetrics: normalizeBoolean(
+      source.requireRequiredMetrics,
+      previousSource.requireRequiredMetrics ?? DEFAULT_STRAVA_CONNECTOR_SOURCE.requireRequiredMetrics
+    ),
+    output: {
+      headingMarkdown: normalizeHeadingMarkdown(output.headingMarkdown, fallbackOutput.headingMarkdown),
+      insertAfterHeadingMarkdown: normalizeHeadingMarkdown(
+        output.insertAfterHeadingMarkdown,
+        fallbackOutput.insertAfterHeadingMarkdown
+      )
+    }
+  };
+}
+
 function publicConnectorsConfig(config = {}) {
   return {
     enabled: Boolean(config.enabled),
@@ -524,13 +641,28 @@ function publicConnectorsConfig(config = {}) {
 function publicConnectorSourceConfig(source = {}) {
   const publicSource = { ...source };
   const bearerTokenSet = Boolean(publicSource.bearerTokenEncrypted);
+  const clientSecretSet = Boolean(publicSource.clientSecretEncrypted);
+  const refreshTokenSet = Boolean(publicSource.refreshTokenEncrypted);
+  const accessTokenSet = Boolean(publicSource.accessTokenEncrypted);
+  const authorizationCodeSet = Boolean(publicSource.authorizationCodeEncrypted);
   delete publicSource.bearerTokenEncrypted;
   delete publicSource.bearerToken;
   delete publicSource.apiToken;
   delete publicSource.accessToken;
+  delete publicSource.clientSecretEncrypted;
+  delete publicSource.clientSecret;
+  delete publicSource.refreshTokenEncrypted;
+  delete publicSource.refreshToken;
+  delete publicSource.accessTokenEncrypted;
+  delete publicSource.authorizationCodeEncrypted;
+  delete publicSource.authorizationCode;
   return {
     ...publicSource,
-    bearerTokenSet
+    bearerTokenSet,
+    clientSecretSet,
+    refreshTokenSet,
+    accessTokenSet,
+    authorizationCodeSet
   };
 }
 
@@ -642,6 +774,17 @@ function normalizeUrlBase(value, fallback) {
     throw new Error("Connector base URL must start with http:// or https://");
   }
   return raw;
+}
+
+function normalizeSecretField(plainText, encryptedFallback, clearValue, serverConfig) {
+  if (normalizeBoolean(clearValue, false)) return "";
+  const secret = normalizeOptionalString(plainText, "");
+  if (secret) return encryptSecret(secret, serverConfig.appEncryptionKey);
+  return normalizeOptionalString(encryptedFallback, "");
+}
+
+function normalizeConnectorPlatform(value) {
+  return value === "strava" ? "strava" : "x";
 }
 
 function normalizeXUsername(value) {

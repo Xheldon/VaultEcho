@@ -276,7 +276,7 @@
                       <span>{{ source.platform.toUpperCase() }} · {{ source.enabled ? t("enabled") : t("disabled") }}</span>
                     </div>
                     <div class="button-row">
-                      <el-switch v-model="source.enabled" :active-text="t('enableXConnector')" />
+                      <el-switch v-model="source.enabled" :active-text="t('connectorEnabled')" />
                       <el-button type="primary" plain :loading="runningConnectorId === source.id" @click="runConnectorNow(source)">{{ t("runConnectorNow") }}</el-button>
                       <el-button :icon="Delete" text type="danger" @click="removeConnectorSource(index)" />
                     </div>
@@ -293,11 +293,13 @@
                     </el-col>
                     <el-col :xs="24" :md="12">
                       <el-form-item :label="t('connectorPlatform')">
-                        <el-select v-model="source.platform" disabled class="full-width">
+                        <el-select v-model="source.platform" class="full-width" @change="onConnectorPlatformChange(source)">
                           <el-option label="X" value="x" />
+                          <el-option label="Strava" value="strava" />
                         </el-select>
                       </el-form-item>
                     </el-col>
+                    <template v-if="source.platform === 'x'">
                     <el-col :xs="24" :md="12">
                       <el-form-item :label="t('xBaseUrl')">
                         <el-input v-model="source.baseUrl" placeholder="https://api.x.com/2" />
@@ -329,6 +331,79 @@
                       <el-checkbox v-model="source.includeReplies">{{ t("includeReplies") }}</el-checkbox>
                       <el-checkbox v-model="source.includeRetweets">{{ t("includeRetweets") }}</el-checkbox>
                     </el-col>
+                    </template>
+                    <template v-else-if="source.platform === 'strava'">
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaBaseUrl')">
+                        <el-input v-model="source.baseUrl" placeholder="https://www.strava.com/api/v3" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaClientId')">
+                        <el-input v-model="source.clientId" placeholder="128619" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaRedirectUri')">
+                        <el-input v-model="source.redirectUri" :placeholder="adminUiRedirectUri()" />
+                        <div class="form-hint">{{ t("stravaRedirectUriHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaClientSecret')">
+                        <el-input v-model="source.clientSecret" type="password" show-password autocomplete="off" />
+                        <div class="form-hint">{{ source.clientSecretSet ? t("stravaClientSecretSaved") : t("stravaClientSecretMissing") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaRefreshToken')">
+                        <el-input v-model="source.refreshToken" type="password" show-password autocomplete="off" />
+                        <div class="form-hint">{{ source.refreshTokenSet ? t("stravaRefreshTokenSaved") : t("stravaRefreshTokenMissing") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaAuthorizationCode')">
+                        <el-input v-model="source.authorizationCode" type="password" show-password autocomplete="off" />
+                        <div class="form-hint">{{ source.authorizationCodeSet ? t("stravaAuthorizationCodeSaved") : t("stravaAuthorizationCodeHint") }}</div>
+                        <div v-if="stravaAuthorizationUrl(source)" class="form-hint">
+                          <a :href="stravaAuthorizationUrl(source)" target="_blank" rel="noreferrer">{{ t("stravaAuthorizationUrl") }}</a>
+                        </div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('maxActivitiesPerRun')">
+                        <el-input-number v-model="source.maxActivitiesPerRun" :min="1" :max="30" class="full-width" />
+                        <div class="form-hint">{{ t("maxActivitiesPerRunHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaRequestDelayMs')">
+                        <el-input-number v-model="source.requestDelayMs" :min="0" :max="30000" :step="500" class="full-width" />
+                        <div class="form-hint">{{ t("stravaRequestDelayHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('minMovingTimeMinutes')">
+                        <el-input-number v-model="source.minMovingTimeMinutes" :min="0" :max="240" class="full-width" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12" class="connector-checkboxes">
+                      <el-checkbox v-model="source.requireRequiredMetrics">{{ t("requireStravaMetrics") }}</el-checkbox>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaActivityHeadingMarkdown')">
+                        <el-input v-model="source.output.headingMarkdown" placeholder="## 今日运动" />
+                        <div class="form-hint">{{ t("stravaActivityHeadingHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="12">
+                      <el-form-item :label="t('stravaInsertAfterHeadingMarkdown')">
+                        <el-input v-model="source.output.insertAfterHeadingMarkdown" :placeholder="t('stravaInsertAfterHeadingPlaceholder')" />
+                        <div class="form-hint">{{ t("stravaInsertAfterHeadingHint") }}</div>
+                      </el-form-item>
+                    </el-col>
+                    </template>
+                    <template v-if="source.platform === 'x'">
                     <el-col :xs="24" :md="12">
                       <el-form-item :label="t('connectorOutputTarget')">
                         <el-segmented v-model="source.output.target" :options="connectorOutputTargetOptions" class="full-width" />
@@ -352,6 +427,7 @@
                         <div class="form-hint">{{ t("connectorContentTemplateHint") }}</div>
                       </el-form-item>
                     </el-col>
+                    </template>
                   </el-row>
                 </section>
               </div>
@@ -522,19 +598,19 @@ const translations = {
     connectorData: "连接器数据",
     enableConnectorScheduler: "启用连接器轮询",
     connectorSchedulerEnabledHint: "保存后，VaultEcho 会按固定间隔轮询所有已启用的连接器来源。",
-    connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步当天内容。",
+    connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步最近回看窗口内的内容。",
     connectorStatus: "连接器状态",
     runConnectorNow: "立即查找",
     addConnectorSource: "添加来源",
-    connectorEmptyHint: "还没有连接器来源。添加一个 X 来源后即可配置账号、Token 和写入方式。",
+    connectorEmptyHint: "还没有连接器来源。添加来源后即可选择 X 或 Strava 并配置账号、Token 和写入方式。",
     connectorName: "来源名称",
     connectorNamePlaceholder: "例如：个人 X",
     disabled: "停用",
     connectorNotScheduled: "未启用自动轮询",
     connectorPlatform: "连接器平台",
-    connectorEnabled: "平台开关",
+    connectorEnabled: "启用来源",
     enableXConnector: "启用 X",
-    xConnectorHint: "当前只支持 X；每个来源只读取当天 00:00 到当前时间的帖子，再写入当天日记。",
+    xConnectorHint: "当前只支持 X；每个来源按轮询间隔滑动回看，并按帖子发布时间写入对应日记。",
     xBaseUrl: "X API Base URL",
     xBearerToken: "X Bearer / User Access Token",
     xTokenSaved: "Token 已保存，留空表示不修改。",
@@ -543,7 +619,7 @@ const translations = {
     xUserIdHint: "推荐填写 User ID；只填 Username 时会先查询一次 User ID。",
     xUsername: "X Username",
     pollInterval: "轮询间隔",
-    pollIntervalHint: "所有来源共用这个轮询间隔；每次都会查询当天 00:00 到当前时间的帖子，并用来源 + 帖子 ID 去重写入。",
+    pollIntervalHint: "所有来源共用这个轮询间隔；每次按间隔滑动回看，23:59 会额外回看当天，并用来源 + 帖子 ID 去重写入。",
     pollEvery15: "15分钟",
     pollEvery30: "30分钟",
     pollEvery60: "1小时",
@@ -554,6 +630,35 @@ const translations = {
     maxPostsPerRun: "单次最多帖子数",
     includeReplies: "包含回复",
     includeRetweets: "包含转帖",
+    stravaBaseUrl: "Strava API Base URL",
+    stravaClientId: "Strava Client ID",
+    stravaRedirectUri: "Strava Redirect URI",
+    stravaRedirectUriHint: "默认使用当前 Admin UI 地址；在 Strava App 设置里把 callback domain 配成这个 VPS 域名。",
+    stravaClientSecret: "Strava Client Secret",
+    stravaClientSecretSaved: "Client Secret 已保存，留空表示不修改。",
+    stravaClientSecretMissing: "尚未保存 Client Secret。新 Secret 会用 APP_ENCRYPTION_KEY 加密。",
+    stravaRefreshToken: "Strava Refresh Token",
+    stravaRefreshTokenSaved: "Refresh Token 已保存，留空表示不修改。",
+    stravaRefreshTokenMissing: "尚未保存 Refresh Token。同步时会自动刷新并保存最新 token 状态。",
+    stravaAuthorizationCode: "Strava Authorization Code",
+    stravaAuthorizationCodeSaved: "Authorization Code 已保存；下一次运行会优先换取新 Token。",
+    stravaAuthorizationCodeHint: "用下方授权链接重新授权 activity:read_all 后，把回跳 URL 里的 code 粘贴到这里。",
+    stravaAuthorizationUrl: "打开 Strava 授权链接",
+    stravaAuthorizationCodeCaptured: "已从 Strava 回调捕获 Authorization Code。点立即查找会先保存并换取新 Token。",
+    stravaAuthorizationDenied: "Strava 授权被取消。",
+    stravaAuthorizationScopeMissing: "Strava 回调缺少活动读取权限，请重新授权并保留 activity:read_all。",
+    stravaAuthorizationSourceMissing: "没有找到对应的 Strava 来源，无法自动填入 Authorization Code。",
+    maxActivitiesPerRun: "单次最多活动数",
+    maxActivitiesPerRunHint: "建议保持较小值；历史回填请继续用本地脚本，连接器只同步近期新增活动。",
+    stravaRequestDelayMs: "详情请求间隔",
+    stravaRequestDelayHint: "每条活动详情之间的等待时间，降低批量详情请求触发 429 的概率。",
+    minMovingTimeMinutes: "最小运动时间",
+    requireStravaMetrics: "过滤缺少心率、速度、卡路里等关键指标的活动",
+    stravaActivityHeadingMarkdown: "运动 Heading Markdown",
+    stravaActivityHeadingHint: "例如 ## 今日运动 或 # 运动；已存在则合并排序，不存在则用分割线新增块。",
+    stravaInsertAfterHeadingMarkdown: "缺失时插入到此 Heading 后",
+    stravaInsertAfterHeadingPlaceholder: "留空：最后一个日记时间段",
+    stravaInsertAfterHeadingHint: "留空时自动使用 Daily Time Slots 配置中的最后一个时间段 heading；只有需要覆盖默认位置时才填写。",
     connectorOutputTarget: "插入位置",
     targetHeading: "单独 Heading",
     targetTimeSlot: "日记时间块",
@@ -564,6 +669,8 @@ const translations = {
     connectorLineFormatHint: "留空则使用上方日记 Line Format。",
     connectorContentTemplate: "帖子内容模板",
     connectorContentTemplateHint: "可用变量：{{text}}、{{url}}、{{id}}、{{username}}、{{created_at}}。",
+    postsWrittenStatus: "条帖子已写入",
+    activitiesWrittenStatus: "条活动已写入",
     connectorStatusLoaded: "连接器状态已更新",
     reviewTasks: "回顾任务",
     reviewDesc: "周、月、季、年 AI 回顾，支持语义召回和模板化输出文件。",
@@ -816,19 +923,19 @@ const englishText = {
   connectorData: "Connector Data",
   enableConnectorScheduler: "Enable connector polling",
   connectorSchedulerEnabledHint: "After saving, VaultEcho polls all enabled connector sources at the configured interval.",
-  connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync today's content manually.",
+  connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync the recent lookback window manually.",
   connectorStatus: "Connector Status",
   runConnectorNow: "Run Now",
   addConnectorSource: "Add Source",
-  connectorEmptyHint: "No connector sources yet. Add an X source to configure its account, token, and insertion rules.",
+  connectorEmptyHint: "No connector sources yet. Add a source, choose X or Strava, then configure credentials and insertion rules.",
   connectorName: "Source Name",
   connectorNamePlaceholder: "For example: Personal X",
   disabled: "Disabled",
   connectorNotScheduled: "Automatic polling is off",
   connectorPlatform: "Connector Platform",
-  connectorEnabled: "Platform Toggle",
+  connectorEnabled: "Enable Source",
   enableXConnector: "Enable X",
-  xConnectorHint: "Only X is supported for now. Each source reads today's posts from 00:00 to now and writes into that daily note.",
+  xConnectorHint: "Only X is supported for now. Each source uses a sliding lookback window and writes posts into daily notes by post time.",
   xBaseUrl: "X API Base URL",
   xBearerToken: "X Bearer / User Access Token",
   xTokenSaved: "Token is saved; leave blank to keep it unchanged.",
@@ -837,7 +944,7 @@ const englishText = {
   xUserIdHint: "User ID is recommended. Username-only config performs one extra user lookup.",
   xUsername: "X Username",
   pollInterval: "Poll Interval",
-  pollIntervalHint: "All sources share this interval. Each poll reads today's posts from 00:00 to now and deduplicates writes by source plus post ID.",
+  pollIntervalHint: "All sources share this interval. Each poll uses a sliding lookback window; 23:59 also catches up the local day. Writes dedupe by source plus post ID.",
   pollEvery15: "15 min",
   pollEvery30: "30 min",
   pollEvery60: "1 hour",
@@ -848,6 +955,35 @@ const englishText = {
   maxPostsPerRun: "Max Posts Per Run",
   includeReplies: "Include replies",
   includeRetweets: "Include reposts",
+  stravaBaseUrl: "Strava API Base URL",
+  stravaClientId: "Strava Client ID",
+  stravaRedirectUri: "Strava Redirect URI",
+  stravaRedirectUriHint: "Defaults to the current Admin UI URL. In Strava app settings, set the callback domain to this VPS domain.",
+  stravaClientSecret: "Strava Client Secret",
+  stravaClientSecretSaved: "Client Secret is saved; leave blank to keep it unchanged.",
+  stravaClientSecretMissing: "No Client Secret is saved. New secrets are encrypted with APP_ENCRYPTION_KEY.",
+  stravaRefreshToken: "Strava Refresh Token",
+  stravaRefreshTokenSaved: "Refresh Token is saved; leave blank to keep it unchanged.",
+  stravaRefreshTokenMissing: "No Refresh Token is saved. Sync automatically refreshes and stores the latest token state.",
+  stravaAuthorizationCode: "Strava Authorization Code",
+  stravaAuthorizationCodeSaved: "Authorization Code is saved. The next run will exchange it for new tokens first.",
+  stravaAuthorizationCodeHint: "Use the authorization link below with activity:read_all, then paste the code from the redirected URL here.",
+  stravaAuthorizationUrl: "Open Strava authorization URL",
+  stravaAuthorizationCodeCaptured: "Captured the Strava authorization code from the callback. Run Now will save it and exchange it for new tokens first.",
+  stravaAuthorizationDenied: "Strava authorization was denied.",
+  stravaAuthorizationScopeMissing: "The Strava callback is missing activity read permission. Reauthorize and keep activity:read_all selected.",
+  stravaAuthorizationSourceMissing: "No matching Strava source was found, so the authorization code could not be applied automatically.",
+  maxActivitiesPerRun: "Max Activities Per Run",
+  maxActivitiesPerRunHint: "Keep this small. Use the local import script for history backfills; the connector only syncs recent activity.",
+  stravaRequestDelayMs: "Detail Request Delay",
+  stravaRequestDelayHint: "Wait time between activity detail requests to reduce the chance of Strava 429s during small bursts.",
+  minMovingTimeMinutes: "Min Moving Time",
+  requireStravaMetrics: "Filter activities missing heart-rate, speed, calories, or other required metrics",
+  stravaActivityHeadingMarkdown: "Activity Heading Markdown",
+  stravaActivityHeadingHint: "For example ## 今日运动 or # 运动. Existing headings are merged and sorted; missing headings are created with separators.",
+  stravaInsertAfterHeadingMarkdown: "Create After Heading",
+  stravaInsertAfterHeadingPlaceholder: "Blank: last daily time slot",
+  stravaInsertAfterHeadingHint: "Leave blank to use the last configured Daily Time Slot heading. Fill this only when overriding the default insertion point.",
   connectorOutputTarget: "Insertion Target",
   targetHeading: "Separate Heading",
   targetTimeSlot: "Daily Time Slot",
@@ -858,6 +994,8 @@ const englishText = {
   connectorLineFormatHint: "Leave blank to use the Daily Line Format above.",
   connectorContentTemplate: "Post Content Template",
   connectorContentTemplateHint: "Available variables: {{text}}, {{url}}, {{id}}, {{username}}, {{created_at}}.",
+  postsWrittenStatus: "posts written",
+  activitiesWrittenStatus: "activities written",
   connectorStatusLoaded: "Connector status updated",
   reviewTasks: "Review Tasks",
   reviewDesc: "Weekly, monthly, quarterly, and yearly AI reviews with semantic recall.",
@@ -961,7 +1099,7 @@ async function loadConfig() {
     applyConfig(config);
     await nextTick();
     await loadVaultDirs({ silent: true });
-    setStatus("Config loaded", "success");
+    if (!applyStravaOAuthCallbackFromUrl()) setStatus("Config loaded", "success");
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -1139,7 +1277,10 @@ async function runConnectorNow(source) {
     await persistConfig();
     const payload = await request("/v1/api/connectors/run", { method: "POST", body: JSON.stringify({ connectorId: source.id }) });
     const result = payload.result;
-    setStatus(`${result.connectorName || result.connectorId}: ${result.postsWritten}/${result.postsFound} posts written`, "success");
+    const written = result.activitiesWritten ?? result.postsWritten ?? 0;
+    const found = result.activitiesFound ?? result.postsFound ?? 0;
+    const label = result.platform === "strava" ? t("activitiesWrittenStatus") : t("postsWrittenStatus");
+    setStatus(`${result.connectorName || result.connectorId}: ${written}/${found} ${label}`, "success");
     await loadConnectorStatus();
   } catch (error) {
     setStatus(error.message, "error");
@@ -1286,21 +1427,55 @@ function normalizeConnectorsForForm(config) {
 }
 
 function normalizeConnectorSourceForForm(source, index) {
-  const fallback = createDefaultConnectorSource(index === 0 ? "x" : `x-${index + 1}`);
+  const platform = source.platform === "strava" ? "strava" : "x";
+  const fallback = createDefaultConnectorSource(index === 0 ? platform : `${platform}-${index + 1}`, platform);
   return {
     ...fallback,
     ...source,
     __key: source.__key || crypto.randomUUID(),
     id: source.id || fallback.id,
-    platform: "x",
+    platform,
     bearerToken: "",
     bearerTokenSet: Boolean(source.bearerTokenSet),
+    clientSecret: "",
+    clientSecretSet: Boolean(source.clientSecretSet),
+    refreshToken: "",
+    refreshTokenSet: Boolean(source.refreshTokenSet),
+    redirectUri: normalizeStravaRedirectUriForForm(source.redirectUri || fallback.redirectUri),
+    authorizationCode: "",
+    authorizationCodeSet: Boolean(source.authorizationCodeSet),
+    accessTokenSet: Boolean(source.accessTokenSet),
     output: { ...fallback.output, ...(source.output || {}) }
   };
 }
 
-function createDefaultConnectorSource(id) {
-  const sourceId = id || uniqueConnectorSourceId("x-source");
+function createDefaultConnectorSource(id, platform = "x") {
+  const normalizedPlatform = platform === "strava" ? "strava" : "x";
+  const sourceId = id || uniqueConnectorSourceId(`${normalizedPlatform}-source`);
+  if (normalizedPlatform === "strava") {
+    return {
+      __key: crypto.randomUUID(),
+      id: sourceId,
+      name: "",
+      enabled: true,
+      platform: "strava",
+      baseUrl: "https://www.strava.com/api/v3",
+      clientId: "",
+      redirectUri: adminUiRedirectUri(),
+      clientSecret: "",
+      clientSecretSet: false,
+      refreshToken: "",
+      refreshTokenSet: false,
+      authorizationCode: "",
+      authorizationCodeSet: false,
+      accessTokenSet: false,
+      maxActivitiesPerRun: 10,
+      requestDelayMs: 1000,
+      minMovingTimeMinutes: 5,
+      requireRequiredMetrics: true,
+      output: { headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "" }
+    };
+  }
   return {
     __key: crypto.randomUUID(),
     id: sourceId,
@@ -1331,7 +1506,101 @@ function stripConnectorSourceForSave(source) {
   const copy = JSON.parse(JSON.stringify(source));
   delete copy.__key;
   delete copy.bearerTokenSet;
+  delete copy.clientSecretSet;
+  delete copy.refreshTokenSet;
+  delete copy.accessTokenSet;
+  delete copy.authorizationCodeSet;
   return copy;
+}
+
+function stravaAuthorizationUrl(source) {
+  if (source?.platform !== "strava" || !String(source.clientId || "").trim()) return "";
+  const url = new URL("https://www.strava.com/oauth/authorize");
+  url.searchParams.set("client_id", String(source.clientId).trim());
+  url.searchParams.set("redirect_uri", normalizeStravaRedirectUriForForm(source.redirectUri));
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("approval_prompt", "force");
+  url.searchParams.set("scope", "read,activity:read_all");
+  url.searchParams.set("state", source.id || "");
+  return url.toString();
+}
+
+function applyStravaOAuthCallbackFromUrl() {
+  const params = new URLSearchParams(window.location.search || "");
+  const error = params.get("error");
+  const code = params.get("code");
+  if (!error && !code) return false;
+
+  if (error) {
+    setStatus(error === "access_denied" ? t("stravaAuthorizationDenied") : `Strava authorization failed: ${error}`, "error");
+    cleanStravaOAuthCallbackUrl();
+    return true;
+  }
+
+  const scope = params.get("scope") || "";
+  if (scope && !stravaScopeHasActivityRead(scope)) {
+    setStatus(t("stravaAuthorizationScopeMissing"), "error");
+    cleanStravaOAuthCallbackUrl();
+    return true;
+  }
+
+  const state = params.get("state") || "";
+  const stravaSources = form.connectors.sources.filter((source) => source.platform === "strava");
+  const source = stravaSources.find((item) => item.id === state) || (stravaSources.length === 1 ? stravaSources[0] : null);
+  if (!source) {
+    setStatus(t("stravaAuthorizationSourceMissing"), "error");
+    cleanStravaOAuthCallbackUrl();
+    return true;
+  }
+
+  source.authorizationCode = code;
+  source.authorizationCodeSet = false;
+  source.redirectUri = adminUiRedirectUri();
+  setStatus(t("stravaAuthorizationCodeCaptured"), "success");
+  cleanStravaOAuthCallbackUrl();
+  return true;
+}
+
+function cleanStravaOAuthCallbackUrl() {
+  const url = new URL(window.location.href);
+  for (const key of ["code", "scope", "state", "error"]) {
+    url.searchParams.delete(key);
+  }
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, document.title, next || "/admin");
+}
+
+function stravaScopeHasActivityRead(scope) {
+  const scopes = new Set(String(scope || "").split(/[,\s]+/).filter(Boolean));
+  return scopes.has("activity:read") || scopes.has("activity:read_all");
+}
+
+function normalizeStravaRedirectUriForForm(value) {
+  const raw = String(value || "").trim();
+  if (!raw || /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/?$/i.test(raw)) {
+    return adminUiRedirectUri();
+  }
+  return raw;
+}
+
+function adminUiRedirectUri() {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  if (!url.pathname || url.pathname === "/") url.pathname = "/admin";
+  return url.toString();
+}
+
+function onConnectorPlatformChange(source) {
+  const next = createDefaultConnectorSource(source.id, source.platform);
+  Object.assign(source, {
+    ...next,
+    __key: source.__key,
+    id: source.id,
+    name: source.name,
+    enabled: source.enabled,
+    platform: next.platform
+  });
 }
 
 function createDefaultReviewTask(id) {

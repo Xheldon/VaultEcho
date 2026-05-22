@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { appendToHeading, insertAfterLastMatchingLine } from "./markdown.js";
-import { buildDailyWrite, renderTemplate } from "./time.js";
+import { appendToHeading, insertAfterLastMatchingLine, upsertSeparatedHeadingEntries } from "./markdown.js";
+import { buildDailyPath, buildDailyWrite, getDateTimeParts, renderTemplate } from "./time.js";
 import { MAX_MARKDOWN_APPEND_BYTES, MAX_MARKDOWN_PATCH_BYTES } from "./limits.js";
 
 const fileQueues = new Map();
@@ -40,6 +40,8 @@ export async function executeOperation(config, operation) {
         return patchHeading(targetPath, preparedOperation, insertAfterLastMatchingLine);
       case "append_daily_by_time":
         return appendDailyByTime(config, targetPath, preparedOperation);
+      case "upsert_daily_separated_heading":
+        return upsertDailySeparatedHeading(config, targetPath, preparedOperation);
       case "soft_delete":
         return softDelete(config, targetPath);
       default:
@@ -62,6 +64,32 @@ function prepareOperation(config, operation) {
     return {
       ...operation,
       linePattern: config.dailyNote.linePattern
+    };
+  }
+
+  if (operation.operation === "upsert_daily_separated_heading") {
+    const at = operation.at || new Date();
+    const dailyPath = buildDailyPath(at, config.dailyNote, (operation.entries || [operation.content || ""]).join("\n"));
+    const parts = getDateTimeParts(at, config.dailyNote.timeZone);
+    const parsedPath = path.posix.parse(dailyPath);
+    return {
+      ...operation,
+      path: dailyPath,
+      headingLevel: operation.headingLevel || config.dailyNote.headingLevel,
+      insertAfterHeadingLevel: operation.insertAfterHeadingLevel || config.dailyNote.headingLevel,
+      linePattern: operation.linePattern || config.dailyNote.linePattern,
+      templatePath: operation.templatePath ?? config.dailyNote.templatePath,
+      createIfMissing: normalizeBoolean(operation.createIfMissing, config.dailyNote.createIfMissing),
+      templateVars: {
+        ...parts,
+        content: "",
+        entry: "",
+        path: dailyPath,
+        title: parsedPath.name,
+        name: parsedPath.name,
+        basename: parsedPath.name,
+        dir: parsedPath.dir
+      }
     };
   }
 
@@ -198,6 +226,45 @@ async function appendDailyByTime(config, targetPath, operation) {
     heading: operation.heading,
     timestamp: operation.timestamp,
     slot: operation.slot,
+    at: operation.at
+  };
+}
+
+async function upsertDailySeparatedHeading(config, targetPath, operation) {
+  if (!(await exists(targetPath.absolutePath))) {
+    if (!operation.createIfMissing) {
+      throw new Error(`Daily note does not exist: ${targetPath.relativePath}`);
+    }
+    if (operation.templatePath) {
+      await fs.mkdir(path.dirname(targetPath.absolutePath), { recursive: true });
+      await atomicWrite(
+        targetPath.absolutePath,
+        ensureTrailingNewline(await renderDailyTemplate(config, operation.templatePath, operation.templateVars || {}))
+      );
+    }
+  }
+
+  ensureMarkdownPath(targetPath.relativePath);
+  await ensurePatchableMarkdownFile(targetPath.absolutePath);
+  const original = await readTextIfExists(targetPath.absolutePath);
+  const next = upsertSeparatedHeadingEntries(original, {
+    heading: operation.heading,
+    headingLevel: operation.headingLevel,
+    entries: operation.entries || [operation.content],
+    linePattern: operation.linePattern,
+    separator: operation.separator || "---",
+    insertAfterHeading: operation.insertAfterHeading || "",
+    insertAfterHeadingLevel: operation.insertAfterHeadingLevel || operation.headingLevel
+  });
+
+  await fs.mkdir(path.dirname(targetPath.absolutePath), { recursive: true });
+  await atomicWrite(targetPath.absolutePath, next);
+  return {
+    ok: true,
+    operation: operation.operation,
+    path: targetPath.relativePath,
+    heading: operation.heading,
+    headingLevel: operation.headingLevel,
     at: operation.at
   };
 }

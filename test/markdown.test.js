@@ -46,6 +46,37 @@ test("insertAfterLastMatchingLine can keep blank lines around timestamp entries"
   assert.equal(output, "# Daily\n\n## Afternoon\n[16:18] A\n\n[16:21] B\n");
 });
 
+test("insertAfterLastMatchingLine reuses empty template spacing for the first timestamp", () => {
+  const input = "# Daily\n\n## 上午\n\n\n## 下午\n";
+  const first = insertAfterLastMatchingLine(input, {
+    heading: "上午",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[07:57] First",
+    blankLineBetweenEntries: true
+  });
+  const second = insertAfterLastMatchingLine(first, {
+    heading: "上午",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[10:28] Second",
+    blankLineBetweenEntries: true
+  });
+
+  assert.equal(first, "# Daily\n\n## 上午\n\n[07:57] First\n\n## 下午\n");
+  assert.equal(second, "# Daily\n\n## 上午\n\n[07:57] First\n\n[10:28] Second\n\n## 下午\n");
+});
+
+test("insertAfterLastMatchingLine normalizes extra blank separators after existing timestamps", () => {
+  const input = "# Daily\n\n## 上午\n\n[07:57] First\n\n\n## 下午\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "上午",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[10:28] Second",
+    blankLineBetweenEntries: true
+  });
+
+  assert.equal(output, "# Daily\n\n## 上午\n\n[07:57] First\n\n[10:28] Second\n\n## 下午\n");
+});
+
 test("insertAfterLastMatchingLine inserts after a multiline timestamp entry", () => {
   const input = "# Daily\n\n## Evening\n[23:22] First line\ncontinued line\nfinal line\n";
   const output = insertAfterLastMatchingLine(input, {

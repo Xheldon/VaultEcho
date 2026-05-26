@@ -116,6 +116,9 @@ export function insertAfterLastMatchingLine(markdown, options) {
     });
     insertAt = insertionPoint.insertAt;
     existingSeparatorBeforeInsertion = insertionPoint.hasExistingSeparator;
+  } else if (blankLineBetweenEntries && lines[insertAt]?.trim() === "") {
+    insertAt += 1;
+    existingSeparatorBeforeInsertion = true;
   }
 
   const next = [...lines];
@@ -467,14 +470,7 @@ function findEntryBlockInsertionPoint(lines, entryStart, sectionEnd, regex, opti
         return { insertAt: index, hasExistingSeparator: false };
       }
 
-      let insertAt = index + 1;
-      while (
-        insertAt < sectionEnd &&
-        (lines[insertAt] || "").trim() === "" &&
-        !isTrailingLineTerminator(lines, insertAt, sectionEnd)
-      ) {
-        insertAt += 1;
-      }
+      const insertAt = index + 1;
       return { insertAt, hasExistingSeparator: true };
     }
     if (regex.test(line.slice(0, 1000))) {
@@ -483,10 +479,6 @@ function findEntryBlockInsertionPoint(lines, entryStart, sectionEnd, regex, opti
     index += 1;
   }
   return { insertAt: index, hasExistingSeparator: false };
-}
-
-function isTrailingLineTerminator(lines, index, sectionEnd) {
-  return sectionEnd === lines.length && index === lines.length - 1 && lines[index] === "";
 }
 
 function buildLineInsertion(lines, insertAt, content, options) {

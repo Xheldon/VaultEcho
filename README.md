@@ -248,6 +248,7 @@ Supported:
 
 - `frontmatter/get`
 - `frontmatter/set`
+- `frontmatter/append` (appends to an inline-array field; defaults to the daily note and creates it when missing)
 
 ### Search And Tags
 

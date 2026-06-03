@@ -29,6 +29,7 @@ Authorization: Bearer <API_TOKEN>
 | `headings/insert-after-last-matching-line` | POST | Finds the final line matching the configured pattern inside a heading block and inserts content below it. |
 | `frontmatter/get` | GET or POST | Reads a YAML frontmatter field. |
 | `frontmatter/set` | POST | Sets or creates a YAML frontmatter field. |
+| `frontmatter/append` | POST | Appends a value to an inline-array YAML frontmatter field, defaulting to the daily note and creating it when missing. |
 | `daily/append-by-time` | POST | Chooses a daily-note heading from configured timezone slots and inserts the entry in chronological order among the existing timestamp lines. |
 | `daily/read` | GET or POST | Resolves the daily-note path from configuration and reads that note. |
 | `search/simple` | GET or POST | Searches Markdown files with simple substring matching. |
@@ -548,6 +549,48 @@ curl -X POST http://localhost:8787/v1/api/frontmatter/set \
   -H "Authorization: Bearer change-me" \
   -H "Content-Type: application/json" \
   -d '{ "path": "Ideas/api-note.md", "key": "status", "value": "draft" }'
+```
+
+## frontmatter/append
+
+**Append Frontmatter Field**
+
+Appends a value to an inline-array YAML frontmatter field, defaulting to the daily note and creating it when missing.
+
+Method: `POST`
+
+Use cases:
+
+- A Shortcut pushes the current GPS coordinates onto the daily note's location array throughout the day.
+- A workflow accumulates tags or references on a note without overwriting the existing list.
+
+Parameters:
+
+| Parameter | Description |
+|---|---|
+| `path | filename | file | name` | Optional target Markdown file. Defaults to the daily note for `at`. |
+| `at` | Optional ISO timestamp used to resolve the default daily note. Defaults to the current time. |
+| `key | field` | Frontmatter field name. |
+| `value | content | text` | Value to append. Strings that look like JSON are parsed; a whole array value is appended as one element. |
+| `type` | Optional value type: string, number, boolean, array, or json. Default: auto-detect. |
+| `unique` | Optional boolean. When true, duplicate values are not added again. |
+| `position` | Where to add the value: end (default) or start. |
+| `createIfMissing` | Optional boolean. Defaults to true; creates the note (and applies the daily template for the default daily note). |
+| `templatePath | template` | Optional Vault-relative template path used when creating a missing note. |
+| `idempotencyKey` | Optional key that prevents duplicate writes during upstream retries. |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8787/v1/api/frontmatter/append \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "locations",
+    "value": [39.9, 116.3],
+    "type": "array",
+    "unique": true
+  }'
 ```
 
 ## daily/append-by-time

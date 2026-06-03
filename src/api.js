@@ -49,6 +49,7 @@ export const API_HANDLER_ROUTES = [
   "headings/insert-after-last-matching-line",
   "frontmatter/get",
   "frontmatter/set",
+  "frontmatter/append",
   "daily/append-by-time",
   "daily/read",
   "search/simple",
@@ -129,6 +130,8 @@ async function executePrimary(config, route, params) {
       return getFrontmatter(config, params);
     case "frontmatter/set":
       return setFrontmatter(config, params);
+    case "frontmatter/append":
+      return appendFrontmatter(config, params);
     case "daily/append-by-time":
       return appendDailyByTime(config, params);
     case "daily/read":
@@ -337,6 +340,47 @@ async function setFrontmatter(config, params) {
   await fs.mkdir(path.dirname(target.absolutePath), { recursive: true });
   await atomicWrite(target.absolutePath, next);
   return { ok: true, operation: "frontmatter/set", path: target.relativePath, key };
+}
+
+async function appendFrontmatter(config, params) {
+  const key = required(params.key || params.field, "key");
+  const rawPath = params.filename || params.file || params.path || params.name;
+  return executeOperation(config, {
+    operation: "append_frontmatter_field",
+    path: rawPath ? normalizeApiFilePath(config, params) : undefined,
+    at: params.at,
+    key,
+    value: coerceFrontmatterValue(params),
+    unique: truthy(params.unique),
+    position: params.position === "start" ? "start" : "end",
+    createIfMissing: params.createIfMissing,
+    templatePath: params.templatePath || params.template,
+    idempotencyKey: params.idempotencyKey
+  });
+}
+
+function coerceFrontmatterValue(params) {
+  const raw = params.value ?? contentOf(params);
+  if (raw === undefined || raw === "") {
+    throw new Error("value is required");
+  }
+  switch (params.type || params.valueType) {
+    case "string":
+      return String(raw);
+    case "number": {
+      const number = Number(raw);
+      if (Number.isNaN(number)) throw new Error("value is not a number");
+      return number;
+    }
+    case "boolean":
+      return raw === true || truthy(raw);
+    case "array":
+    case "list":
+    case "json":
+      return parseMaybeJson(raw);
+    default:
+      return parseMaybeJson(raw);
+  }
 }
 
 async function appendDailyByTime(config, params) {

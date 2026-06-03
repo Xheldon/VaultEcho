@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendToHeading, createSafeLineRegex, insertAfterLastMatchingLine } from "../src/markdown.js";
+import {
+  appendFrontmatterField,
+  appendToHeading,
+  createSafeLineRegex,
+  insertAfterLastMatchingLine
+} from "../src/markdown.js";
 
 test("insertAfterLastMatchingLine inserts below the final timestamp in a heading", () => {
   const input = "# Daily\n\n## Noon\n[12:01] A\n[12:20] B\n\n## Evening\nLater\n";
@@ -190,6 +195,40 @@ test("insertAfterLastMatchingLine sorts around multiline timestamp blocks", () =
     output,
     "# Daily\n\n## Evening\n\n[23:22] First line\ncontinued line\n\n[23:40] Middle entry\n\n[23:50] Later entry\n"
   );
+});
+
+test("appendFrontmatterField creates an inline array when the key is absent", () => {
+  const output = appendFrontmatterField("", "locations", [39.9, 116.3]);
+  assert.equal(output, "---\nlocations: [[39.9,116.3]]\n---\n");
+});
+
+test("appendFrontmatterField pushes onto an existing inline array", () => {
+  const input = "---\nlocations: [[39.9,116.3]]\n---\n\nbody\n";
+  const output = appendFrontmatterField(input, "locations", [31.2, 121.4]);
+  assert.equal(output, "---\nlocations: [[39.9,116.3],[31.2,121.4]]\n---\n\nbody\n");
+});
+
+test("appendFrontmatterField promotes a scalar value to an array", () => {
+  const input = "---\nstatus: draft\n---\n\n";
+  const output = appendFrontmatterField(input, "status", "review");
+  assert.equal(output, '---\nstatus: ["draft","review"]\n---\n\n');
+});
+
+test("appendFrontmatterField can dedupe and prepend", () => {
+  const input = '---\ntags: ["a","b"]\n---\n\n';
+  assert.equal(
+    appendFrontmatterField(input, "tags", "b", { unique: true }),
+    '---\ntags: ["a","b"]\n---\n\n'
+  );
+  assert.equal(
+    appendFrontmatterField(input, "tags", "c", { position: "start" }),
+    '---\ntags: ["c","a","b"]\n---\n\n'
+  );
+});
+
+test("appendFrontmatterField rejects block-style lists", () => {
+  const input = "---\nlocations:\n  - [39.9, 116.3]\n  - [31.2, 121.4]\n---\n\n";
+  assert.throws(() => appendFrontmatterField(input, "locations", [1, 2]), /block-style list/);
 });
 
 test("createSafeLineRegex rejects nested repetition patterns", () => {

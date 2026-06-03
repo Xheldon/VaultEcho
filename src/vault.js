@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { appendToHeading, insertAfterLastMatchingLine, upsertSeparatedHeadingEntries } from "./markdown.js";
+import {
+  appendFrontmatterField,
+  appendToHeading,
+  insertAfterLastMatchingLine,
+  upsertSeparatedHeadingEntries
+} from "./markdown.js";
 import { buildDailyPath, buildDailyWrite, getDateTimeParts, renderTemplate } from "./time.js";
 import { MAX_MARKDOWN_APPEND_BYTES, MAX_MARKDOWN_PATCH_BYTES } from "./limits.js";
 
@@ -42,6 +47,8 @@ export async function executeOperation(config, operation) {
         return appendDailyByTime(config, targetPath, preparedOperation);
       case "upsert_daily_separated_heading":
         return upsertDailySeparatedHeading(config, targetPath, preparedOperation);
+      case "append_frontmatter_field":
+        return appendFrontmatterFieldOp(config, targetPath, preparedOperation);
       case "soft_delete":
         return softDelete(config, targetPath);
       default:
@@ -85,6 +92,30 @@ function prepareOperation(config, operation) {
         content: "",
         entry: "",
         path: dailyPath,
+        title: parsedPath.name,
+        name: parsedPath.name,
+        basename: parsedPath.name,
+        dir: parsedPath.dir
+      }
+    };
+  }
+
+  if (operation.operation === "append_frontmatter_field") {
+    const at = operation.at || new Date();
+    const parts = getDateTimeParts(at, config.dailyNote.timeZone);
+    const hasExplicitPath = Boolean(operation.path);
+    const targetPath = hasExplicitPath ? operation.path : buildDailyPath(at, config.dailyNote);
+    const parsedPath = path.posix.parse(targetPath);
+    const templatePath = operation.templatePath ?? (hasExplicitPath ? "" : config.dailyNote.templatePath);
+    return {
+      ...operation,
+      path: targetPath,
+      createIfMissing: normalizeBoolean(operation.createIfMissing, true),
+      templatePath,
+      templateVars: {
+        ...parts,
+        content: "",
+        path: targetPath,
         title: parsedPath.name,
         name: parsedPath.name,
         basename: parsedPath.name,
@@ -267,6 +298,37 @@ async function upsertDailySeparatedHeading(config, targetPath, operation) {
     path: targetPath.relativePath,
     heading: operation.heading,
     headingLevel: operation.headingLevel,
+    at: operation.at
+  };
+}
+
+async function appendFrontmatterFieldOp(config, targetPath, operation) {
+  ensureMarkdownPath(targetPath.relativePath);
+  await ensurePatchableMarkdownFile(targetPath.absolutePath);
+
+  let original = "";
+  if (await exists(targetPath.absolutePath)) {
+    original = await readTextIfExists(targetPath.absolutePath);
+  } else if (!operation.createIfMissing) {
+    throw new Error(`Note does not exist: ${targetPath.relativePath}`);
+  } else if (operation.templatePath) {
+    original = ensureTrailingNewline(
+      await renderDailyTemplate(config, operation.templatePath, operation.templateVars || {})
+    );
+  }
+
+  const next = appendFrontmatterField(original, operation.key, operation.value, {
+    unique: operation.unique,
+    position: operation.position
+  });
+
+  await fs.mkdir(path.dirname(targetPath.absolutePath), { recursive: true });
+  await atomicWrite(targetPath.absolutePath, ensureTrailingNewline(next));
+  return {
+    ok: true,
+    operation: operation.operation,
+    path: targetPath.relativePath,
+    key: operation.key,
     at: operation.at
   };
 }

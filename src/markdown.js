@@ -82,7 +82,8 @@ export function insertAfterLastMatchingLine(markdown, options) {
     linePattern,
     content,
     ifHeadingMissing = "create",
-    blankLineBetweenEntries = false
+    blankLineBetweenEntries = false,
+    sortByTimestamp = false
   } = options;
   const regex = createSafeLineRegex(linePattern);
   const lines = splitLines(markdown);
@@ -104,18 +105,32 @@ export function insertAfterLastMatchingLine(markdown, options) {
   let previousEntryAt = section.start;
   let hasPreviousEntry = false;
   let existingSeparatorBeforeInsertion = false;
+
+  const matchingIndices = [];
   for (let index = section.start + 1; index < section.end; index += 1) {
     if (regex.test(lines[index].slice(0, 1000))) {
-      previousEntryAt = index;
-      hasPreviousEntry = true;
+      matchingIndices.push(index);
     }
   }
-  if (hasPreviousEntry) {
+
+  // When sorting, anchor below the last entry whose timestamp is <= the new one
+  // so it lands in chronological order; otherwise anchor below the final entry.
+  const anchorIndex = sortByTimestamp
+    ? findSortedAnchorIndex(lines, matchingIndices, content)
+    : matchingIndices.length ? matchingIndices[matchingIndices.length - 1] : -1;
+
+  if (anchorIndex !== -1) {
+    previousEntryAt = anchorIndex;
+    hasPreviousEntry = true;
     const insertionPoint = findEntryBlockInsertionPoint(lines, previousEntryAt, section.end, regex, {
       insertAfterBlankSeparator: blankLineBetweenEntries
     });
     insertAt = insertionPoint.insertAt;
     existingSeparatorBeforeInsertion = insertionPoint.hasExistingSeparator;
+  } else if (sortByTimestamp && matchingIndices.length) {
+    // The new entry is earlier than every existing entry: place it before the first block.
+    insertAt = matchingIndices[0];
+    existingSeparatorBeforeInsertion = blankLineBetweenEntries;
   } else if (blankLineBetweenEntries && lines[insertAt]?.trim() === "") {
     insertAt += 1;
     existingSeparatorBeforeInsertion = true;
@@ -358,6 +373,15 @@ function entryMinutes(entry) {
   const match = /^\[(\d{2}):(\d{2})\]/.exec(entry);
   if (!match) return Number.MAX_SAFE_INTEGER;
   return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function findSortedAnchorIndex(lines, matchingIndices, content) {
+  const newMinutes = entryMinutes(content);
+  let anchor = -1;
+  for (const index of matchingIndices) {
+    if (entryMinutes(lines[index]) <= newMinutes) anchor = index;
+  }
+  return anchor;
 }
 
 function findSeparatedHeadingInsertIndex(lines, options) {

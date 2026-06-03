@@ -134,6 +134,64 @@ test("insertAfterLastMatchingLine keeps multiline entries before the next headin
   );
 });
 
+test("insertAfterLastMatchingLine sorts a new entry between existing timestamps", () => {
+  const input = "# Daily\n\n## 昨夜凌晨\n\n[01:15] 长篇日记\n\n## 上午\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "昨夜凌晨",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[00:30] #发推特 抽时间把博客加了四种语言",
+    blankLineBetweenEntries: true,
+    sortByTimestamp: true
+  });
+
+  assert.equal(
+    output,
+    "# Daily\n\n## 昨夜凌晨\n\n[00:30] #发推特 抽时间把博客加了四种语言\n\n[01:15] 长篇日记\n\n## 上午\n"
+  );
+});
+
+test("insertAfterLastMatchingLine sorts a new entry after an earlier timestamp", () => {
+  const input = "# Daily\n\n## Noon\n\n[12:01] A\n\n[12:40] C\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Noon",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[12:20] B",
+    blankLineBetweenEntries: true,
+    sortByTimestamp: true
+  });
+
+  assert.equal(output, "# Daily\n\n## Noon\n\n[12:01] A\n\n[12:20] B\n\n[12:40] C\n");
+});
+
+test("insertAfterLastMatchingLine sorts after the latest timestamp when newest", () => {
+  const input = "# Daily\n\n## Noon\n\n[12:01] A\n\n[12:20] B\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Noon",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[12:45] C",
+    blankLineBetweenEntries: true,
+    sortByTimestamp: true
+  });
+
+  assert.equal(output, "# Daily\n\n## Noon\n\n[12:01] A\n\n[12:20] B\n\n[12:45] C\n");
+});
+
+test("insertAfterLastMatchingLine sorts around multiline timestamp blocks", () => {
+  const input = "# Daily\n\n## Evening\n\n[23:22] First line\ncontinued line\n\n[23:50] Later entry\n";
+  const output = insertAfterLastMatchingLine(input, {
+    heading: "Evening",
+    linePattern: "^\\[\\d{2}:\\d{2}\\]",
+    content: "[23:40] Middle entry",
+    blankLineBetweenEntries: true,
+    sortByTimestamp: true
+  });
+
+  assert.equal(
+    output,
+    "# Daily\n\n## Evening\n\n[23:22] First line\ncontinued line\n\n[23:40] Middle entry\n\n[23:50] Later entry\n"
+  );
+});
+
 test("createSafeLineRegex rejects nested repetition patterns", () => {
   assert.throws(() => createSafeLineRegex("(a+)+$"), /nested repetition/);
 });

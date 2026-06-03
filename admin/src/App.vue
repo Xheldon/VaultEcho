@@ -223,6 +223,7 @@
               <el-col :xs="24">
                 <el-checkbox v-model="form.dailyNote.createIfMissing">{{ t("createDailyIfMissing") }}</el-checkbox>
                 <el-checkbox v-model="form.dailyNote.blankLineBetweenEntries">{{ t("blankLineBetweenEntries") }}</el-checkbox>
+                <el-checkbox v-model="form.dailyNote.sortEntriesByTime">{{ t("sortEntriesByTime") }}</el-checkbox>
               </el-col>
             </el-row>
             <div class="subsection-title">{{ t("timeSlots") }}</div>
@@ -590,6 +591,7 @@ const translations = {
     lineFormat: "行格式",
     createDailyIfMissing: "当天日记不存在时自动创建",
     blankLineBetweenEntries: "时间戳条目之间保留空行",
+    sortEntriesByTime: "按时间顺序插入时间戳条目",
     timeSlots: "时间段",
     heading: "Heading",
     start: "开始",
@@ -915,6 +917,7 @@ const englishText = {
   lineFormat: "Line Format",
   createDailyIfMissing: "Create the daily note when it does not exist",
   blankLineBetweenEntries: "Keep a blank line between timestamp entries",
+  sortEntriesByTime: "Insert timestamp entries in chronological order",
   timeSlots: "Time Slots",
   heading: "Heading",
   start: "Start",
@@ -1076,7 +1079,7 @@ function defaultForm() {
       schedule: { intervalMinutes: 1440 },
       sources: []
     },
-    dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, slots: [] },
+    dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, sortEntriesByTime: true, slots: [] },
     reviews: { enabled: false, maxSourceChars: 60000, maxRecallChars: 16000, tasks: [] }
   };
 }

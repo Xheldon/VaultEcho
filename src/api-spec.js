@@ -333,7 +333,7 @@ export const API_ENDPOINTS = [
     route: "daily/append-by-time",
     method: "POST",
     title: "Append Daily Entry By Time",
-    summary: "Chooses a daily-note heading from configured timezone slots and inserts the entry below the last timestamp line.",
+    summary: "Chooses a daily-note heading from configured timezone slots and inserts the entry in chronological order among the existing timestamp lines.",
     scenarios: [
       "Coze only sends the processed journal text; the gateway decides whether it belongs under Morning, Afternoon, or Evening.",
       "Shortcuts sends a quick note and the gateway applies the configured `[HH:mm]` line format."

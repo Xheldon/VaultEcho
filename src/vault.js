@@ -102,6 +102,7 @@ function prepareOperation(config, operation) {
     templatePath: operation.templatePath ?? config.dailyNote.templatePath,
     createIfMissing: normalizeBoolean(operation.createIfMissing, config.dailyNote.createIfMissing),
     blankLineBetweenEntries: config.dailyNote.blankLineBetweenEntries,
+    sortByTimestamp: config.dailyNote.sortEntriesByTime,
     ifHeadingMissing: operation.ifHeadingMissing || "create"
   };
 }
@@ -198,6 +199,7 @@ async function patchHeading(targetPath, operation, transform) {
     linePattern: operation.linePattern,
     content: normalizeString(operation.content),
     blankLineBetweenEntries: Boolean(operation.blankLineBetweenEntries),
+    sortByTimestamp: Boolean(operation.sortByTimestamp),
     ifHeadingMissing: operation.ifHeadingMissing || "create"
   });
 

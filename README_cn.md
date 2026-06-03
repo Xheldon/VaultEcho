@@ -95,7 +95,7 @@ OBSIDIAN_VAULT_PATH=/path/to/headless-vault
 - `Max JSON Body Bytes`: 请求体大小限制。
 - `Image Attachment Dir` / `Audio Attachment Dir` / `Video Attachment Dir` / `File Attachment Dir`: `attachments/upload` 的目标附件目录，可以全部指向同一个 Vault 文件夹。
 - `Max Attachment Upload Bytes`: 附件 multipart 上传体积限制。
-- `日记时间戳插入位置设置`: 默认折叠。包含日记文件路径模板、日记模板文件、缺失时自动新建、heading 层级、互不重叠的时间段、Line Format、Line Pattern，以及时间戳条目之间是否保留空行，用于 `daily/append-by-time` 这类按时间戳写入日记 heading 的接口。
+- `日记时间戳插入位置设置`: 默认折叠。包含日记文件路径模板、日记模板文件、缺失时自动新建、heading 层级、互不重叠的时间段、Line Format、Line Pattern、时间戳条目之间是否保留空行，以及是否按时间顺序插入时间戳条目，用于 `daily/append-by-time` 这类按时间戳写入日记 heading 的接口。
 - `Embedding`: 可配置 OpenAI-compatible `/embeddings` API 的 Base URL、Model、API Key、Dimensions、切块大小、批量大小和自动扫描间隔。
 - `AI Model`: 可配置 Chat Completions 模式给 OpenAI-compatible 网关使用，也可以配置 Responses API 模式给 OpenAI 官方前沿模型使用，供内置回顾任务调用。
 - `Review Tasks`: 默认折叠。配置周、月、季、年 AI 回顾任务，包括来源目录、语义召回、提示词、运行时间和输出路径。

@@ -29,7 +29,7 @@ Authorization: Bearer <API_TOKEN>
 | `headings/insert-after-last-matching-line` | POST | Finds the final line matching the configured pattern inside a heading block and inserts content below it. |
 | `frontmatter/get` | GET or POST | Reads a YAML frontmatter field. |
 | `frontmatter/set` | POST | Sets or creates a YAML frontmatter field. |
-| `daily/append-by-time` | POST | Chooses a daily-note heading from configured timezone slots and inserts the entry below the last timestamp line. |
+| `daily/append-by-time` | POST | Chooses a daily-note heading from configured timezone slots and inserts the entry in chronological order among the existing timestamp lines. |
 | `daily/read` | GET or POST | Resolves the daily-note path from configuration and reads that note. |
 | `search/simple` | GET or POST | Searches Markdown files with simple substring matching. |
 | `search/semantic` | POST | Performs semantic similarity search using the built remote embedding index. |
@@ -554,7 +554,7 @@ curl -X POST http://localhost:8787/v1/api/frontmatter/set \
 
 **Append Daily Entry By Time**
 
-Chooses a daily-note heading from configured timezone slots and inserts the entry below the last timestamp line.
+Chooses a daily-note heading from configured timezone slots and inserts the entry in chronological order among the existing timestamp lines.
 
 Method: `POST`
 

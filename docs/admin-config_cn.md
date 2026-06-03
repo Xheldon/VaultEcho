@@ -42,6 +42,7 @@ English version: [admin-config.md](admin-config.md).
 - `Line Format`: 新条目的格式，默认 `[{{HH:mm}}] {{content}}`。
 - 支持多行条目。插入下一条内容时，VaultEcho 会把上一条时间戳行以及它后面连续的非空、非时间戳内容视为同一个条目块；遇到空行即视为该条目结束。
 - `Keep a blank line between timestamp entries`: 时间戳条目之间保留一个空行，同时 heading 和第一条时间戳之间也保留一个空行。
+- `Insert timestamp entries in chronological order`（按时间顺序插入时间戳条目）：默认开启。开启后，新条目会按时间顺序插入到目标 heading 下已有的 `[HH:mm]` 行之间，而不是总是追加到最后一条下方。这样即使 X 连接器等数据源回补了更早时间的内容，条目也能保持有序。关闭后则按写入先后顺序排列。
 - 时间段：可以添加任意多个不重叠时间段。请求时间会按全局 `Time Zone` 计算，然后落到对应 heading 下。
 - `连接器数据`: 内部日记数据源。当前支持 X 和 Strava，也可以新增多个来源，用于不同账号或不同写入规则。
 - `轮询间隔`: 自动轮询的全局固定间隔。可选 15 分钟、30 分钟、1 小时、2 小时、6 小时、12 小时、24 小时。定时轮询失败后会在 15 分钟后重试。

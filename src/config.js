@@ -12,6 +12,7 @@ const DEFAULT_DAILY_NOTE = {
   linePattern: "^\\[\\d{2}:\\d{2}\\]",
   lineFormat: "[{{HH:mm}}] {{content}}",
   blankLineBetweenEntries: true,
+  sortEntriesByTime: true,
   timeZone: DEFAULT_TIME_ZONE,
   slots: [
     { heading: "Morning", start: "05:00", end: "11:59" },
@@ -276,6 +277,10 @@ export function normalizeRuntimeConfig(input = {}, serverConfig, previous = {}) 
       blankLineBetweenEntries: normalizeBoolean(
         dailyNote.blankLineBetweenEntries,
         DEFAULT_DAILY_NOTE.blankLineBetweenEntries
+      ),
+      sortEntriesByTime: normalizeBoolean(
+        dailyNote.sortEntriesByTime,
+        DEFAULT_DAILY_NOTE.sortEntriesByTime
       ),
       timeZone,
       slots: normalizeSlots(dailyNote.slots)

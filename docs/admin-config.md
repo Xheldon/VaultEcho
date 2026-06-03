@@ -42,6 +42,7 @@ This section controls `daily/append-by-time`.
 - `Line Format`: format for new entries. The default is `[{{HH:mm}}] {{content}}`.
 - Multiline entries are supported. When inserting the next entry, VaultEcho treats the previous timestamp line and its following consecutive non-empty, non-timestamp lines as one entry block. A blank line terminates that block.
 - `Keep a blank line between timestamp entries`: also keeps one blank line between the heading and the first timestamp entry.
+- `Insert timestamp entries in chronological order`: enabled by default. When on, a new entry is placed in time order among the existing `[HH:mm]` lines under the target heading instead of always being appended below the last one. This keeps entries sorted even when sources such as the X connector backfill earlier timestamps. Turn it off to keep pure insertion order.
 - Time slots: add any number of non-overlapping slots. The request time is evaluated in `Time Zone`, then the matching slot decides the target heading.
 - `Connector Data`: internal daily-note sources. Supported platforms are X and Strava, and you can add multiple sources for different accounts or output rules.
 - `Poll Interval`: global fixed interval for automatic polling. Available values are 15 minutes, 30 minutes, 1 hour, 2 hours, 6 hours, 12 hours, and 24 hours. Failed scheduled polls are retried after 15 minutes.

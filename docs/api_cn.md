@@ -29,6 +29,8 @@ Authorization: Bearer <API_TOKEN>
 | `headings/insert-after-last-matching-line` | POST | 在指定 heading 段落内，找到最后一条匹配正则的行，并把内容插到其下方。 |
 | `frontmatter/get` | GET or POST | 读取一个 YAML frontmatter 字段。 |
 | `frontmatter/set` | POST | 设置或创建一个 YAML frontmatter 字段。 |
+| `frontmatter/append` | POST | 向 inline 数组形式的 frontmatter 字段追加值，默认写当天日记并在缺失时新建。 |
+| `geo/convert` | GET or POST | 在 GCJ-02 与 WGS-84 之间转换坐标，方向始终显式指定。 |
 | `daily/append-by-time` | POST | 根据配置的时区和时段选择 daily note heading，并把条目插到最后一条时间行之后。 |
 | `daily/read` | GET or POST | 根据 Daily Note 配置解析路径并读取当天日记。 |
 | `search/simple` | GET or POST | 用简单字符串包含匹配搜索 Markdown 文件。 |
@@ -549,6 +551,7 @@ curl "http://localhost:8787/v1/api/frontmatter/get?path=Ideas/api-note.md&key=st
 | `path | filename | file | name` | 目标 Markdown 文件。 |
 | `key | field` | Frontmatter 字段名。 |
 | `value | content | text` | 要保存的值。字符串看起来是 JSON 时会尝试解析。 |
+| `geoConvert` | 可选。对 `lat,lng` 或 `[lat, lng]` 这类坐标值做显式转换，例如 `gcj02-to-wgs84` 或 `wgs84-to-gcj02`。默认不转换。 |
 
 示例：
 
@@ -558,6 +561,102 @@ curl -X POST http://localhost:8787/v1/api/frontmatter/set \
   -H "Content-Type: application/json" \
   -d '{ "path": "Ideas/api-note.md", "key": "status", "value": "draft" }'
 ```
+
+把单点位置写进 Map View 用的 `location` 字段，并把国内 GCJ-02 坐标转成 OSM 瓦片用的 WGS-84：
+
+```bash
+curl -X POST http://localhost:8787/v1/api/frontmatter/set \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "Daily/2026-06-03.md",
+    "key": "location",
+    "value": "31.2304,121.4737",
+    "geoConvert": "gcj02-to-wgs84"
+  }'
+```
+
+## frontmatter/append
+
+**追加 Frontmatter 数组字段**
+
+向一个 inline 数组形式的 YAML frontmatter 字段追加一个值；不传 `path` 时默认写当天日记，文件不存在时自动新建。
+
+方法：`POST`
+
+适用场景：
+
+- 快捷指令一天多次把当前坐标追加到日记的 `locations` 数组里。
+- 在不覆盖已有列表的前提下，给笔记累加 tags 或引用。
+
+参数：
+
+| 参数 | 说明 |
+|---|---|
+| `path | filename | file | name` | 可选目标 Markdown 文件。不传则用 `at` 对应的当天日记。 |
+| `at` | 可选 ISO 时间戳，用于解析默认的当天日记。默认当前时间。 |
+| `key | field` | Frontmatter 字段名。 |
+| `value | content | text` | 要追加的值。看起来是 JSON 的字符串会被解析；整个数组值会作为「一个元素」追加。 |
+| `type` | 可选值类型：string、number、boolean、array、json。默认自动识别。 |
+| `unique` | 可选布尔。为真时重复值不会重复追加。 |
+| `position` | 追加位置：end（默认）或 start。 |
+| `createIfMissing` | 可选布尔。默认 true；会新建笔记（默认日记会套用日记模板）。 |
+| `templatePath | template` | 可选。新建缺失笔记时使用的 Vault 相对模板路径。 |
+| `idempotencyKey` | 可选幂等键，避免上游重试造成重复写入。 |
+
+> 说明：这里写的是 frontmatter 里的 inline 数组（如 `locations: [[39.9,116.3]]`）。Obsidian **Map View 的「多个位置」并不读 frontmatter 数组**，而是读正文里的内联 `geo:` 链接 + 一个空的 `locations:` 标记；frontmatter 数组更适合单点或 Leaflet 等用数组的插件。
+
+示例：
+
+```bash
+curl -X POST http://localhost:8787/v1/api/frontmatter/append \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "locations",
+    "value": [39.9, 116.3],
+    "type": "array",
+    "unique": true
+  }'
+```
+
+## geo/convert
+
+**坐标转换**
+
+在 GCJ-02 与 WGS-84 之间转换坐标。方向始终由调用方显式指定，不做自动判别（GCJ-02 是对 WGS-84 的确定性偏移，单看数字无法区分，自动猜一定会出错）。中国大陆境外为空操作。
+
+方法：`GET or POST`
+
+适用场景：
+
+- 把 GCJ-02 坐标转成 WGS-84，再丢到基于 OpenStreetMap 瓦片的 Map View 上。
+- 把 WGS-84 的 GPS 坐标转成 GCJ-02，给高德等国内瓦片源用。
+
+参数：
+
+| 参数 | 说明 |
+|---|---|
+| `lat | latitude` | 纬度。也可以用 `value` 传 `lat,lng` 或 `[lat, lng]`。 |
+| `lng | lon | longitude` | 经度。 |
+| `value | coord | coordinate` | 可选的组合形式：`lat,lng` 字符串或 `[lat, lng]` 数组。 |
+| `from` | 源坐标系：gcj02 或 wgs84。 |
+| `to` | 目标坐标系：gcj02 或 wgs84。 |
+
+示例：
+
+```bash
+curl -X POST http://localhost:8787/v1/api/geo/convert \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "value": "31.2304,121.4737",
+    "from": "gcj02",
+    "to": "wgs84"
+  }'
+```
+
+返回示例：`{ "ok": true, "operation": "geo/convert", "from": "gcj02", "to": "wgs84", "lat": ..., "lng": ..., "value": "lat,lng" }`。
 
 ## daily/append-by-time
 

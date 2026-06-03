@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { executeApiAction } from "../src/api.js";
+import { gcj02ToWgs84, roundCoordinate } from "../src/geo.js";
 import { MAX_MARKDOWN_APPEND_BYTES, MAX_MARKDOWN_READ_BYTES } from "../src/limits.js";
 
 test("v1 api new creates a note from filename and can run a safe vault script", async () => {
@@ -63,6 +64,50 @@ test("v1 api exposes fine-grained heading and frontmatter actions", async () => 
 
   assert.equal(heading.result.content, "A\nB");
   assert.equal(status.result.value, "draft");
+});
+
+test("geo/convert converts between gcj02 and wgs84 with an explicit direction", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+
+  const converted = await executeApiAction(config, "geo/convert", {
+    value: "31.2304,121.4737",
+    from: "gcj02",
+    to: "wgs84"
+  });
+  const [expectedLat, expectedLng] = gcj02ToWgs84(31.2304, 121.4737).map(roundCoordinate);
+  assert.equal(converted.result.from, "gcj02");
+  assert.equal(converted.result.to, "wgs84");
+  assert.equal(converted.result.lat, expectedLat);
+  assert.equal(converted.result.lng, expectedLng);
+  assert.equal(converted.result.value, `${expectedLat},${expectedLng}`);
+
+  const identity = await executeApiAction(config, "geo/convert", {
+    lat: 10,
+    lng: 20,
+    from: "wgs84",
+    to: "wgs84"
+  });
+  assert.deepEqual([identity.result.lat, identity.result.lng], [10, 20]);
+});
+
+test("frontmatter/set optionally converts a coordinate value", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-api-action-"));
+  const config = testConfig(root);
+
+  await executeApiAction(config, "frontmatter/set", {
+    path: "Daily/2026-06-03.md",
+    key: "location",
+    value: "31.2304,121.4737",
+    geoConvert: "gcj02-to-wgs84"
+  });
+  const stored = await executeApiAction(config, "frontmatter/get", {
+    path: "Daily/2026-06-03.md",
+    key: "location"
+  });
+  const [expectedLat, expectedLng] = gcj02ToWgs84(31.2304, 121.4737).map(roundCoordinate);
+  assert.equal(stored.result.value, `${expectedLat},${expectedLng}`);
+  assert.notEqual(stored.result.value, "31.2304,121.4737");
 });
 
 test("files/create applies template first and request yaml last", async () => {

@@ -249,6 +249,7 @@ Supported:
 - `frontmatter/get`
 - `frontmatter/set`
 - `frontmatter/append` (appends to an inline-array field; defaults to the daily note and creates it when missing)
+- `geo/convert` (explicit GCJ-02 <-> WGS-84 coordinate conversion)
 
 ### Search And Tags
 

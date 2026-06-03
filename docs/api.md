@@ -30,6 +30,7 @@ Authorization: Bearer <API_TOKEN>
 | `frontmatter/get` | GET or POST | Reads a YAML frontmatter field. |
 | `frontmatter/set` | POST | Sets or creates a YAML frontmatter field. |
 | `frontmatter/append` | POST | Appends a value to an inline-array YAML frontmatter field, defaulting to the daily note and creating it when missing. |
+| `geo/convert` | GET or POST | Converts a coordinate between GCJ-02 and WGS-84. The direction is always explicit; no auto-detection. |
 | `daily/append-by-time` | POST | Chooses a daily-note heading from configured timezone slots and inserts the entry in chronological order among the existing timestamp lines. |
 | `daily/read` | GET or POST | Resolves the daily-note path from configuration and reads that note. |
 | `search/simple` | GET or POST | Searches Markdown files with simple substring matching. |
@@ -541,6 +542,7 @@ Parameters:
 | `path | filename | file | name` | Target Markdown file. |
 | `key | field` | Frontmatter field name. |
 | `value | content | text` | Value to save. String values that look like JSON are parsed. |
+| `geoConvert` | Optional explicit coordinate conversion for a `lat,lng` or `[lat, lng]` value, e.g. `gcj02-to-wgs84` or `wgs84-to-gcj02`. Off by default. |
 
 Example:
 
@@ -590,6 +592,42 @@ curl -X POST http://localhost:8787/v1/api/frontmatter/append \
     "value": [39.9, 116.3],
     "type": "array",
     "unique": true
+  }'
+```
+
+## geo/convert
+
+**Convert Coordinates**
+
+Converts a coordinate between GCJ-02 and WGS-84. The direction is always explicit; no auto-detection.
+
+Method: `GET or POST`
+
+Use cases:
+
+- Convert GCJ-02 coordinates to WGS-84 before plotting on OpenStreetMap-based Map View tiles.
+- Convert WGS-84 GPS coordinates to GCJ-02 for a Chinese tile provider such as AutoNavi (Gaode).
+
+Parameters:
+
+| Parameter | Description |
+|---|---|
+| `lat | latitude` | Latitude. Alternatively pass `value` as `lat,lng` or `[lat, lng]`. |
+| `lng | lon | longitude` | Longitude. |
+| `value | coord | coordinate` | Optional combined `lat,lng` string or `[lat, lng]` array. |
+| `from` | Source coordinate system: gcj02 or wgs84. |
+| `to` | Target coordinate system: gcj02 or wgs84. |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8787/v1/api/geo/convert \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "value": "31.2304,121.4737",
+    "from": "gcj02",
+    "to": "wgs84"
   }'
 ```
 

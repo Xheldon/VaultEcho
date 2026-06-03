@@ -245,6 +245,7 @@ curl -X POST http://localhost:8787/v1/api/frontmatter/set \
 - `frontmatter/get`
 - `frontmatter/set`
 - `frontmatter/append`（向 inline 数组字段追加值；默认写入当天日记，缺失时自动新建）
+- `geo/convert`（显式的 GCJ-02 ↔ WGS-84 坐标转换）
 
 ### Search And Tags
 

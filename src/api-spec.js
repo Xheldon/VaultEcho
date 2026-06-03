@@ -322,7 +322,8 @@ export const API_ENDPOINTS = [
     params: [
       ["path | filename | file | name", "Target Markdown file."],
       ["key | field", "Frontmatter field name."],
-      ["value | content | text", "Value to save. String values that look like JSON are parsed."]
+      ["value | content | text", "Value to save. String values that look like JSON are parsed."],
+      ["geoConvert", "Optional explicit coordinate conversion for a `lat,lng` or `[lat, lng]` value, e.g. `gcj02-to-wgs84` or `wgs84-to-gcj02`. Off by default."]
     ],
     curl: `curl -X POST http://localhost:8787/v1/api/frontmatter/set \\
   -H "Authorization: Bearer change-me" \\
@@ -358,6 +359,31 @@ export const API_ENDPOINTS = [
     "value": [39.9, 116.3],
     "type": "array",
     "unique": true
+  }'`
+  },
+  {
+    route: "geo/convert",
+    method: "GET or POST",
+    title: "Convert Coordinates",
+    summary: "Converts a coordinate between GCJ-02 and WGS-84. The direction is always explicit; no auto-detection.",
+    scenarios: [
+      "Convert GCJ-02 coordinates to WGS-84 before plotting on OpenStreetMap-based Map View tiles.",
+      "Convert WGS-84 GPS coordinates to GCJ-02 for a Chinese tile provider such as AutoNavi (Gaode)."
+    ],
+    params: [
+      ["lat | latitude", "Latitude. Alternatively pass `value` as `lat,lng` or `[lat, lng]`."],
+      ["lng | lon | longitude", "Longitude."],
+      ["value | coord | coordinate", "Optional combined `lat,lng` string or `[lat, lng]` array."],
+      ["from", "Source coordinate system: gcj02 or wgs84."],
+      ["to", "Target coordinate system: gcj02 or wgs84."]
+    ],
+    curl: `curl -X POST http://localhost:8787/v1/api/geo/convert \\
+  -H "Authorization: Bearer change-me" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "value": "31.2304,121.4737",
+    "from": "gcj02",
+    "to": "wgs84"
   }'`
   },
   {

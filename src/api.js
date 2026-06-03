@@ -27,6 +27,7 @@ import {
   searchEmbeddingIndex
 } from "./embedding-index.js";
 import { getConnectorStatus, runConnector } from "./connectors.js";
+import { convertCoordinate, normalizeDatum, parseLatLng, roundCoordinate } from "./geo.js";
 import { buildDailyPath, getDateTimeParts, renderTemplate } from "./time.js";
 import { executeOperation, resolveVaultPath } from "./vault.js";
 import { getReviewStatus, runReviewTask } from "./review-tasks.js";
@@ -50,6 +51,7 @@ export const API_HANDLER_ROUTES = [
   "frontmatter/get",
   "frontmatter/set",
   "frontmatter/append",
+  "geo/convert",
   "daily/append-by-time",
   "daily/read",
   "search/simple",
@@ -132,6 +134,8 @@ async function executePrimary(config, route, params) {
       return setFrontmatter(config, params);
     case "frontmatter/append":
       return appendFrontmatter(config, params);
+    case "geo/convert":
+      return convertGeo(config, params);
     case "daily/append-by-time":
       return appendDailyByTime(config, params);
     case "daily/read":
@@ -335,11 +339,58 @@ async function setFrontmatter(config, params) {
   await ensurePatchableMarkdownFile(target.absolutePath);
   const original = await readTextIfExists(target.absolutePath) ?? "";
   const key = required(params.key || params.field, "key");
-  const value = params.value ?? contentOf(params);
+  const value = maybeConvertGeoValue(params.value ?? contentOf(params), params);
   const next = replaceFrontmatterField(original, key, parseMaybeJson(value));
   await fs.mkdir(path.dirname(target.absolutePath), { recursive: true });
   await atomicWrite(target.absolutePath, next);
   return { ok: true, operation: "frontmatter/set", path: target.relativePath, key };
+}
+
+function convertGeo(config, params) {
+  const from = required(params.from, "from");
+  const to = required(params.to, "to");
+  const raw = params.value ?? params.coord ?? params.coordinate;
+  let lat;
+  let lng;
+  if (raw !== undefined && raw !== "") {
+    ({ lat, lng } = parseLatLng(parseMaybeJson(raw)));
+  } else {
+    lat = Number(required(params.lat ?? params.latitude, "lat"));
+    lng = Number(required(params.lng ?? params.lon ?? params.longitude, "lng"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new Error("lat and lng must be numbers");
+    }
+  }
+
+  const [outLat, outLng] = convertCoordinate(lat, lng, from, to).map(roundCoordinate);
+  return {
+    ok: true,
+    operation: "geo/convert",
+    from: normalizeDatum(from),
+    to: normalizeDatum(to),
+    lat: outLat,
+    lng: outLng,
+    value: `${outLat},${outLng}`,
+    input: { lat, lng }
+  };
+}
+
+// Optional, explicit coordinate conversion for a "lat,lng" or [lat, lng] value.
+// Defaults to no conversion so already-correct coordinates are never shifted.
+function maybeConvertGeoValue(value, params) {
+  const spec = params.geoConvert || params.geo;
+  if (!spec && !(params.geoFrom && params.geoTo)) return value;
+  const [from, to] = parseGeoConvertSpec(spec, params);
+  const { lat, lng, shape } = parseLatLng(parseMaybeJson(value));
+  const [outLat, outLng] = convertCoordinate(lat, lng, from, to).map(roundCoordinate);
+  return shape === "array" ? [outLat, outLng] : `${outLat},${outLng}`;
+}
+
+function parseGeoConvertSpec(spec, params) {
+  if (params.geoFrom && params.geoTo) return [params.geoFrom, params.geoTo];
+  const parts = String(spec).split(/->|-to-|[:>,]/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 2) return parts;
+  throw new Error('geoConvert must look like "gcj02-to-wgs84"');
 }
 
 async function appendFrontmatter(config, params) {

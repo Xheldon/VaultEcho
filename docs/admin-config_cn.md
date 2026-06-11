@@ -51,6 +51,7 @@ English version: [admin-config.md](admin-config.md).
 - 推荐填写 `X User ID`。如果只填 `X Username`，VaultEcho 会先额外查询一次 User ID。
 - Strava 鉴权使用 `Client ID`、`Client Secret` 和 `Refresh Token`；Secret 会用 `APP_ENCRYPTION_KEY` 加密。`Redirect URI` 默认使用当前 Admin UI 地址，例如 `https://your-vps.example/admin`；需要在 Strava App 设置里把 Authorization Callback Domain 配成同一个 VPS 域名。VaultEcho 会自动刷新 access token，并把刷新后的 token 状态存到 `/data`。如果看到 `activity:read_permission missing`，说明当前授权缺少活动读取 scope，需要用后台里的 Strava 授权链接重新授权 `read,activity:read_all`；Strava 回跳到 Admin UI 后会自动填入 authorization code，也可以手动填入新的 refresh token。
 - Strava 来源默认单次最多处理 10 条活动，并在每条活动详情请求之间等待 1000 ms。建议保持保守；历史回填继续使用本地导入脚本，不要靠高频连接器轮询补历史。
+- Strava 会记录所有运动类型。唯一的过滤是 `最小运动时间`（默认 5 分钟）：低于该时长的活动会被跳过。活动本身没有的指标——例如羽毛球、乒乓球这类室内运动没有速度和里程——会从条目中省略，而不是把整条活动丢弃。
 - 每次定时轮询都会按轮询间隔使用滑动回看窗口：15 分钟 -> 30 分钟、30 分钟 -> 1 小时、1 小时 -> 2 小时、2 小时 -> 6 小时、6 小时 -> 12 小时、12 小时 -> 24 小时、24 小时 -> 48 小时。每天本地 23:59 还会额外兜底读取当天 `00:00` 到兜底运行时刻的数据。写入会按来源 + 帖子/活动 ID 做幂等去重。默认迁移来的 X 来源会继续使用旧的 `x-post-<id>` key 格式以兼容已有记录。
 - `插入位置`: 可选 `单独 Heading` 或 `日记时间块`。`单独 Heading` 会写入固定 heading，如果当天日记里没有该 heading，会在页面底部新建。`日记时间块` 会按每条帖子的 `created_at` 匹配上方时间段，例如 12:20 写入下午时间块。
 - `目标 Heading Markdown`: 完整 Markdown heading，例如 `## Twitter`。只在 `插入位置` 为 `单独 Heading` 时使用。

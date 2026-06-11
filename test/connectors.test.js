@@ -243,7 +243,6 @@ test("Strava connector refreshes tokens and writes activities into the configure
       maxActivitiesPerRun: 10,
       requestDelayMs: 0,
       minMovingTimeMinutes: 5,
-      requireRequiredMetrics: true,
       output: {
         headingMarkdown: "# 运动",
         insertAfterHeadingMarkdown: ""
@@ -328,6 +327,103 @@ test("Strava connector refreshes tokens and writes activities into the configure
   }
 });
 
+test("Strava connector records non-GPS sports and skips activities under the minimum duration", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-connector-"));
+  const config = testConfig(root);
+  config.connectors.sources = [
+    {
+      id: "strava",
+      name: "Strava",
+      enabled: true,
+      platform: "strava",
+      baseUrl: "https://www.strava.com/api/v3",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      refreshToken: "refresh-token",
+      maxActivitiesPerRun: 10,
+      requestDelayMs: 0,
+      minMovingTimeMinutes: 5,
+      output: { headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "" }
+    }
+  ];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/oauth/token") {
+      return jsonResponse({
+        access_token: "fresh-access-token",
+        refresh_token: "next-refresh-token",
+        expires_at: Math.floor(Date.now() / 1000) + 21600,
+        scope: "read,activity:read_all"
+      });
+    }
+    if (url.pathname === "/api/v3/athlete/activities") {
+      return jsonResponse([
+        { id: 300, start_date: "2026-05-21T01:47:00.000Z" },
+        { id: 400, start_date: "2026-05-21T12:15:00.000Z" }
+      ]);
+    }
+    if (url.pathname === "/api/v3/activities/300") {
+      // Badminton: indoor, no GPS speed/distance, but has heart rate and calories.
+      return jsonResponse(stravaActivity({
+        id: 300,
+        name: "羽毛球",
+        sport_type: "Badminton",
+        type: "Badminton",
+        start_date: "2026-05-21T01:47:00.000Z",
+        moving_time: 1800,
+        elapsed_time: 2000,
+        average_heartrate: 120.4,
+        max_heartrate: 165,
+        distance: 0,
+        total_elevation_gain: 0,
+        average_speed: 0,
+        max_speed: 0,
+        calories: 250
+      }));
+    }
+    if (url.pathname === "/api/v3/activities/400") {
+      // Table tennis: only 3m20s of moving time, below the 5-minute minimum.
+      return jsonResponse(stravaActivity({
+        id: 400,
+        name: "乒乓球",
+        sport_type: "TableTennis",
+        type: "TableTennis",
+        start_date: "2026-05-21T12:15:00.000Z",
+        moving_time: 200,
+        elapsed_time: 240,
+        distance: 0,
+        average_speed: 0,
+        max_speed: 0,
+        calories: 30
+      }));
+    }
+    return jsonResponse({ error: "unexpected url" }, 404);
+  };
+
+  try {
+    const result = await runConnector(config, "strava", {
+      now: new Date("2026-05-21T16:30:00.000Z"),
+      runAt: new Date("2026-05-21T16:30:00.000Z")
+    });
+
+    assert.equal(result.activitiesFound, 1);
+    assert.equal(result.activitiesWritten, 1);
+
+    const note = await fs.readFile(path.join(root, "vault", "Daily", "2026-05-21.md"), "utf8");
+    assert.match(
+      note,
+      /\[09:47\] 羽毛球，Badminton，运动时间 30分钟，总耗时 33分20秒，平均心率 120 bpm，最大心率 165 bpm，累计爬升 0 m，卡路里 250 kcal，\[\[Apple Watch Series 10\]\]。/
+    );
+    assert.equal(note.includes("乒乓球"), false);
+    assert.equal(note.includes("总里程"), false);
+    assert.equal(note.includes("km/h"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Strava connector exchanges a new authorization code before fetching activities", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-connector-"));
   const config = testConfig(root);
@@ -344,7 +440,6 @@ test("Strava connector exchanges a new authorization code before fetching activi
       maxActivitiesPerRun: 1,
       requestDelayMs: 0,
       minMovingTimeMinutes: 5,
-      requireRequiredMetrics: true,
       output: {
         headingMarkdown: "## 今日运动",
         insertAfterHeadingMarkdown: ""
@@ -459,7 +554,6 @@ test("Strava connector refreshes and retries once when a cached access token is 
       maxActivitiesPerRun: 1,
       requestDelayMs: 0,
       minMovingTimeMinutes: 5,
-      requireRequiredMetrics: true,
       output: {
         headingMarkdown: "## 今日运动",
         insertAfterHeadingMarkdown: ""

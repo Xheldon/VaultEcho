@@ -192,7 +192,6 @@ const DEFAULT_STRAVA_CONNECTOR_SOURCE = {
   maxActivitiesPerRun: 10,
   requestDelayMs: 1000,
   minMovingTimeMinutes: 5,
-  requireRequiredMetrics: true,
   output: {
     headingMarkdown: "## 今日运动",
     insertAfterHeadingMarkdown: ""
@@ -615,10 +614,6 @@ function normalizeStravaConnectorSourceConfig(input = {}, previous = {}, serverC
       0,
       240,
       previousSource.minMovingTimeMinutes ?? DEFAULT_STRAVA_CONNECTOR_SOURCE.minMovingTimeMinutes
-    ),
-    requireRequiredMetrics: normalizeBoolean(
-      source.requireRequiredMetrics,
-      previousSource.requireRequiredMetrics ?? DEFAULT_STRAVA_CONNECTOR_SOURCE.requireRequiredMetrics
     ),
     output: {
       headingMarkdown: normalizeHeadingMarkdown(output.headingMarkdown, fallbackOutput.headingMarkdown),

@@ -337,10 +337,10 @@ async function runStravaConnector(config, strava, options) {
     token = await resolveStravaAccessToken(config, strava, { forceRefresh: true });
     details = await fetchStravaActivityDetailsForWindow(strava, token.accessToken, window);
   }
+  const minMovingTimeSeconds = stravaMinMovingTimeSeconds(strava);
   const activities = details
     .map((activity) => normalizeStravaActivity(activity, config.timeZone))
-    .filter((activity) => activity && activity.movingTimeSeconds >= stravaMinMovingTimeSeconds(strava))
-    .filter((activity) => !strava.requireRequiredMetrics || hasRequiredStravaActivityData(activity))
+    .filter((activity) => activity && stravaActivityDurationSeconds(activity) >= minMovingTimeSeconds)
     .sort((left, right) => left.startDate - right.startDate);
   const heading = parseHeadingMarkdown(
     strava.output?.headingMarkdown,
@@ -604,24 +604,32 @@ function stravaActivityStartDate(activity) {
   return new Date(`${local}+08:00`);
 }
 
-function hasRequiredStravaActivityData(activity) {
-  return Boolean(activity.id)
-    && Boolean(activity.type)
-    && positiveNumber(activity.movingTimeSeconds)
-    && positiveNumber(activity.elapsedTimeSeconds)
-    && positiveNumber(activity.averageHeartrate)
-    && positiveNumber(activity.maxHeartrate)
-    && positiveNumber(activity.averageSpeed)
-    && positiveNumber(activity.maxSpeed)
-    && positiveNumber(activity.calories);
+// Effective duration for the min-duration filter. Non-GPS sports (badminton,
+// table tennis, gym, etc.) may not report moving_time, so fall back to elapsed.
+function stravaActivityDurationSeconds(activity) {
+  if (positiveNumber(activity.movingTimeSeconds)) return activity.movingTimeSeconds;
+  if (positiveNumber(activity.elapsedTimeSeconds)) return activity.elapsedTimeSeconds;
+  return 0;
 }
 
+// Builds the entry from whatever metrics the activity actually has. Indoor and
+// non-GPS sports lack speed/distance (and sometimes heart rate or calories), so
+// every metric is optional and simply omitted when absent.
 function formatStravaActivityEntry(activity) {
-  const namePrefix = activity.name ? `${activity.name}，` : "";
+  const parts = [];
+  if (activity.name) parts.push(activity.name);
+  if (activity.type) parts.push(activity.type);
+  if (positiveNumber(activity.movingTimeSeconds)) parts.push(`运动时间 ${formatDuration(activity.movingTimeSeconds)}`);
+  if (positiveNumber(activity.elapsedTimeSeconds)) parts.push(`总耗时 ${formatDuration(activity.elapsedTimeSeconds)}`);
+  if (positiveNumber(activity.averageHeartrate)) parts.push(`平均心率 ${Math.round(activity.averageHeartrate)} bpm`);
+  if (positiveNumber(activity.maxHeartrate)) parts.push(`最大心率 ${Math.round(activity.maxHeartrate)} bpm`);
+  if (positiveNumber(activity.distanceMeters)) parts.push(`总里程 ${formatDistance(activity.distanceMeters)}`);
+  if (finiteNumber(activity.elevationGainMeters)) parts.push(`累计爬升 ${formatElevation(activity.elevationGainMeters)}`);
+  if (positiveNumber(activity.averageSpeed)) parts.push(`平均速度 ${formatSpeed(activity.averageSpeed)}`);
+  if (positiveNumber(activity.maxSpeed)) parts.push(`最大速度 ${formatSpeed(activity.maxSpeed)}`);
+  if (positiveNumber(activity.calories)) parts.push(`卡路里 ${Math.round(activity.calories)} kcal`);
   const deviceSuffix = activity.deviceName ? `，[[${activity.deviceName}]]` : "";
-  const distance = positiveNumber(activity.distanceMeters) ? `，总里程 ${formatDistance(activity.distanceMeters)}` : "";
-  const elevation = finiteNumber(activity.elevationGainMeters) ? `，累计爬升 ${formatElevation(activity.elevationGainMeters)}` : "";
-  return `[${activity.HH}:${activity.mm}] ${namePrefix}${activity.type}，运动时间 ${formatDuration(activity.movingTimeSeconds)}，总耗时 ${formatDuration(activity.elapsedTimeSeconds)}，平均心率 ${Math.round(activity.averageHeartrate)} bpm，最大心率 ${Math.round(activity.maxHeartrate)} bpm${distance}${elevation}，平均速度 ${formatSpeed(activity.averageSpeed)}，最大速度 ${formatSpeed(activity.maxSpeed)}，卡路里 ${Math.round(activity.calories)} kcal${deviceSuffix}。`;
+  return `[${activity.HH}:${activity.mm}] ${parts.join("，")}${deviceSuffix}。`;
 }
 
 function formatDuration(seconds) {

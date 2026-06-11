@@ -388,9 +388,6 @@
                         <el-input-number v-model="source.minMovingTimeMinutes" :min="0" :max="240" class="full-width" />
                       </el-form-item>
                     </el-col>
-                    <el-col :xs="24" :md="12" class="connector-checkboxes">
-                      <el-checkbox v-model="source.requireRequiredMetrics">{{ t("requireStravaMetrics") }}</el-checkbox>
-                    </el-col>
                     <el-col :xs="24" :md="12">
                       <el-form-item :label="t('stravaActivityHeadingMarkdown')">
                         <el-input v-model="source.output.headingMarkdown" placeholder="## 今日运动" />
@@ -655,7 +652,6 @@ const translations = {
     stravaRequestDelayMs: "详情请求间隔",
     stravaRequestDelayHint: "每条活动详情之间的等待时间，降低批量详情请求触发 429 的概率。",
     minMovingTimeMinutes: "最小运动时间",
-    requireStravaMetrics: "过滤缺少心率、速度、卡路里等关键指标的活动",
     stravaActivityHeadingMarkdown: "运动 Heading Markdown",
     stravaActivityHeadingHint: "例如 ## 今日运动 或 # 运动；已存在则合并排序，不存在则用分割线新增块。",
     stravaInsertAfterHeadingMarkdown: "缺失时插入到此 Heading 后",
@@ -981,7 +977,6 @@ const englishText = {
   stravaRequestDelayMs: "Detail Request Delay",
   stravaRequestDelayHint: "Wait time between activity detail requests to reduce the chance of Strava 429s during small bursts.",
   minMovingTimeMinutes: "Min Moving Time",
-  requireStravaMetrics: "Filter activities missing heart-rate, speed, calories, or other required metrics",
   stravaActivityHeadingMarkdown: "Activity Heading Markdown",
   stravaActivityHeadingHint: "For example ## 今日运动 or # 运动. Existing headings are merged and sorted; missing headings are created with separators.",
   stravaInsertAfterHeadingMarkdown: "Create After Heading",
@@ -1475,7 +1470,6 @@ function createDefaultConnectorSource(id, platform = "x") {
       maxActivitiesPerRun: 10,
       requestDelayMs: 1000,
       minMovingTimeMinutes: 5,
-      requireRequiredMetrics: true,
       output: { headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "" }
     };
   }

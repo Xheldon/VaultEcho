@@ -1,8 +1,11 @@
 name: Release Docker image
 
-# Builds a multi-arch (amd64 + arm64) image and pushes it to Docker Hub.
-# Triggers automatically when a version tag like v0.2.16 is pushed, and can
-# also be run manually from the Actions tab (version is read from package.json).
+# Run manually from the Actions tab ("Run workflow"). It:
+#   1. builds a multi-arch (amd64 + arm64) image and pushes it to Docker Hub
+#   2. creates the matching v<version> git tag and a GitHub Release
+# The version comes from package.json, so no tag has to be pushed by hand.
+# Dispatch-only on purpose: the workflow creates the tag itself, so there is no
+# separate tag-push trigger that would run the whole thing a second time.
 #
 # Required repository secrets:
 #   DOCKERHUB_USERNAME  Docker Hub username (also used as the image namespace)
@@ -10,10 +13,10 @@ name: Release Docker image
 # The image is published as ${DOCKERHUB_USERNAME}/vaultecho:<version> and :latest.
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   docker:
@@ -24,13 +27,7 @@ jobs:
 
       - name: Resolve version
         id: version
-        run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="$(node -p "require('./package.json').version")"
-          fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -54,3 +51,12 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/vaultecho:${{ steps.version.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/vaultecho:latest
+
+      - name: Create tag and GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            Docker image: `${{ secrets.DOCKERHUB_USERNAME }}/vaultecho:${{ steps.version.outputs.version }}` (also `:latest`), multi-arch linux/amd64 + linux/arm64.

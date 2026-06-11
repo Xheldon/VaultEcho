@@ -1,4 +1,7 @@
-FROM node:22-alpine AS admin-builder
+# Build the admin UI on the native build platform. Its output is static
+# JS/CSS (architecture-independent), so building it under QEMU emulation for
+# other target arches would only make multi-arch builds extremely slow.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS admin-builder
 
 WORKDIR /app
 

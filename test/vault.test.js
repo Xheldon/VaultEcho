@@ -196,6 +196,75 @@ test("upsert_daily_separated_heading merges existing entries under the configure
   );
 });
 
+test("append_frontmatter_field defaults to the daily note and accumulates an inline array", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const config = testConfig(root);
+
+  const first = await executeOperation(config, {
+    operation: "append_frontmatter_field",
+    at: "2026-05-13T16:21:00+08:00",
+    key: "locations",
+    value: [39.9, 116.3]
+  });
+  await executeOperation(config, {
+    operation: "append_frontmatter_field",
+    at: "2026-05-13T18:05:00+08:00",
+    key: "locations",
+    value: [31.2, 121.4]
+  });
+
+  assert.equal(first.path, "Daily/2026-05-13.md");
+  const dailyPath = path.join(root, "vault", "Daily", "2026-05-13.md");
+  assert.equal(
+    await fs.readFile(dailyPath, "utf8"),
+    "---\nlocations: [[39.9,116.3],[31.2,121.4]]\n---\n"
+  );
+});
+
+test("append_frontmatter_field writes above existing daily body and respects unique", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const config = testConfig(root);
+  const dailyPath = path.join(root, "vault", "Notes", "trip.md");
+  await fs.mkdir(path.dirname(dailyPath), { recursive: true });
+  await fs.writeFile(dailyPath, "# Trip\n\nNotes here.\n", "utf8");
+
+  await executeOperation(config, {
+    operation: "append_frontmatter_field",
+    path: "Notes/trip.md",
+    key: "tags",
+    value: "travel"
+  });
+  const result = await executeOperation(config, {
+    operation: "append_frontmatter_field",
+    path: "Notes/trip.md",
+    key: "tags",
+    value: "travel",
+    unique: true
+  });
+
+  assert.equal(result.path, "Notes/trip.md");
+  assert.equal(
+    await fs.readFile(dailyPath, "utf8"),
+    '---\ntags: ["travel"]\n---\n\n# Trip\n\nNotes here.\n'
+  );
+});
+
+test("append_frontmatter_field can reject missing notes", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-"));
+  const config = testConfig(root);
+
+  await assert.rejects(
+    executeOperation(config, {
+      operation: "append_frontmatter_field",
+      path: "Notes/missing.md",
+      key: "tags",
+      value: "x",
+      createIfMissing: false
+    }),
+    /Note does not exist/
+  );
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

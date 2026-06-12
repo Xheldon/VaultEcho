@@ -263,6 +263,39 @@ export function applyFrontmatterFields(markdown, fields) {
   return next;
 }
 
+export function appendFrontmatterField(markdown, key, value, options = {}) {
+  if (!key) throw new Error("key is required");
+  if (value === undefined) throw new Error("value is required");
+  const { unique = false, position = "end" } = options;
+
+  if (hasBlockSequence(markdown, key)) {
+    throw new Error(
+      `Frontmatter field "${key}" uses a block-style list, which append does not support; store it as an inline array (key: [a, b]) instead.`
+    );
+  }
+
+  const existing = parseInlineFrontmatterValue(getFrontmatterField(markdown, key));
+  let items;
+  if (existing === undefined) items = [];
+  else if (Array.isArray(existing)) items = [...existing];
+  else items = [existing];
+
+  if (position === "start") items.unshift(value);
+  else items.push(value);
+
+  if (unique) {
+    const seen = new Set();
+    items = items.filter((item) => {
+      const fingerprint = JSON.stringify(item);
+      if (seen.has(fingerprint)) return false;
+      seen.add(fingerprint);
+      return true;
+    });
+  }
+
+  return replaceFrontmatterField(markdown, key, items);
+}
+
 export function findHeadingSection(lines, heading, headingLevel) {
   const target = normalizeHeadingText(heading);
   const marker = "#".repeat(headingLevel);
@@ -533,4 +566,33 @@ function parseFrontmatter(markdown) {
 function stringifyFrontmatterValue(value) {
   if (typeof value === "string") return value;
   return JSON.stringify(value);
+}
+
+function parseInlineFrontmatterValue(raw) {
+  if (raw === null || raw === undefined || raw === "") return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+// Detects a YAML block-style sequence under a key, e.g. `key:` followed by
+// indented `- item` lines. The line-based reader cannot round-trip these, so
+// callers reject them instead of silently corrupting the list.
+function hasBlockSequence(markdown, key) {
+  const frontmatter = parseFrontmatter(markdown);
+  if (!frontmatter) return false;
+  const lines = frontmatter.body.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^([^:#][^:]*):\s*(.*)$/.exec(lines[index]);
+    if (!match || match[1].trim() !== key) continue;
+    if (match[2].trim() !== "") return false;
+    for (let next = index + 1; next < lines.length; next += 1) {
+      if (lines[next].trim() === "") continue;
+      return /^\s+-\s/.test(lines[next]);
+    }
+    return false;
+  }
+  return false;
 }

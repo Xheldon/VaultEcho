@@ -102,6 +102,7 @@ The config UI supports:
 - `Daily Timestamp Insertion Rules`: folded by default. Includes the daily file path template, optional daily template file, create-if-missing behavior, heading level, non-overlapping time slots, line format, line pattern, blank-line spacing, and chronological ordering of timestamp entries for endpoints such as `daily/append-by-time`.
 - `Embedding`: OpenAI-compatible `/embeddings` API base URL, model, API key, dimensions, chunk size, batch size, and auto-scan interval.
 - `AI Model`: Chat Completions mode for OpenAI-compatible gateways, or Responses API mode for official OpenAI frontier models used by built-in review tasks.
+- `Apple Health`: folded by default. Enables the receive-only `health/ingest` endpoint and configures, for sleep and workouts independently, the target heading (or time-slot insertion) for device-pushed Apple Health data.
 - `Review Tasks`: folded by default. Configures weekly, monthly, quarterly, and yearly AI reviews with source folders, semantic recall, prompt, schedule, and output path.
 
 Embedding uses a remote `/embeddings` API to generate vectors and stores the index at `data/index/embeddings.json`. OpenAI `text-embedding-3` models also use this endpoint; their newer capability is exposed through options such as `dimensions`. This lets a 1C2G VPS run VaultEcho without a local model, Qdrant, Elasticsearch, or database extension. After API writes change a file, VaultEcho can automatically update that file's index. Changes pulled by Headless Sync can be compensated by the Rebuild Index button or by an auto-scan interval.
@@ -230,6 +231,31 @@ curl -X POST http://localhost:8787/v1/api/daily/append-by-time \
 If `16:21` matches `Afternoon`, the entry is inserted below the final `[HH:mm]` line under `## Afternoon`. The Web UI controls the daily path template, heading level, missing-note template, and whether a blank line is kept between timestamp entries.
 
 If `at` is omitted, VaultEcho uses the server's current clock and interprets it through the configured user time zone. Passing `at` is still useful for backfill, testing, or upstream systems that captured an event earlier than the request time.
+
+### Apple Health
+
+`health/ingest` is a receive-only endpoint for a companion device that pushes raw Apple Health data. VaultEcho aggregates and formats it server-side so the iOS client does not have to. Sleep samples become one nightly summary (total/in-bed time, deep/core/REM/awake stages, average heart rate, HRV) attributed to the wake day; `HKWorkout` sessions are formatted like the Strava activity entry. Target headings (or time-slot insertion) are configured in the Web UI.
+
+```bash
+curl -X POST http://localhost:8787/v1/api/health/ingest \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sleep": {
+      "samples": [
+        { "value": "asleepDeep", "startDate": "2026-06-16T23:30:00+08:00", "endDate": "2026-06-17T00:42:00+08:00" },
+        { "value": "asleepCore", "startDate": "2026-06-17T00:42:00+08:00", "endDate": "2026-06-17T07:15:00+08:00" }
+      ],
+      "heartRate": 52,
+      "hrv": 48
+    },
+    "workouts": [
+      { "uuid": "A1B2", "type": "Running", "startDate": "2026-06-17T18:05:00+08:00", "duration": 1800, "distanceMeters": 5200 }
+    ]
+  }'
+```
+
+Sleep re-pushes overwrite that night's entry (so incremental Apple Watch syncs do not duplicate); each workout is de-duplicated by its UUID.
 
 ### Frontmatter
 

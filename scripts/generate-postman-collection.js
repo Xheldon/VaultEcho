@@ -461,6 +461,34 @@ const collection = {
       apiRequest("Unsupported - Commands", "GET", "/v1/api/commands", {
         description: "Expected to return unsupported because command execution requires desktop Obsidian."
       })
+    ]),
+
+    folder("12 Apple Health", [
+      apiRequest("Ingest - Sleep And Workouts", "POST", "/v1/api/health/ingest", {
+        description: "Receive-only endpoint for device-pushed Apple Health data. Sleep samples are aggregated into one nightly summary attributed to the wake day; HKWorkout sessions are formatted like the Strava activity entry. Requires Apple Health to be enabled in the Web UI.",
+        body: {
+          sleep: {
+            samples: [
+              { value: "asleepDeep", startDate: "2026-06-16T23:30:00+08:00", endDate: "2026-06-17T00:42:00+08:00" },
+              { value: "asleepCore", startDate: "2026-06-17T00:42:00+08:00", endDate: "2026-06-17T05:02:00+08:00" },
+              { value: "asleepREM", startDate: "2026-06-17T05:02:00+08:00", endDate: "2026-06-17T07:15:00+08:00" }
+            ],
+            heartRate: 52,
+            hrv: 48
+          },
+          workouts: [
+            {
+              uuid: "A1B2",
+              type: "Running",
+              startDate: "2026-06-17T18:05:00+08:00",
+              duration: 1800,
+              distanceMeters: 5200,
+              averageHeartRate: 150,
+              deviceName: "Apple Watch Series 10"
+            }
+          ]
+        }
+      })
     ])
   ]
 };

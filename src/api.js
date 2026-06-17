@@ -27,6 +27,7 @@ import {
   searchEmbeddingIndex
 } from "./embedding-index.js";
 import { getConnectorStatus, runConnector } from "./connectors.js";
+import { ingestHealth } from "./health.js";
 import { convertCoordinate, normalizeDatum, parseLatLng, roundCoordinate } from "./geo.js";
 import { buildDailyPath, getDateTimeParts, renderTemplate } from "./time.js";
 import { executeOperation, resolveVaultPath } from "./vault.js";
@@ -65,6 +66,7 @@ export const API_HANDLER_ROUTES = [
   "reviews/run",
   "connectors/status",
   "connectors/run",
+  "health/ingest",
   "batch",
   "uri/execute",
   "unsupported/active",
@@ -162,6 +164,8 @@ async function executePrimary(config, route, params) {
       return getConnectorStatus(config);
     case "connectors/run":
       return runConnector(config, params.connectorId || params.id || params.platform || "x");
+    case "health/ingest":
+      return ingestHealth(config, params);
     case "batch":
       return executeBatch(config, params);
     case "uri/execute":

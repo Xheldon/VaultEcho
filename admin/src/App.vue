@@ -433,6 +433,73 @@
           </el-form>
         </el-collapse-item>
 
+        <el-collapse-item id="apple-health-section" name="appleHealth">
+          <template #title>
+            <SectionTitle icon="Clock" :title="t('appleHealthTitle')" :description="t('appleHealthDesc')" inline />
+          </template>
+          <div class="collapse-body">
+            <div class="feature-toggle-panel">
+              <div>
+                <el-switch v-model="form.appleHealth.enabled" :active-text="t('appleHealthEnable')" />
+                <div class="form-hint">{{ form.appleHealth.enabled ? t("appleHealthEnabledHint") : t("appleHealthDisabledHint") }}</div>
+              </div>
+            </div>
+            <template v-if="form.appleHealth.enabled">
+              <div class="form-hint apple-health-endpoint-hint">{{ t("appleHealthEndpointHint") }}</div>
+              <el-form label-position="top">
+                <div class="subsection-title">{{ t("appleHealthSleep") }}</div>
+                <el-checkbox v-model="form.appleHealth.sleep.enabled">{{ t("appleHealthSleepEnable") }}</el-checkbox>
+                <el-row v-if="form.appleHealth.sleep.enabled" :gutter="18">
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('connectorOutputTarget')">
+                      <el-segmented v-model="form.appleHealth.sleep.output.target" :options="connectorOutputTargetOptions" class="full-width" />
+                      <div class="form-hint">{{ form.appleHealth.sleep.output.target === 'time-slot' ? t("connectorTimeSlotTargetHint") : t("connectorHeadingTargetHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col v-if="form.appleHealth.sleep.output.target === 'heading'" :xs="24" :md="12">
+                    <el-form-item :label="t('connectorHeadingMarkdown')">
+                      <el-input v-model="form.appleHealth.sleep.output.headingMarkdown" placeholder="## 今日睡眠" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col v-if="form.appleHealth.sleep.output.target === 'heading'" :xs="24" :md="12">
+                    <el-form-item :label="t('stravaInsertAfterHeadingMarkdown')">
+                      <el-input v-model="form.appleHealth.sleep.output.insertAfterHeadingMarkdown" :placeholder="t('stravaInsertAfterHeadingPlaceholder')" />
+                      <div class="form-hint">{{ t("stravaInsertAfterHeadingHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+
+                <div class="subsection-title">{{ t("appleHealthWorkouts") }}</div>
+                <el-checkbox v-model="form.appleHealth.workouts.enabled">{{ t("appleHealthWorkoutsEnable") }}</el-checkbox>
+                <el-row v-if="form.appleHealth.workouts.enabled" :gutter="18">
+                  <el-col :xs="24" :md="8">
+                    <el-form-item :label="t('appleHealthMinDuration')">
+                      <el-input-number v-model="form.appleHealth.workouts.minDurationMinutes" :min="0" :max="240" class="full-width" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :md="8">
+                    <el-form-item :label="t('connectorOutputTarget')">
+                      <el-segmented v-model="form.appleHealth.workouts.output.target" :options="connectorOutputTargetOptions" class="full-width" />
+                      <div class="form-hint">{{ form.appleHealth.workouts.output.target === 'time-slot' ? t("connectorTimeSlotTargetHint") : t("connectorHeadingTargetHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col v-if="form.appleHealth.workouts.output.target === 'heading'" :xs="24" :md="8">
+                    <el-form-item :label="t('connectorHeadingMarkdown')">
+                      <el-input v-model="form.appleHealth.workouts.output.headingMarkdown" placeholder="## 今日运动" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col v-if="form.appleHealth.workouts.output.target === 'heading'" :xs="24" :md="12">
+                    <el-form-item :label="t('stravaInsertAfterHeadingMarkdown')">
+                      <el-input v-model="form.appleHealth.workouts.output.insertAfterHeadingMarkdown" :placeholder="t('stravaInsertAfterHeadingPlaceholder')" />
+                      <div class="form-hint">{{ t("stravaInsertAfterHeadingHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+              </el-form>
+            </template>
+          </div>
+        </el-collapse-item>
+
         <el-collapse-item id="reviews-section" name="reviews">
           <template #title>
             <SectionTitle icon="Notebook" :title="t('reviewTasks')" :description="t('reviewDesc')" inline />
@@ -595,6 +662,17 @@ const translations = {
     end: "结束",
     addSlot: "添加时间段",
     connectorData: "连接器数据",
+    appleHealthTitle: "Apple 健康",
+    appleHealthDesc: "接收设备推送的 Apple 健康原始数据，服务端聚合后写入每日笔记",
+    appleHealthEnable: "启用 Apple 健康接收端点",
+    appleHealthEnabledHint: "设备向 POST /v1/api/health/ingest 推送数据后，VaultEcho 负责聚合和格式化。这是只接收端点，不会主动拉取设备。",
+    appleHealthDisabledHint: "已关闭。开启后才会处理 /v1/api/health/ingest 的推送。",
+    appleHealthEndpointHint: "端点：POST /v1/api/health/ingest（Bearer 鉴权）。请求体可包含 sleep（睡眠样本）和 workouts（HKWorkout 数组）。睡眠按起床日归属，重复推送会覆盖当晚条目；运动按 UUID 去重。",
+    appleHealthSleep: "睡眠",
+    appleHealthSleepEnable: "处理睡眠数据",
+    appleHealthWorkouts: "运动（HKWorkout）",
+    appleHealthWorkoutsEnable: "处理运动数据",
+    appleHealthMinDuration: "最短时长（分钟）",
     enableConnectorScheduler: "启用连接器轮询",
     connectorSchedulerEnabledHint: "保存后，VaultEcho 会按固定间隔轮询所有已启用的连接器来源。",
     connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步最近回看窗口内的内容。",
@@ -920,6 +998,17 @@ const englishText = {
   end: "End",
   addSlot: "Add Slot",
   connectorData: "Connector Data",
+  appleHealthTitle: "Apple Health",
+  appleHealthDesc: "Receive raw Apple Health data pushed from a device; VaultEcho aggregates and writes it into the daily note",
+  appleHealthEnable: "Enable Apple Health ingest endpoint",
+  appleHealthEnabledHint: "After a device pushes to POST /v1/api/health/ingest, VaultEcho aggregates and formats it. Receive-only; VaultEcho never pulls from a device.",
+  appleHealthDisabledHint: "Disabled. Turn this on to process pushes to /v1/api/health/ingest.",
+  appleHealthEndpointHint: "Endpoint: POST /v1/api/health/ingest (Bearer auth). The body may include sleep (samples) and workouts (HKWorkout array). Sleep is attributed to the wake day and re-pushes overwrite that night; workouts are de-duplicated by UUID.",
+  appleHealthSleep: "Sleep",
+  appleHealthSleepEnable: "Process sleep data",
+  appleHealthWorkouts: "Workouts (HKWorkout)",
+  appleHealthWorkoutsEnable: "Process workout data",
+  appleHealthMinDuration: "Minimum duration (minutes)",
   enableConnectorScheduler: "Enable connector polling",
   connectorSchedulerEnabledHint: "After saving, VaultEcho polls all enabled connector sources at the configured interval.",
   connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync the recent lookback window manually.",
@@ -1074,8 +1163,33 @@ function defaultForm() {
       schedule: { intervalMinutes: 1440 },
       sources: []
     },
+    appleHealth: {
+      enabled: false,
+      sleep: { enabled: true, output: { target: "heading", headingMarkdown: "## 今日睡眠", insertAfterHeadingMarkdown: "" } },
+      workouts: { enabled: true, minDurationMinutes: 0, output: { target: "heading", headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "" } }
+    },
     dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, sortEntriesByTime: true, slots: [] },
     reviews: { enabled: false, maxSourceChars: 60000, maxRecallChars: 16000, tasks: [] }
+  };
+}
+
+function normalizeAppleHealthForForm(source = {}) {
+  const defaults = defaultForm().appleHealth;
+  const sleep = source.sleep || {};
+  const workouts = source.workouts || {};
+  return {
+    enabled: Boolean(source.enabled),
+    sleep: {
+      enabled: sleep.enabled !== undefined ? Boolean(sleep.enabled) : defaults.sleep.enabled,
+      output: { ...defaults.sleep.output, ...(sleep.output || {}) }
+    },
+    workouts: {
+      enabled: workouts.enabled !== undefined ? Boolean(workouts.enabled) : defaults.workouts.enabled,
+      minDurationMinutes: Number.isFinite(Number(workouts.minDurationMinutes))
+        ? Number(workouts.minDurationMinutes)
+        : defaults.workouts.minDurationMinutes,
+      output: { ...defaults.workouts.output, ...(workouts.output || {}) }
+    }
   };
 }
 
@@ -1133,6 +1247,7 @@ function applyConfig(config) {
   form.ai = normalizeProviderForForm({ ...defaults.ai, ...(config.ai || {}), apiKey: "" });
   form.embedding = normalizeProviderForForm({ ...defaults.embedding, ...(config.embedding || {}), apiKey: "" });
   form.connectors = normalizeConnectorsForForm({ ...defaults.connectors, ...(config.connectors || {}) });
+  form.appleHealth = normalizeAppleHealthForForm(config.appleHealth || {});
   form.dailyNote = { ...defaults.dailyNote, ...(config.dailyNote || {}) };
   form.reviews = {
     ...defaults.reviews,
@@ -1157,6 +1272,7 @@ function toPayload() {
     ai: { ...form.ai, provider: "openai-compatible" },
     embedding: { ...form.embedding, provider: "openai-compatible" },
     connectors: stripConnectorsForSave(form.connectors),
+    appleHealth: form.appleHealth,
     dailyNote: { ...form.dailyNote, timeZone: form.timeZone },
     reviews: {
       ...form.reviews,

@@ -615,7 +615,7 @@ function stravaActivityDurationSeconds(activity) {
 // Builds the entry from whatever metrics the activity actually has. Indoor and
 // non-GPS sports lack speed/distance (and sometimes heart rate or calories), so
 // every metric is optional and simply omitted when absent.
-function formatStravaActivityEntry(activity) {
+export function formatStravaActivityEntry(activity) {
   const parts = [];
   if (activity.name) parts.push(activity.name);
   if (activity.type) parts.push(activity.type);
@@ -893,7 +893,7 @@ function xPostIdempotencyKey(x, postId) {
   return x.id === "x" ? `x-post-${postId}` : `x-post-${x.id}-${postId}`;
 }
 
-function parseHeadingMarkdown(value, fallbackLevel, fallbackMarkdown = "## Twitter") {
+export function parseHeadingMarkdown(value, fallbackLevel, fallbackMarkdown = "## Twitter") {
   const raw = String(value || fallbackMarkdown).trim();
   const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(raw);
   if (match) {

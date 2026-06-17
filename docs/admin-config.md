@@ -77,6 +77,20 @@ VaultEcho does not cache Strava activity details. `/data` only stores necessary 
 
 External callers usually should not send `at`; if they omit it, VaultEcho uses the current server time and converts it into the configured user timezone. Send `at` only when replaying a captured event from a known historical time.
 
+## Apple Health
+
+This section configures the `health/ingest` endpoint. Unlike connectors, Apple Health is receive-only: a companion device pushes raw HealthKit data to `POST /v1/api/health/ingest` (Bearer auth) and VaultEcho aggregates and formats it server-side, then writes it into the daily note. VaultEcho never pulls from a device.
+
+- `Enable Apple Health ingest endpoint`: master switch. When off, `health/ingest` returns an error.
+- Sleep and Workouts are two independent sub-sections; you can enable either one.
+- `Sleep`: VaultEcho aggregates the raw `HKCategoryValueSleepAnalysis` samples into one nightly summary line — total asleep time, in-bed time, per-stage durations (deep / core / REM / awake), and optional average heart rate and HRV. The night is attributed to the wake day (a night that starts before midnight on the 16th and ends on the morning of the 17th lands in the 17th daily note). Re-pushing the same night overwrites that night's entry, so incremental Apple Watch syncs do not create duplicates.
+- `Workouts`: each `HKWorkout` is formatted with the same entry format as the Strava activity connector (type, duration, average/max heart rate, distance, calories, device link). Each workout is de-duplicated by its UUID, so re-pushing the same workout never duplicates. `Minimum duration (minutes)` skips workouts shorter than the threshold.
+- `Insertion Target` (per sub-section): choose `Separate Heading` or `Daily Time Slot`. `Separate Heading` writes into a fixed heading such as `## 今日睡眠` or `## 今日运动`, creating a separated `---` block if missing; `Daily Time Slot` routes the entry into the matching time-slot heading by timestamp (workout start time, or sleep wake time).
+- `Target Heading Markdown`: full Markdown heading, used only when `Insertion Target` is `Separate Heading`.
+- `Create After Heading`: optional. Leave blank to insert the block after the last configured Daily Time Slot heading; fill it only to override that default insertion point.
+
+Apple Health writes share the daily-note path, heading level, line pattern, blank-line spacing, and template settings from `Daily Timestamp Insertion Rules`, and reuse the same one-week idempotency-record retention. The `Daily` top-level directory must be in `Allowed Top-Level Dirs`.
+
 ## AI Model
 
 Review tasks can call either the OpenAI-compatible Chat Completions API or the official OpenAI Responses API:

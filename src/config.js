@@ -204,6 +204,27 @@ const DEFAULT_CONNECTORS = {
   sources: []
 };
 
+const DEFAULT_APPLE_HEALTH = {
+  enabled: false,
+  sleep: {
+    enabled: true,
+    output: {
+      target: "heading",
+      headingMarkdown: "## 今日睡眠",
+      insertAfterHeadingMarkdown: ""
+    }
+  },
+  workouts: {
+    enabled: true,
+    minDurationMinutes: 0,
+    output: {
+      target: "heading",
+      headingMarkdown: "## 今日运动",
+      insertAfterHeadingMarkdown: ""
+    }
+  }
+};
+
 export function loadServerConfig(env = process.env, cwd = process.cwd()) {
   const isContainerDefault = cwd === "/app";
   const defaultDataDir = isContainerDefault ? "/data" : path.join(cwd, "data");
@@ -265,6 +286,7 @@ export function normalizeRuntimeConfig(input = {}, serverConfig, previous = {}) 
     embedding: normalizeEmbeddingConfig(input.embedding, previous.embedding, serverConfig),
     ai: normalizeAiConfig(input.ai, previous.ai, serverConfig),
     connectors: normalizeConnectorsConfig(input.connectors, previous.connectors, serverConfig),
+    appleHealth: normalizeAppleHealthConfig(input.appleHealth),
     reviews: normalizeReviewsConfig(input.reviews),
     dailyNote: {
       pathTemplate: normalizeString(dailyNote.pathTemplate, DEFAULT_DAILY_NOTE.pathTemplate),
@@ -320,6 +342,7 @@ export function publicRuntimeConfig(config) {
       apiKeySet: aiApiKeySet
     },
     connectors: publicConnectorsConfig(config.connectors),
+    appleHealth: config.appleHealth,
     reviews: config.reviews,
     dailyNote: config.dailyNote
   };
@@ -622,6 +645,41 @@ function normalizeStravaConnectorSourceConfig(input = {}, previous = {}, serverC
         fallbackOutput.insertAfterHeadingMarkdown
       )
     }
+  };
+}
+
+function normalizeAppleHealthConfig(input = {}) {
+  const source = isPlainObject(input) ? input : {};
+  const sleep = isPlainObject(source.sleep) ? source.sleep : {};
+  const workouts = isPlainObject(source.workouts) ? source.workouts : {};
+  return {
+    enabled: normalizeBoolean(source.enabled, DEFAULT_APPLE_HEALTH.enabled),
+    sleep: {
+      enabled: normalizeBoolean(sleep.enabled, DEFAULT_APPLE_HEALTH.sleep.enabled),
+      output: normalizeAppleHealthOutput(sleep.output, DEFAULT_APPLE_HEALTH.sleep.output)
+    },
+    workouts: {
+      enabled: normalizeBoolean(workouts.enabled, DEFAULT_APPLE_HEALTH.workouts.enabled),
+      minDurationMinutes: normalizeIntegerRange(
+        workouts.minDurationMinutes,
+        0,
+        240,
+        DEFAULT_APPLE_HEALTH.workouts.minDurationMinutes
+      ),
+      output: normalizeAppleHealthOutput(workouts.output, DEFAULT_APPLE_HEALTH.workouts.output)
+    }
+  };
+}
+
+function normalizeAppleHealthOutput(output, fallback) {
+  const source = isPlainObject(output) ? output : {};
+  return {
+    target: normalizeConnectorOutputTarget(source.target, fallback.target),
+    headingMarkdown: normalizeHeadingMarkdown(source.headingMarkdown, fallback.headingMarkdown),
+    insertAfterHeadingMarkdown: normalizeHeadingMarkdown(
+      source.insertAfterHeadingMarkdown,
+      fallback.insertAfterHeadingMarkdown
+    )
   };
 }
 

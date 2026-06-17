@@ -98,6 +98,7 @@ OBSIDIAN_VAULT_PATH=/path/to/headless-vault
 - `日记时间戳插入位置设置`: 默认折叠。包含日记文件路径模板、日记模板文件、缺失时自动新建、heading 层级、互不重叠的时间段、Line Format、Line Pattern、时间戳条目之间是否保留空行，以及是否按时间顺序插入时间戳条目，用于 `daily/append-by-time` 这类按时间戳写入日记 heading 的接口。
 - `Embedding`: 可配置 OpenAI-compatible `/embeddings` API 的 Base URL、Model、API Key、Dimensions、切块大小、批量大小和自动扫描间隔。
 - `AI Model`: 可配置 Chat Completions 模式给 OpenAI-compatible 网关使用，也可以配置 Responses API 模式给 OpenAI 官方前沿模型使用，供内置回顾任务调用。
+- `Apple Health`: 默认折叠。启用只接收的 `health/ingest` 端点，并分别为睡眠和运动配置设备推送数据的目标 heading（或按时间段插入）。
 - `Review Tasks`: 默认折叠。配置周、月、季、年 AI 回顾任务，包括来源目录、语义召回、提示词、运行时间和输出路径。
 
 Embedding 使用远程 `/embeddings` API 生成向量，并把索引保存到 `data/index/embeddings.json`。OpenAI 的 `text-embedding-3` 系列也仍然走这个端点，只是支持 `dimensions` 等新参数。这让 1C2G VPS 可以运行，不需要本地大模型、Qdrant、Elasticsearch 或数据库扩展。写入 API 修改文件后会按配置自动更新该文件索引；Headless Sync 从远端拉下来的变化可通过“重建索引”按钮或自动扫描间隔补偿。
@@ -226,6 +227,31 @@ curl -X POST http://localhost:8787/v1/api/daily/append-by-time \
 如果 `16:21` 命中 `下午`，会插到 `## 下午` 下最后一条 `[HH:mm]` 行之后。Web UI 可以控制日记路径模板、heading 层级、缺失日记使用的模板，以及时间戳条目之间是否保留空行。
 
 如果不传 `at`，VaultEcho 使用服务器当前时间，并按配置的用户时区来决定当天日记和命中的时间段。`at` 仍适合补写、测试，或上游系统采集时间早于请求时间的场景。
+
+### Apple 健康
+
+`health/ingest` 是一个只接收的端点，供配套设备推送 Apple 健康原始数据。VaultEcho 在服务端做聚合和格式化，省掉 iOS 端处理原始数据的麻烦。睡眠样本会聚合成一条当晚摘要（总睡眠/卧床时长、深睡/核心/REM/清醒分期、平均心率、HRV），按起床日归属；`HKWorkout` 会按与 Strava 运动一致的格式写入。目标 heading（或按时间段插入）在 Web UI 配置。
+
+```bash
+curl -X POST http://localhost:8787/v1/api/health/ingest \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sleep": {
+      "samples": [
+        { "value": "asleepDeep", "startDate": "2026-06-16T23:30:00+08:00", "endDate": "2026-06-17T00:42:00+08:00" },
+        { "value": "asleepCore", "startDate": "2026-06-17T00:42:00+08:00", "endDate": "2026-06-17T07:15:00+08:00" }
+      ],
+      "heartRate": 52,
+      "hrv": 48
+    },
+    "workouts": [
+      { "uuid": "A1B2", "type": "Running", "startDate": "2026-06-17T18:05:00+08:00", "duration": 1800, "distanceMeters": 5200 }
+    ]
+  }'
+```
+
+睡眠重复推送会覆盖当晚那条（Apple Watch 增量同步不会重复）；每条运动按 UUID 去重。
 
 ### Frontmatter
 

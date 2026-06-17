@@ -154,7 +154,8 @@ export function upsertSeparatedHeadingEntries(markdown, options) {
     linePattern,
     separator = "---",
     insertAfterHeading = "",
-    insertAfterHeadingLevel = headingLevel
+    insertAfterHeadingLevel = headingLevel,
+    replaceExisting = false
   } = options;
   const contentEntries = Array.isArray(entries)
     ? entries.map((entry) => String(entry || "").trim()).filter(Boolean)
@@ -168,7 +169,7 @@ export function upsertSeparatedHeadingEntries(markdown, options) {
   const section = findDelimitedHeadingSection(lines, heading, headingLevel, separator);
 
   if (section) {
-    return rewriteSeparatedHeading(lines, section, contentEntries, regex, separator);
+    return rewriteSeparatedHeading(lines, section, contentEntries, regex, separator, replaceExisting);
   }
 
   const insertionIndex = findSeparatedHeadingInsertIndex(lines, {
@@ -188,7 +189,29 @@ export function upsertSeparatedHeadingEntries(markdown, options) {
     replaceCount += 1;
   }
   next.splice(insertionIndex, replaceCount, ...insertion);
-  return joinLines(next);
+  return joinLines(collapseAdjacentSeparators(next, separator));
+}
+
+// A fresh separated block carries its own leading and trailing separator. When
+// two such blocks sit next to each other (e.g. a sleep block beside a workout
+// block) that produces two adjacent `---` rules; keep only one.
+function collapseAdjacentSeparators(lines, separator) {
+  const result = [];
+  let lastNonBlankIsSeparator = false;
+  for (const line of lines) {
+    if (line.trim() === separator) {
+      if (lastNonBlankIsSeparator) {
+        while (result.length && result[result.length - 1].trim() === "") result.pop();
+        continue;
+      }
+      lastNonBlankIsSeparator = true;
+      result.push(line);
+      continue;
+    }
+    if (line.trim() !== "") lastNonBlankIsSeparator = false;
+    result.push(line);
+  }
+  return result;
 }
 
 export function createSafeLineRegex(pattern) {
@@ -350,10 +373,12 @@ function findDelimitedHeadingSection(lines, heading, headingLevel, separator) {
   };
 }
 
-function rewriteSeparatedHeading(lines, section, entries, regex, separator) {
-  const existingEntries = lines
-    .slice(section.start + 1, section.contentEnd)
-    .filter((line) => regex.test(line.slice(0, 1000)));
+function rewriteSeparatedHeading(lines, section, entries, regex, separator, replaceExisting = false) {
+  const existingEntries = replaceExisting
+    ? []
+    : lines
+        .slice(section.start + 1, section.contentEnd)
+        .filter((line) => regex.test(line.slice(0, 1000)));
   const allEntries = uniqueSortedEntries([...existingEntries, ...entries]);
   const replacement = buildSeparatedHeadingLines(allEntries, {
     separator,

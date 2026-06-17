@@ -84,6 +84,7 @@ function prepareOperation(config, operation) {
       path: dailyPath,
       headingLevel: operation.headingLevel || config.dailyNote.headingLevel,
       insertAfterHeadingLevel: operation.insertAfterHeadingLevel || config.dailyNote.headingLevel,
+      replaceExisting: normalizeBoolean(operation.replaceExisting, false),
       linePattern: operation.linePattern || config.dailyNote.linePattern,
       templatePath: operation.templatePath ?? config.dailyNote.templatePath,
       createIfMissing: normalizeBoolean(operation.createIfMissing, config.dailyNote.createIfMissing),
@@ -287,7 +288,8 @@ async function upsertDailySeparatedHeading(config, targetPath, operation) {
     linePattern: operation.linePattern,
     separator: operation.separator || "---",
     insertAfterHeading: operation.insertAfterHeading || "",
-    insertAfterHeadingLevel: operation.insertAfterHeadingLevel || operation.headingLevel
+    insertAfterHeadingLevel: operation.insertAfterHeadingLevel || operation.headingLevel,
+    replaceExisting: Boolean(operation.replaceExisting)
   });
 
   await fs.mkdir(path.dirname(targetPath.absolutePath), { recursive: true });

@@ -77,6 +77,20 @@ VaultEcho 不会缓存 Strava 活动详情。`/data` 中只保存必要的 token
 
 外部调用方通常不需要传 `at`；不传时 VaultEcho 会用服务器当前时间并转换成全局用户时区。只有在补录历史事件时才建议显式传 `at`。
 
+## Apple 健康
+
+这一节配置 `health/ingest` 端点。和连接器不同，Apple 健康是只接收的：由配套设备把 HealthKit 原始数据推送到 `POST /v1/api/health/ingest`（Bearer 鉴权），VaultEcho 在服务端聚合、格式化后写入每日笔记。VaultEcho 不会主动拉取设备数据。
+
+- `启用 Apple 健康接收端点`：总开关。关闭时 `health/ingest` 直接返回错误。
+- 睡眠和运动是两个独立子项，可以只开其中一个。
+- `睡眠`：VaultEcho 把原始 `HKCategoryValueSleepAnalysis` 样本聚合成一条当晚摘要——总睡眠时长、卧床时长、各阶段时长（深睡 / 核心 / REM / 清醒），以及可选的平均心率和 HRV。一晚按起床日归属（16 号午夜前入睡、17 号早上起床的睡眠会写入 17 号日记）。重复推送同一晚会覆盖当晚那条，因此 Apple Watch 的增量同步不会产生重复。
+- `运动`：每个 `HKWorkout` 使用与 Strava 运动连接器完全一致的条目格式（类型、时长、平均/最大心率、里程、卡路里、设备链接）。每条运动按 UUID 去重，重复推送同一条不会重复写。`最短时长（分钟）` 会跳过短于阈值的运动。
+- `插入位置`（每个子项各自配置）：可选 `单独 Heading` 或 `日记时间块`。`单独 Heading` 写入固定标题，例如 `## 今日睡眠` 或 `## 今日运动`，不存在时会创建一个带 `---` 的分隔块；`日记时间块` 按时间戳（运动开始时间、或睡眠起床时间）落入对应时间段 heading。
+- `目标 Heading Markdown`：完整的 Markdown 标题，仅在 `插入位置` 为 `单独 Heading` 时使用。
+- `在该 Heading 之后插入`：可选。留空则插入到配置的最后一个日记时间段 heading 之后；只有需要覆盖默认位置时才填写。
+
+Apple 健康的写入复用 `每日时间戳插入规则` 里的日记路径、heading 层级、行匹配、空行间隔和模板设置，并复用相同的幂等记录一周保留策略。`Daily` 顶级目录必须在允许写入的顶级目录白名单中。
+
 ## AI Model
 
 Review Tasks 可以调用 OpenAI-compatible Chat Completions API，也可以调用 OpenAI 官方 Responses API：

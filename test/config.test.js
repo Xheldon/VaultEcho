@@ -151,6 +151,38 @@ test("runtime config normalizes AI API mode", async () => {
   assert.equal(fallback.ai.apiMode, "chat-completions");
 });
 
+test("runtime config normalizes Apple Health settings and exposes them publicly", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
+  const serverConfig = loadServerConfig(
+    {
+      CONFIG_PATH: path.join(root, "data", "config.json")
+    },
+    root
+  );
+
+  await saveRuntimeConfig(serverConfig, {
+    appleHealth: {
+      enabled: true,
+      sleep: { enabled: true, output: { target: "time-slot", headingMarkdown: "## 今日睡眠" } },
+      workouts: { enabled: false, minDurationMinutes: 999, output: { target: "invalid", headingMarkdown: "### 运动" } }
+    }
+  });
+
+  const loaded = await loadRuntimeConfig(serverConfig);
+  assert.equal(loaded.appleHealth.enabled, true);
+  assert.equal(loaded.appleHealth.sleep.output.target, "time-slot");
+  assert.equal(loaded.appleHealth.sleep.output.headingMarkdown, "## 今日睡眠");
+  assert.equal(loaded.appleHealth.workouts.enabled, false);
+  // Out-of-range minutes fall back; an invalid target falls back to the default heading.
+  assert.equal(loaded.appleHealth.workouts.minDurationMinutes, 0);
+  assert.equal(loaded.appleHealth.workouts.output.target, "heading");
+  assert.equal(loaded.appleHealth.workouts.output.headingMarkdown, "### 运动");
+
+  const publicConfig = publicRuntimeConfig(loaded);
+  assert.equal(publicConfig.appleHealth.enabled, true);
+  assert.equal(publicConfig.appleHealth.sleep.output.headingMarkdown, "## 今日睡眠");
+});
+
 test("runtime config normalizes review exclude paths", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vault-config-"));
   const serverConfig = loadServerConfig(

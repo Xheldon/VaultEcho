@@ -18,6 +18,7 @@ export const API_ALIASES = {
   reviews: "reviews/status",
   connector: "connectors/run",
   connectors: "connectors/status",
+  health: "health/ingest",
   script: "batch",
   uri: "uri/execute",
   active: "unsupported/active",
@@ -571,6 +572,46 @@ export const API_ENDPOINTS = [
   -H "Authorization: Bearer change-me" \\
   -H "Content-Type: application/json" \\
   -d '{ "connectorId": "x" }'`
+  },
+  {
+    route: "health/ingest",
+    method: "POST",
+    title: "Ingest Apple Health Data",
+    summary: "Receives raw Apple Health sleep samples and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Routing, target headings (or time-slot insertion), and idempotency come from the Apple Health Web UI settings; sleep is attributed to the wake day and re-pushes overwrite that night's entry, while each workout is de-duplicated by its UUID.",
+    scenarios: [
+      "A companion iOS app posts the night's sleep-stage samples after waking; VaultEcho aggregates total/in-bed time, per-stage durations, average heart rate, and HRV into one daily-note line.",
+      "An iOS automation posts finished HKWorkout sessions; VaultEcho formats each one like the Strava activity entry and writes it under the configured workout heading.",
+      "A device pushes both sleep and workouts in one request after a HealthKit sync."
+    ],
+    params: [
+      ["sleep", "Optional. Either an array of sleep-stage samples or an object `{ samples: [...], heartRate, hrv }`. Each sample needs `value` (HKCategoryValueSleepAnalysis number or identifier such as `asleepDeep`), `startDate`, and `endDate`. `heartRate`/`hrv` accept a single average number or an array of `{ value }` samples."],
+      ["workouts", "Optional. An array of HKWorkout objects (or a single object). Recognized fields: `uuid`/`id`, `startDate`, `endDate` or `duration` (seconds), `workoutActivityType`/`activityType`/`type` (number or label), `totalDistance`/`distanceMeters`/`distanceKm`, `totalEnergyBurned`/`calories`, `averageHeartRate`, `maxHeartRate`, `deviceName`/`sourceName`."]
+    ],
+    curl: `curl -X POST http://localhost:8787/v1/api/health/ingest \\
+  -H "Authorization: Bearer change-me" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "sleep": {
+      "samples": [
+        { "value": "asleepDeep", "startDate": "2026-06-16T23:30:00+08:00", "endDate": "2026-06-17T00:42:00+08:00" },
+        { "value": "asleepCore", "startDate": "2026-06-17T00:42:00+08:00", "endDate": "2026-06-17T05:02:00+08:00" },
+        { "value": "asleepREM", "startDate": "2026-06-17T05:02:00+08:00", "endDate": "2026-06-17T07:15:00+08:00" }
+      ],
+      "heartRate": 52,
+      "hrv": 48
+    },
+    "workouts": [
+      {
+        "uuid": "A1B2",
+        "type": "Running",
+        "startDate": "2026-06-17T18:05:00+08:00",
+        "duration": 1800,
+        "distanceMeters": 5200,
+        "averageHeartRate": 150,
+        "deviceName": "Apple Watch Series 10"
+      }
+    ]
+  }'`
   },
   {
     route: "tags/list",

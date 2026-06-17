@@ -204,6 +204,12 @@ const DEFAULT_CONNECTORS = {
   sources: []
 };
 
+export const DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE =
+  "[{{time}}] {{#name}}{{name}}，{{/name}}{{type}}{{#duration}}，运动时间 {{duration}}{{/duration}}{{#totalDuration}}，总耗时 {{totalDuration}}{{/totalDuration}}{{#avgHeartRate}}，平均心率 {{avgHeartRate}} bpm{{/avgHeartRate}}{{#maxHeartRate}}，最大心率 {{maxHeartRate}} bpm{{/maxHeartRate}}{{#distance}}，总里程 {{distance}} km{{/distance}}{{#elevationGain}}，累计爬升 {{elevationGain}} m{{/elevationGain}}{{#avgSpeed}}，平均速度 {{avgSpeed}} km/h{{/avgSpeed}}{{#maxSpeed}}，最大速度 {{maxSpeed}} km/h{{/maxSpeed}}{{#calories}}，卡路里 {{calories}} kcal{{/calories}}{{#device}}，[[{{device}}]]{{/device}}。";
+
+export const DEFAULT_APPLE_HEALTH_SLEEP_TEMPLATE =
+  "[{{wakeTime}}] 睡眠 {{asleep}}{{#inBed}}（卧床{{inBed}}）{{/inBed}}{{#stages}}｜{{stages}}{{/stages}}{{#vitals}}｜{{vitals}}{{/vitals}}";
+
 const DEFAULT_APPLE_HEALTH = {
   enabled: false,
   sleep: {
@@ -211,7 +217,8 @@ const DEFAULT_APPLE_HEALTH = {
     output: {
       target: "heading",
       headingMarkdown: "## 今日睡眠",
-      insertAfterHeadingMarkdown: ""
+      insertAfterHeadingMarkdown: "",
+      contentTemplate: DEFAULT_APPLE_HEALTH_SLEEP_TEMPLATE
     }
   },
   workouts: {
@@ -220,7 +227,8 @@ const DEFAULT_APPLE_HEALTH = {
     output: {
       target: "heading",
       headingMarkdown: "## 今日运动",
-      insertAfterHeadingMarkdown: ""
+      insertAfterHeadingMarkdown: "",
+      contentTemplate: DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE
     }
   }
 };
@@ -679,7 +687,10 @@ function normalizeAppleHealthOutput(output, fallback) {
     insertAfterHeadingMarkdown: normalizeHeadingMarkdown(
       source.insertAfterHeadingMarkdown,
       fallback.insertAfterHeadingMarkdown
-    )
+    ),
+    // An empty template falls back to the default; trailing/leading whitespace
+    // is trimmed since the entry is a single line.
+    contentTemplate: normalizeString(source.contentTemplate, fallback.contentTemplate)
   };
 }
 

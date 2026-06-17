@@ -98,7 +98,7 @@ OBSIDIAN_VAULT_PATH=/path/to/headless-vault
 - `日记时间戳插入位置设置`: 默认折叠。包含日记文件路径模板、日记模板文件、缺失时自动新建、heading 层级、互不重叠的时间段、Line Format、Line Pattern、时间戳条目之间是否保留空行，以及是否按时间顺序插入时间戳条目，用于 `daily/append-by-time` 这类按时间戳写入日记 heading 的接口。
 - `Embedding`: 可配置 OpenAI-compatible `/embeddings` API 的 Base URL、Model、API Key、Dimensions、切块大小、批量大小和自动扫描间隔。
 - `AI Model`: 可配置 Chat Completions 模式给 OpenAI-compatible 网关使用，也可以配置 Responses API 模式给 OpenAI 官方前沿模型使用，供内置回顾任务调用。
-- `Apple Health`: 默认折叠。启用只接收的 `health/ingest` 端点，并分别为睡眠和运动配置设备推送数据的目标 heading（或按时间段插入）。
+- `Apple Health`: 默认折叠。启用只接收的 `health/ingest` 端点，并分别为睡眠和运动配置设备推送数据的目标 heading（或按时间段插入），以及带占位符的写入模板（条件段会自动省略缺失指标）。
 - `Review Tasks`: 默认折叠。配置周、月、季、年 AI 回顾任务，包括来源目录、语义召回、提示词、运行时间和输出路径。
 
 Embedding 使用远程 `/embeddings` API 生成向量，并把索引保存到 `data/index/embeddings.json`。OpenAI 的 `text-embedding-3` 系列也仍然走这个端点，只是支持 `dimensions` 等新参数。这让 1C2G VPS 可以运行，不需要本地大模型、Qdrant、Elasticsearch 或数据库扩展。写入 API 修改文件后会按配置自动更新该文件索引；Headless Sync 从远端拉下来的变化可通过“重建索引”按钮或自动扫描间隔补偿。

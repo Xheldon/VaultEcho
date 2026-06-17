@@ -223,6 +223,35 @@ test("does not create the daily note when createIfMissing is off", async () => {
   assert.equal(await fs.access(path.join(root, "vault", "Daily", "2026-06-17.md")).then(() => true).catch(() => false), false);
 });
 
+test("a custom content template renders placeholders and drops absent metrics", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+  config.appleHealth.workouts.output.contentTemplate =
+    "[{{time}}] {{type}}{{#duration}}｜{{duration}}{{/duration}}{{#distance}}｜{{distance}}km{{/distance}}{{#maxHeartRate}}｜最高{{maxHeartRate}}bpm{{/maxHeartRate}}";
+  config.appleHealth.sleep.output.contentTemplate =
+    "[{{wakeTime}}] 起床{{wakeTime}}，睡了{{asleep}}{{#maxHeartRate}}，最高心率{{maxHeartRate}}{{/maxHeartRate}}{{#wristTemperature}}，手腕{{wristTemperature}}℃{{/wristTemperature}}";
+
+  await ingestHealth(config, {
+    sleep: {
+      samples: [{ value: "asleepCore", startDate: "2026-06-16T23:30:00+08:00", endDate: "2026-06-17T07:10:00+08:00" }],
+      heartRate: [{ value: 48 }, { value: 70 }],
+      wristTemperature: 36.4
+    },
+    workouts: [
+      { uuid: "run", type: "Running", startDate: "2026-06-17T07:30:00+08:00", duration: 1800, distanceMeters: 5000, maxHeartRate: 172 },
+      { uuid: "gym", type: "Strength Training", startDate: "2026-06-17T19:00:00+08:00", duration: 2400 }
+    ]
+  });
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  // Full-metric workout renders everything.
+  assert.match(daily, /\[07:30\] Running｜30分钟｜5\.00km｜最高172bpm/);
+  // Indoor workout has no distance/HR: those conditional sections drop cleanly.
+  assert.match(daily, /\[19:00\] Strength Training｜40分钟$/m);
+  // Sleep uses max heart rate from the sample array and wrist temperature.
+  assert.match(daily, /\[07:10\] 起床07:10，睡了7小时40分，最高心率70，手腕36\.4℃/);
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

@@ -615,7 +615,7 @@ function stravaActivityDurationSeconds(activity) {
 // Builds the entry from whatever metrics the activity actually has. Indoor and
 // non-GPS sports lack speed/distance (and sometimes heart rate or calories), so
 // every metric is optional and simply omitted when absent.
-export function formatStravaActivityEntry(activity) {
+function formatStravaActivityEntry(activity) {
   const parts = [];
   if (activity.name) parts.push(activity.name);
   if (activity.type) parts.push(activity.type);

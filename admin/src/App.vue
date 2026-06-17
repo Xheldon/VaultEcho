@@ -467,6 +467,21 @@
                       <div class="form-hint">{{ t("stravaInsertAfterHeadingHint") }}</div>
                     </el-form-item>
                   </el-col>
+                  <el-col :xs="24">
+                    <el-form-item>
+                      <template #label>
+                        {{ t("appleHealthTemplate") }}
+                        <el-tooltip placement="top" effect="dark">
+                          <template #content>
+                            <div class="placeholder-help">{{ t("appleHealthSleepPlaceholders") }}</div>
+                          </template>
+                          <el-icon class="placeholder-help-icon"><InfoFilled /></el-icon>
+                        </el-tooltip>
+                      </template>
+                      <el-input v-model="form.appleHealth.sleep.output.contentTemplate" type="textarea" :rows="3" />
+                      <div class="form-hint">{{ t("appleHealthTemplateHint") }}</div>
+                    </el-form-item>
+                  </el-col>
                 </el-row>
 
                 <div class="subsection-title">{{ t("appleHealthWorkouts") }}</div>
@@ -492,6 +507,21 @@
                     <el-form-item :label="t('stravaInsertAfterHeadingMarkdown')">
                       <el-input v-model="form.appleHealth.workouts.output.insertAfterHeadingMarkdown" :placeholder="t('stravaInsertAfterHeadingPlaceholder')" />
                       <div class="form-hint">{{ t("stravaInsertAfterHeadingHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24">
+                    <el-form-item>
+                      <template #label>
+                        {{ t("appleHealthTemplate") }}
+                        <el-tooltip placement="top" effect="dark">
+                          <template #content>
+                            <div class="placeholder-help">{{ t("appleHealthWorkoutPlaceholders") }}</div>
+                          </template>
+                          <el-icon class="placeholder-help-icon"><InfoFilled /></el-icon>
+                        </el-tooltip>
+                      </template>
+                      <el-input v-model="form.appleHealth.workouts.output.contentTemplate" type="textarea" :rows="3" />
+                      <div class="form-hint">{{ t("appleHealthTemplateHint") }}</div>
                     </el-form-item>
                   </el-col>
                 </el-row>
@@ -574,11 +604,16 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import en from "element-plus/es/locale/lang/en";
-import { Check, Delete, Plus, Refresh } from "@element-plus/icons-vue";
+import { Check, Delete, InfoFilled, Plus, Refresh } from "@element-plus/icons-vue";
 import DirectorySelector from "./components/DirectorySelector.vue";
 import ModelForm from "./components/ModelForm.vue";
 import ReviewTaskCard from "./components/ReviewTaskCard.vue";
 import SectionTitle from "./components/SectionTitle.vue";
+
+const DEFAULT_AH_WORKOUT_TEMPLATE =
+  "[{{time}}] {{#name}}{{name}}，{{/name}}{{type}}{{#duration}}，运动时间 {{duration}}{{/duration}}{{#totalDuration}}，总耗时 {{totalDuration}}{{/totalDuration}}{{#avgHeartRate}}，平均心率 {{avgHeartRate}} bpm{{/avgHeartRate}}{{#maxHeartRate}}，最大心率 {{maxHeartRate}} bpm{{/maxHeartRate}}{{#distance}}，总里程 {{distance}} km{{/distance}}{{#elevationGain}}，累计爬升 {{elevationGain}} m{{/elevationGain}}{{#avgSpeed}}，平均速度 {{avgSpeed}} km/h{{/avgSpeed}}{{#maxSpeed}}，最大速度 {{maxSpeed}} km/h{{/maxSpeed}}{{#calories}}，卡路里 {{calories}} kcal{{/calories}}{{#device}}，[[{{device}}]]{{/device}}。";
+const DEFAULT_AH_SLEEP_TEMPLATE =
+  "[{{wakeTime}}] 睡眠 {{asleep}}{{#inBed}}（卧床{{inBed}}）{{/inBed}}{{#stages}}｜{{stages}}{{/stages}}{{#vitals}}｜{{vitals}}{{/vitals}}";
 
 const legacyAllowedDirs = ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Reviews", "Templates", "Attachments", "Archive"];
 const legacyTaskDirs = ["Daily", "Inbox", "Notes", "Ideas", "Projects"];
@@ -673,6 +708,12 @@ const translations = {
     appleHealthWorkouts: "运动（HKWorkout）",
     appleHealthWorkoutsEnable: "处理运动数据",
     appleHealthMinDuration: "最短时长（分钟）",
+    appleHealthTemplate: "写入模板",
+    appleHealthTemplateHint: "用占位符 + 文本自定义写入格式。用条件段 {{#字段}}…{{/字段}} 包住的内容，在该字段没有数据时整段省略（含标签和分隔符）。建议以 [{{time}}] 或 [{{wakeTime}}] 开头以便按时间排序；留空恢复默认格式。鼠标悬停左侧图标查看全部占位符。",
+    appleHealthSleepPlaceholders:
+      "睡眠占位符（有数据才显示）：\n{{wakeTime}} 起床  {{bedTime}} 入睡  {{date}} 日期\n{{asleep}} 总睡眠  {{inBed}} 卧床\n{{deep}}/{{core}}/{{rem}}/{{awake}} 各阶段时长\n{{latency}} 入睡延迟  {{awakenings}} 醒来次数\n{{avgHeartRate}}/{{minHeartRate}}/{{maxHeartRate}} 心率 bpm\n{{hrv}} HRV ms  {{respiratoryRate}} 呼吸率  {{wristTemperature}} 手腕温度  {{spo2}} 血氧%\n{{stages}} 分期合并  {{vitals}} 心率·HRV 合并\n条件段示例：{{#maxHeartRate}}，最高心率{{maxHeartRate}} bpm{{/maxHeartRate}}",
+    appleHealthWorkoutPlaceholders:
+      "运动占位符（有数据才显示）：\n{{time}} 开始时间  {{date}} 日期  {{type}} 类型  {{name}} 名称\n{{duration}} 运动时长  {{totalDuration}} 总耗时\n{{distance}} 里程(km)  {{avgPace}} 配速  {{avgSpeed}}/{{maxSpeed}} 速度 km/h\n{{avgHeartRate}}/{{maxHeartRate}} 心率 bpm  {{calories}} 卡路里\n{{elevationGain}} 爬升 m  {{flightsClimbed}} 爬楼层数  {{steps}} 步数  {{device}} 设备\n条件段示例：{{#distance}}，总里程 {{distance}} km{{/distance}}",
     enableConnectorScheduler: "启用连接器轮询",
     connectorSchedulerEnabledHint: "保存后，VaultEcho 会按固定间隔轮询所有已启用的连接器来源。",
     connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步最近回看窗口内的内容。",
@@ -1009,6 +1050,12 @@ const englishText = {
   appleHealthWorkouts: "Workouts (HKWorkout)",
   appleHealthWorkoutsEnable: "Process workout data",
   appleHealthMinDuration: "Minimum duration (minutes)",
+  appleHealthTemplate: "Write template",
+  appleHealthTemplateHint: "Customize the line with placeholders and text. Content wrapped in a conditional section {{#field}}…{{/field}} is dropped entirely (label and separator included) when that field has no data. Start with [{{time}}] or [{{wakeTime}}] so entries sort by time; leave empty to restore the default. Hover the icon on the left for all placeholders.",
+  appleHealthSleepPlaceholders:
+    "Sleep placeholders (shown only when present):\n{{wakeTime}} wake  {{bedTime}} fell asleep  {{date}} date\n{{asleep}} total sleep  {{inBed}} time in bed\n{{deep}}/{{core}}/{{rem}}/{{awake}} stage durations\n{{latency}} sleep latency  {{awakenings}} awakenings\n{{avgHeartRate}}/{{minHeartRate}}/{{maxHeartRate}} heart rate bpm\n{{hrv}} HRV ms  {{respiratoryRate}} respiratory  {{wristTemperature}} wrist temp  {{spo2}} SpO2%\n{{stages}} stages joined  {{vitals}} HR·HRV joined\nConditional example: {{#maxHeartRate}}, max HR {{maxHeartRate}} bpm{{/maxHeartRate}}",
+  appleHealthWorkoutPlaceholders:
+    "Workout placeholders (shown only when present):\n{{time}} start  {{date}} date  {{type}} type  {{name}} name\n{{duration}} duration  {{totalDuration}} elapsed\n{{distance}} distance(km)  {{avgPace}} pace  {{avgSpeed}}/{{maxSpeed}} speed km/h\n{{avgHeartRate}}/{{maxHeartRate}} heart rate bpm  {{calories}} calories\n{{elevationGain}} elevation m  {{flightsClimbed}} flights  {{steps}} steps  {{device}} device\nConditional example: {{#distance}}, distance {{distance}} km{{/distance}}",
   enableConnectorScheduler: "Enable connector polling",
   connectorSchedulerEnabledHint: "After saving, VaultEcho polls all enabled connector sources at the configured interval.",
   connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync the recent lookback window manually.",
@@ -1165,8 +1212,8 @@ function defaultForm() {
     },
     appleHealth: {
       enabled: false,
-      sleep: { enabled: true, output: { target: "heading", headingMarkdown: "## 今日睡眠", insertAfterHeadingMarkdown: "" } },
-      workouts: { enabled: true, minDurationMinutes: 0, output: { target: "heading", headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "" } }
+      sleep: { enabled: true, output: { target: "heading", headingMarkdown: "## 今日睡眠", insertAfterHeadingMarkdown: "", contentTemplate: DEFAULT_AH_SLEEP_TEMPLATE } },
+      workouts: { enabled: true, minDurationMinutes: 0, output: { target: "heading", headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "", contentTemplate: DEFAULT_AH_WORKOUT_TEMPLATE } }
     },
     dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, sortEntriesByTime: true, slots: [] },
     reviews: { enabled: false, maxSourceChars: 60000, maxRecallChars: 16000, tasks: [] }

@@ -676,3 +676,17 @@ code {
     justify-content: flex-start;
   }
 }
+
+.placeholder-help {
+  max-width: 380px;
+  white-space: pre-line;
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+.placeholder-help-icon {
+  margin-left: 4px;
+  cursor: help;
+  vertical-align: -2px;
+  color: var(--el-color-info);
+}

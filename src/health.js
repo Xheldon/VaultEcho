@@ -1,5 +1,9 @@
-import { formatStravaActivityEntry, parseHeadingMarkdown } from "./connectors.js";
-import { buildDailyPath, getDateTimeParts } from "./time.js";
+import { parseHeadingMarkdown } from "./connectors.js";
+import {
+  DEFAULT_APPLE_HEALTH_SLEEP_TEMPLATE,
+  DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE
+} from "./config.js";
+import { getDateTimeParts } from "./time.js";
 import { executeOperation } from "./vault.js";
 
 // Maximum number of raw samples accepted in a single ingest, guarding against
@@ -96,15 +100,13 @@ async function ingestSleep(config, sleepConfig, payload, timeZone) {
     }
 
     const parts = getDateTimeParts(aggregate.wakeDate, timeZone);
-    const heartRate = resolveAverage(session.heartRate);
-    const hrv = resolveAverage(session.hrv);
-    const body = formatSleepBody(aggregate, { heartRate, hrv });
-    const line = `[${parts.HH}:${parts.mm}] ${body}`;
+    const vars = buildSleepVars(aggregate, session, timeZone);
+    const entry = buildEntryFromTemplate(sleepConfig.output, DEFAULT_APPLE_HEALTH_SLEEP_TEMPLATE, vars, vars.wakeTime);
 
     const write = await writeDailyEntry(config, sleepConfig.output, {
       at: aggregate.wakeDate.toISOString(),
-      line,
-      body,
+      line: entry.line,
+      body: entry.body,
       idempotencyKey: sleepIdempotencyKey(session, aggregate),
       replayIfResultMissing: true
     });
@@ -116,8 +118,8 @@ async function ingestSleep(config, sleepConfig, payload, timeZone) {
       asleepMinutes: aggregate.asleepMinutes,
       inBedMinutes: aggregate.inBedMinutes,
       stages: aggregate.stages,
-      heartRate,
-      hrv,
+      heartRate: vars.avgHeartRate ?? null,
+      hrv: vars.hrv ?? null,
       path: write.path,
       idempotent: Boolean(write.idempotent)
     });
@@ -139,6 +141,9 @@ function buildSleepSession(source) {
     samples: extractSleepSamples(source),
     heartRate: source?.heartRate ?? source?.heartRates ?? source?.avgHeartRate,
     hrv: source?.hrv ?? source?.heartRateVariability ?? source?.hrvSdnn,
+    respiratoryRate: source?.respiratoryRate ?? source?.respiratory ?? source?.breathingRate,
+    wristTemperature: source?.wristTemperature ?? source?.wristTemp ?? source?.temperature,
+    spo2: source?.spo2 ?? source?.oxygenSaturation ?? source?.bloodOxygen,
     id: firstString(source?.id, source?.uuid, source?.sessionId)
   };
 }
@@ -198,6 +203,8 @@ function aggregateSleep(samples) {
   let wakeDate = samples[0].end;
   let startDate = samples[0].start;
   let asleepStartDate = null;
+  let inBedStartDate = null;
+  let awakeCount = 0;
   for (const sample of samples) {
     const minutes = (sample.end.getTime() - sample.start.getTime()) / 60000;
     if (stageMinutes[sample.stage] !== undefined) {
@@ -208,7 +215,16 @@ function aggregateSleep(samples) {
     if (ASLEEP_STAGES.has(sample.stage) && (!asleepStartDate || sample.start < asleepStartDate)) {
       asleepStartDate = sample.start;
     }
+    if (sample.stage === "inBed" && (!inBedStartDate || sample.start < inBedStartDate)) {
+      inBedStartDate = sample.start;
+    }
+    if (sample.stage === "awake") awakeCount += 1;
   }
+
+  // Sleep latency: from getting in bed to first falling asleep.
+  const latencyMinutes = inBedStartDate && asleepStartDate && asleepStartDate > inBedStartDate
+    ? (asleepStartDate.getTime() - inBedStartDate.getTime()) / 60000
+    : 0;
 
   const asleepMinutes = stageMinutes.core + stageMinutes.deep + stageMinutes.rem + stageMinutes.asleep;
   return {
@@ -217,6 +233,8 @@ function aggregateSleep(samples) {
     wakeDate,
     asleepMinutes,
     inBedMinutes: stageMinutes.inBed,
+    latencyMinutes,
+    awakenings: awakeCount,
     stages: {
       deep: Math.round(stageMinutes.deep),
       core: Math.round(stageMinutes.core),
@@ -226,27 +244,52 @@ function aggregateSleep(samples) {
   };
 }
 
-function formatSleepBody(aggregate, { heartRate, hrv }) {
-  const segments = [];
+// Builds the placeholder variables for the sleep template. Only meaningful
+// values are set; absent ones stay undefined so conditional sections drop them.
+function buildSleepVars(aggregate, session, timeZone) {
+  const vars = {
+    wakeTime: timeOfDay(aggregate.wakeDate, timeZone),
+    date: getDateTimeParts(aggregate.wakeDate, timeZone)["yyyy-MM-dd"],
+    asleep: formatSleepDuration(aggregate.asleepMinutes)
+  };
+  if (aggregate.asleepStartDate) vars.bedTime = timeOfDay(aggregate.asleepStartDate, timeZone);
+  if (aggregate.inBedMinutes > 0) vars.inBed = formatSleepDuration(aggregate.inBedMinutes);
+  if (aggregate.stages.deep > 0) vars.deep = formatSleepDuration(aggregate.stages.deep);
+  if (aggregate.stages.core > 0) vars.core = formatSleepDuration(aggregate.stages.core);
+  if (aggregate.stages.rem > 0) vars.rem = formatSleepDuration(aggregate.stages.rem);
+  if (aggregate.stages.awake > 0) vars.awake = formatSleepDuration(aggregate.stages.awake);
+  if (aggregate.latencyMinutes > 0) vars.latency = formatSleepDuration(aggregate.latencyMinutes);
+  if (aggregate.awakenings > 0) vars.awakenings = aggregate.awakenings;
 
-  const bedSuffix = aggregate.inBedMinutes > 0
-    ? `（卧床${formatSleepDuration(aggregate.inBedMinutes)}）`
-    : "";
-  segments.push(`睡眠 ${formatSleepDuration(aggregate.asleepMinutes)}${bedSuffix}`);
+  const hr = resolveStats(session.heartRate);
+  if (positiveNumber(hr.avg)) vars.avgHeartRate = Math.round(hr.avg);
+  if (positiveNumber(hr.min)) vars.minHeartRate = Math.round(hr.min);
+  if (positiveNumber(hr.max)) vars.maxHeartRate = Math.round(hr.max);
+  const hrv = resolveAverage(session.hrv);
+  if (positiveNumber(hrv)) vars.hrv = Math.round(hrv);
+  const respiratoryRate = resolveAverage(session.respiratoryRate);
+  if (positiveNumber(respiratoryRate)) vars.respiratoryRate = round1(respiratoryRate);
+  const wristTemperature = resolveAverage(session.wristTemperature);
+  if (wristTemperature !== null && wristTemperature !== 0) vars.wristTemperature = round1(wristTemperature);
+  const spo2 = resolveAverage(session.spo2);
+  if (positiveNumber(spo2)) vars.spo2 = Math.round(spo2 <= 1 ? spo2 * 100 : spo2);
 
-  const stageParts = [];
-  if (aggregate.stages.deep > 0) stageParts.push(`深睡${formatSleepDuration(aggregate.stages.deep)}`);
-  if (aggregate.stages.core > 0) stageParts.push(`核心${formatSleepDuration(aggregate.stages.core)}`);
-  if (aggregate.stages.rem > 0) stageParts.push(`REM${formatSleepDuration(aggregate.stages.rem)}`);
-  if (aggregate.stages.awake > 0) stageParts.push(`清醒${formatSleepDuration(aggregate.stages.awake)}`);
-  if (stageParts.length) segments.push(stageParts.join("·"));
+  // Convenience groups used by the default template (stage breakdown joined by
+  // "·", and the two core vitals), so the default output stays compact.
+  const stageParts = [
+    vars.deep && `深睡${vars.deep}`,
+    vars.core && `核心${vars.core}`,
+    vars.rem && `REM${vars.rem}`,
+    vars.awake && `清醒${vars.awake}`
+  ].filter(Boolean);
+  if (stageParts.length) vars.stages = stageParts.join("·");
+  const vitalParts = [
+    vars.avgHeartRate && `平均心率${vars.avgHeartRate} bpm`,
+    vars.hrv && `HRV ${vars.hrv} ms`
+  ].filter(Boolean);
+  if (vitalParts.length) vars.vitals = vitalParts.join("·");
 
-  const vitalParts = [];
-  if (positiveNumber(heartRate)) vitalParts.push(`平均心率${Math.round(heartRate)} bpm`);
-  if (positiveNumber(hrv)) vitalParts.push(`HRV ${Math.round(hrv)} ms`);
-  if (vitalParts.length) segments.push(vitalParts.join("·"));
-
-  return segments.join("｜");
+  return vars;
 }
 
 function formatSleepDuration(minutes) {
@@ -269,12 +312,12 @@ async function ingestWorkouts(config, workoutsConfig, rawWorkouts, timeZone) {
   const entries = [];
   const writes = [];
   for (const activity of activities) {
-    const line = formatStravaActivityEntry(activity);
-    const body = line.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+    const vars = buildWorkoutVars(activity);
+    const entry = buildEntryFromTemplate(workoutsConfig.output, DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE, vars, vars.time);
     const write = await writeDailyEntry(config, workoutsConfig.output, {
       at: activity.startDate.toISOString(),
-      line,
-      body,
+      line: entry.line,
+      body: entry.body,
       idempotencyKey: `apple-workout-${activity.id}`,
       replayIfResultMissing: true
     });
@@ -296,6 +339,11 @@ function normalizeWorkout(raw, timeZone) {
   if (name && name === type) name = "";
   const durationSeconds = numberOrNull(raw.duration ?? raw.movingTime)
     ?? (end ? (end.getTime() - start.getTime()) / 1000 : null);
+  const distanceMeters = resolveDistanceMeters(raw);
+  const avgPaceSecPerKm = numberOrNull(raw.averagePaceSecondsPerKm)
+    ?? (positiveNumber(distanceMeters) && positiveNumber(durationSeconds)
+      ? durationSeconds / (distanceMeters / 1000)
+      : null);
 
   return {
     id: workoutId(raw, start, type),
@@ -304,17 +352,44 @@ function normalizeWorkout(raw, timeZone) {
     startDate: start,
     HH: parts.HH,
     mm: parts.mm,
+    date: parts["yyyy-MM-dd"],
     movingTimeSeconds: durationSeconds,
     elapsedTimeSeconds: end ? (end.getTime() - start.getTime()) / 1000 : null,
     averageHeartrate: numberOrNull(raw.averageHeartRate ?? raw.avgHeartRate ?? raw.averageHeartrate),
     maxHeartrate: numberOrNull(raw.maxHeartRate ?? raw.maximumHeartRate ?? raw.maxHeartrate),
-    distanceMeters: resolveDistanceMeters(raw),
+    distanceMeters,
     elevationGainMeters: numberOrNull(raw.elevationGain ?? raw.totalElevationGain ?? raw.elevation),
     averageSpeed: numberOrNull(raw.averageSpeed),
     maxSpeed: numberOrNull(raw.maxSpeed),
+    avgPaceSecPerKm,
+    flightsClimbed: numberOrNull(raw.flightsClimbed ?? raw.flights),
+    steps: numberOrNull(raw.steps ?? raw.stepCount),
     calories: resolveCalories(raw),
     deviceName: cleanDeviceName(raw.deviceName ?? raw.device ?? raw.sourceName ?? raw.source ?? "")
   };
+}
+
+// Builds the placeholder variables for the workout template. Only meaningful
+// values are set; absent ones stay undefined so conditional sections drop them.
+function buildWorkoutVars(activity) {
+  const vars = { time: `${activity.HH}:${activity.mm}`, date: activity.date, type: activity.type };
+  if (activity.name) vars.name = activity.name;
+  if (positiveNumber(activity.movingTimeSeconds)) vars.duration = formatWorkoutDuration(activity.movingTimeSeconds);
+  if (positiveNumber(activity.elapsedTimeSeconds)) vars.totalDuration = formatWorkoutDuration(activity.elapsedTimeSeconds);
+  if (positiveNumber(activity.averageHeartrate)) vars.avgHeartRate = Math.round(activity.averageHeartrate);
+  if (positiveNumber(activity.maxHeartrate)) vars.maxHeartRate = Math.round(activity.maxHeartrate);
+  if (positiveNumber(activity.distanceMeters)) vars.distance = (activity.distanceMeters / 1000).toFixed(2);
+  if (finiteNumber(activity.elevationGainMeters) && activity.elevationGainMeters !== 0) {
+    vars.elevationGain = Math.round(activity.elevationGainMeters);
+  }
+  if (positiveNumber(activity.averageSpeed)) vars.avgSpeed = (activity.averageSpeed * 3.6).toFixed(1);
+  if (positiveNumber(activity.maxSpeed)) vars.maxSpeed = (activity.maxSpeed * 3.6).toFixed(1);
+  if (positiveNumber(activity.avgPaceSecPerKm)) vars.avgPace = formatPace(activity.avgPaceSecPerKm);
+  if (positiveNumber(activity.flightsClimbed)) vars.flightsClimbed = Math.round(activity.flightsClimbed);
+  if (positiveNumber(activity.steps)) vars.steps = Math.round(activity.steps);
+  if (positiveNumber(activity.calories)) vars.calories = Math.round(activity.calories);
+  if (activity.deviceName) vars.device = activity.deviceName;
+  return vars;
 }
 
 function workoutDurationSeconds(activity) {
@@ -398,6 +473,43 @@ function resolveInsertAfterHeading(config, output) {
   };
 }
 
+// ----- template rendering -----
+
+// Renders the configured line and derives the heading entry (with the [HH:mm]
+// prefix needed for sorting) and the time-slot body (without the prefix).
+function buildEntryFromTemplate(output, defaultTemplate, vars, timeStr) {
+  const template = String(output?.contentTemplate || "").trim() || defaultTemplate;
+  let rendered = renderHealthTemplate(template, vars);
+  if (!/^\[\d{2}:\d{2}\]/.test(rendered)) {
+    // The heading block sorts by the leading [HH:mm]; ensure one is present even
+    // if the user removed it from the template.
+    rendered = `[${timeStr}] ${rendered}`.trim();
+  }
+  const body = rendered.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+  return { line: rendered, body };
+}
+
+// A tiny template engine: {{#key}}...{{/key}} renders the inner block only when
+// the variable is present, and {{key}} substitutes the value (empty when absent).
+// Conditional sections let absent metrics drop their own label and separator.
+function renderHealthTemplate(template, vars) {
+  const withSections = template.replace(
+    /\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g,
+    (match, key, inner) => (isPresent(vars[key]) ? inner : "")
+  );
+  const substituted = withSections.replace(
+    /\{\{(\w+)\}\}/g,
+    (match, key) => (isPresent(vars[key]) ? String(vars[key]) : "")
+  );
+  return substituted.replace(/[ \t]{2,}/g, " ").trim();
+}
+
+function isPresent(value) {
+  if (value === undefined || value === null || value === "") return false;
+  if (typeof value === "number") return Number.isFinite(value) && value !== 0;
+  return true;
+}
+
 // ----- helpers -----
 
 function normalizeWorkoutList(value) {
@@ -407,14 +519,51 @@ function normalizeWorkoutList(value) {
 }
 
 function resolveAverage(value) {
-  if (positiveNumber(value)) return value;
+  return resolveStats(value).avg ?? null;
+}
+
+// Returns { avg, min, max } from either a single number or an array of samples
+// ({ value }/{ bpm }/{ ms } or bare numbers).
+function resolveStats(value) {
+  if (positiveNumber(value)) return { avg: value, min: value, max: value };
+  if (typeof value === "number" && Number.isFinite(value)) return { avg: value, min: value, max: value };
   const samples = Array.isArray(value) ? value : Array.isArray(value?.samples) ? value.samples : null;
-  if (!samples || !samples.length) return null;
+  if (!samples || !samples.length) return {};
   const numbers = samples
     .map((item) => (typeof item === "number" ? item : numberOrNull(item?.value ?? item?.bpm ?? item?.ms)))
-    .filter((number) => positiveNumber(number));
-  if (!numbers.length) return null;
-  return numbers.reduce((sum, number) => sum + number, 0) / numbers.length;
+    .filter((number) => Number.isFinite(number));
+  if (!numbers.length) return {};
+  return {
+    avg: numbers.reduce((sum, number) => sum + number, 0) / numbers.length,
+    min: Math.min(...numbers),
+    max: Math.max(...numbers)
+  };
+}
+
+function formatWorkoutDuration(seconds) {
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) return `${hours}小时${pad2(minutes)}分`;
+  if (secs > 0) return `${minutes}分${pad2(secs)}秒`;
+  return `${minutes}分钟`;
+}
+
+function formatPace(secondsPerKm) {
+  const total = Math.round(secondsPerKm);
+  const minutes = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${minutes}'${pad2(secs)}"`;
+}
+
+function timeOfDay(date, timeZone) {
+  const parts = getDateTimeParts(date, timeZone);
+  return `${parts.HH}:${parts.mm}`;
+}
+
+function round1(value) {
+  return Math.round(value * 10) / 10;
 }
 
 function toDate(value) {
@@ -437,6 +586,10 @@ function numberOrNull(value) {
 
 function positiveNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function cleanText(value) {

@@ -92,6 +92,8 @@ This section configures the Apple Health endpoints. Unlike connectors, Apple Hea
 
 Apple Health writes share the daily-note path, heading level, line pattern, blank-line spacing, and template settings from `Daily Timestamp Insertion Rules`, and reuse the same one-week idempotency-record retention. The `Daily` top-level directory must be in `Allowed Top-Level Dirs`.
 
+The `health/*` endpoints accept request bodies up to 16 MB (regardless of `Max JSON Body Bytes`, which still governs the other endpoints), so a long workout's GPS `route` array does not hit the limit. VaultEcho ignores `route` entirely, so the app can also simply omit it to keep payloads small.
+
 ## AI Model
 
 Review tasks can call either the OpenAI-compatible Chat Completions API or the official OpenAI Responses API:

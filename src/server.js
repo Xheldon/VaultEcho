@@ -17,6 +17,7 @@ import { startEmbeddingAutoScan } from "./embedding-index.js";
 import { startReviewTaskScheduler } from "./review-tasks.js";
 import { startIdempotencyCleanup } from "./vault.js";
 
+const HEALTH_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024;
 const ADMIN_INDEX_MUTATIONS = new Set(["index/errors/clear", "index/rebuild"]);
 const ADMIN_REVIEW_MUTATIONS = new Set(["reviews/run"]);
 const ADMIN_CONNECTOR_MUTATIONS = new Set(["connectors/run"]);
@@ -115,9 +116,14 @@ const server = http.createServer(async (request, response) => {
         const result = await uploadAttachmentFromRequest(runtimeConfigCache, request, url.searchParams);
         return sendJson(response, 200, { route: action, ...result });
       }
+      // Apple Health workout payloads can carry a long GPS `route` array, so
+      // health endpoints get a much larger body ceiling than the general limit.
+      const maxBodyBytes = action.startsWith("health/")
+        ? Math.max(runtimeConfigCache.maxJsonBodyBytes, HEALTH_MAX_JSON_BODY_BYTES)
+        : runtimeConfigCache.maxJsonBodyBytes;
       const body = ["GET", "DELETE"].includes(request.method)
         ? { json: {}, text: "" }
-        : await readAnyBody(request, runtimeConfigCache.maxJsonBodyBytes);
+        : await readAnyBody(request, maxBodyBytes);
       const input = {
         ...Object.fromEntries(url.searchParams.entries()),
         ...body.json

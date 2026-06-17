@@ -92,6 +92,8 @@ VaultEcho 不会缓存 Strava 活动详情。`/data` 中只保存必要的 token
 
 Apple 健康的写入复用 `每日时间戳插入规则` 里的日记路径、heading 层级、行匹配、空行间隔和模板设置，并复用相同的幂等记录一周保留策略。`Daily` 顶级目录必须在允许写入的顶级目录白名单中。
 
+`health/*` 端点的请求体上限是 16 MB（不受 `Max JSON Body Bytes` 限制，后者仍管其他端点），所以长距离运动的 GPS `route` 数组不会超限。VaultEcho 完全忽略 `route`，所以 App 也可以干脆不发它，让 payload 更小。
+
 ## AI Model
 
 Review Tasks 可以调用 OpenAI-compatible Chat Completions API，也可以调用 OpenAI 官方 Responses API：

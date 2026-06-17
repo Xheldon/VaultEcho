@@ -136,6 +136,28 @@ test("workout ingest writes a Strava-style activity entry under the workout head
   );
 });
 
+test("workout device given as an object/array resolves to the name, never [object Object]", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  await ingestHealth(config, {
+    workouts: [
+      {
+        uuid: "DEV-OBJ",
+        type: "Cycling",
+        startDate: "2026-06-17T09:40:00+08:00",
+        duration: 1326,
+        // HealthKit-style sources array of objects (as the app actually sends).
+        sources: [{ name: "Apple Watch 10", productType: "Watch7,8", bundleIdentifier: "com.apple.health" }]
+      }
+    ]
+  });
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  assert.match(daily, /\[\[Apple Watch 10\]\]。/);
+  assert.doesNotMatch(daily, /object Object/);
+});
+
 test("re-pushing the same workout uuid does not duplicate", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
   const config = testConfig(root);

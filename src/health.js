@@ -502,7 +502,7 @@ function normalizeWorkout(raw, timeZone) {
     flightsClimbed: numberOrNull(raw.flightsClimbed ?? raw.flights),
     steps: numberOrNull(raw.steps ?? raw.stepCount),
     calories: resolveCalories(raw),
-    deviceName: cleanDeviceName(raw.deviceName ?? raw.device ?? raw.sourceName ?? raw.source ?? "")
+    deviceName: resolveDeviceName(raw)
   };
 }
 
@@ -817,8 +817,39 @@ function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+// The device/source can arrive as a string, an object ({ name, productType,
+// ... }), or an array of such (HealthKit `sources`). Pull the human name and
+// never let a raw object reach String() (which would render "[object Object]").
+function resolveDeviceName(raw) {
+  return deviceNameFrom(raw.deviceName)
+    || deviceNameFrom(raw.device)
+    || deviceNameFrom(raw.sourceName)
+    || deviceNameFrom(raw.source)
+    || deviceNameFrom(raw.sources)
+    || "";
+}
+
+function deviceNameFrom(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return cleanDeviceName(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const name = deviceNameFrom(item);
+      if (name) return name;
+    }
+    return "";
+  }
+  if (isPlainObject(value)) {
+    return cleanDeviceName(
+      value.name ?? value.deviceName ?? value.model ?? value.productType ?? value.bundleIdentifier ?? ""
+    );
+  }
+  return "";
+}
+
 function cleanDeviceName(value) {
-  return String(value || "").replace(/[\r\n[\]|]/g, " ").replace(/\s+/g, " ").trim();
+  if (typeof value !== "string") return "";
+  return value.replace(/[\r\n[\]|]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function pad2(value) {

@@ -53,14 +53,21 @@ export async function ingestHealth(config, params = {}) {
   let sleepSummaries = [];
   const workoutResults = [];
 
-  const sleepPayload = params.sleep ?? params.sleepAnalysis;
+  let sleepPayload = params.sleep ?? params.sleepAnalysis;
+  let workoutsPayload = normalizeWorkoutList(params.workouts ?? params.workout);
+  // Accept a bare top-level body without a sleep/workouts wrapper by inferring
+  // its kind from the shape (the iOS app may POST a sleep object directly).
+  if (sleepPayload === undefined && !workoutsPayload.length) {
+    if (looksLikeSleepPayload(params)) sleepPayload = params;
+    else if (looksLikeWorkoutPayload(params)) workoutsPayload = [params];
+  }
+
   if (sleepPayload !== undefined && sleepPayload !== null && appleHealth.sleep?.enabled) {
     const sleep = await ingestSleep(config, appleHealth.sleep, sleepPayload, timeZone);
     sleepSummaries = sleep.summaries;
     results.push(...sleep.writes);
   }
 
-  const workoutsPayload = normalizeWorkoutList(params.workouts ?? params.workout);
   if (workoutsPayload.length && appleHealth.workouts?.enabled) {
     const written = await ingestWorkouts(config, appleHealth.workouts, workoutsPayload, timeZone);
     workoutResults.push(...written.entries);
@@ -89,13 +96,17 @@ async function ingestSleep(config, sleepConfig, payload, timeZone) {
   const writes = [];
 
   for (const session of sessions) {
-    if (!session.samples.length) {
-      summaries.push({ ok: false, error: "No sleep samples provided" });
+    if (!session.samples.length && !isPlainObject(session.preStages)) {
+      summaries.push({ ok: false, error: "No sleep segments/samples or stage summary provided" });
       continue;
     }
-    const aggregate = aggregateSleep(session.samples);
+    const aggregate = aggregateSleep(session);
+    if (!aggregate.wakeDate) {
+      summaries.push({ ok: false, error: "Could not determine wake time (need segments, or sleepEnd)" });
+      continue;
+    }
     if (!aggregate.asleepMinutes && !aggregate.inBedMinutes) {
-      summaries.push({ ok: false, error: "Sleep samples contained no in-bed or asleep time" });
+      summaries.push({ ok: false, error: "Sleep data contained no in-bed or asleep time" });
       continue;
     }
 
@@ -137,13 +148,27 @@ function extractSleepSessions(payload) {
 }
 
 function buildSleepSession(source) {
+  const vitals = isPlainObject(source?.vitals) ? source.vitals : {};
   return {
     samples: extractSleepSamples(source),
-    heartRate: source?.heartRate ?? source?.heartRates ?? source?.avgHeartRate,
-    hrv: source?.hrv ?? source?.heartRateVariability ?? source?.hrvSdnn,
-    respiratoryRate: source?.respiratoryRate ?? source?.respiratory ?? source?.breathingRate,
-    wristTemperature: source?.wristTemperature ?? source?.wristTemp ?? source?.temperature,
-    spo2: source?.spo2 ?? source?.oxygenSaturation ?? source?.bloodOxygen,
+    // Pre-aggregated totals the app may have already computed; preferred over
+    // recomputing from segments when present.
+    preStages: isPlainObject(source?.stages) ? source.stages : null,
+    totalAsleepSec: numberOrNull(source?.totalAsleepSec),
+    timeInBedSec: numberOrNull(source?.timeInBedSec),
+    sleepStart: source?.sleepStart,
+    sleepEnd: source?.sleepEnd,
+    awakenings: numberOrNull(source?.awakenings),
+    heartRate: source?.heartRate ?? source?.heartRates ?? source?.avgHeartRate
+      ?? vitals.averageHeartRateBpm ?? vitals.avgHeartRateBpm ?? vitals.heartRate,
+    hrv: source?.hrv ?? source?.heartRateVariability ?? source?.hrvSdnn
+      ?? vitals.averageHRVms ?? vitals.hrvMs ?? vitals.hrv,
+    respiratoryRate: source?.respiratoryRate ?? source?.respiratory ?? source?.breathingRate
+      ?? vitals.respiratoryRate ?? vitals.respiratoryRateBpm,
+    wristTemperature: source?.wristTemperature ?? source?.wristTemp ?? source?.temperature
+      ?? vitals.wristTemperatureDeltaC ?? vitals.wristTemperatureC ?? vitals.wristTemperature,
+    spo2: source?.spo2 ?? source?.oxygenSaturation ?? source?.bloodOxygen
+      ?? vitals.oxygenSaturation ?? vitals.spo2,
     id: firstString(source?.id, source?.uuid, source?.sessionId)
   };
 }
@@ -161,11 +186,13 @@ function sleepIdempotencyKey(session, aggregate) {
 function extractSleepSamples(payload) {
   const raw = Array.isArray(payload)
     ? payload
-    : Array.isArray(payload?.samples)
-      ? payload.samples
-      : Array.isArray(payload?.stages)
-        ? payload.stages
-        : [];
+    : Array.isArray(payload?.segments)
+      ? payload.segments
+      : Array.isArray(payload?.samples)
+        ? payload.samples
+        : Array.isArray(payload?.stages)
+          ? payload.stages
+          : [];
   const samples = [];
   for (const item of raw.slice(0, MAX_SLEEP_SAMPLES)) {
     if (!item || typeof item !== "object") continue;
@@ -195,13 +222,16 @@ function classifySleepStage(value) {
   return "unknown";
 }
 
-function aggregateSleep(samples) {
+// Aggregates one session. Stage durations and totals are taken from the app's
+// pre-computed values (the `stages`/`totalAsleepSec`/`timeInBedSec` fields) when
+// present, otherwise derived from the raw segments. Wake time anchors the daily
+// note to the wake day; a night that starts before midnight still lands on the
+// morning you got up.
+function aggregateSleep(session) {
+  const samples = Array.isArray(session.samples) ? session.samples : [];
   const stageMinutes = { core: 0, deep: 0, rem: 0, asleep: 0, awake: 0, inBed: 0 };
-  // Wake time is the end of the whole session, i.e. the latest sample end. The
-  // daily note is attributed to this wake day (a night starting before midnight
-  // still lands on the morning you got up).
-  let wakeDate = samples[0].end;
-  let startDate = samples[0].start;
+  let segmentWake = null;
+  let segmentStart = null;
   let asleepStartDate = null;
   let inBedStartDate = null;
   let awakeCount = 0;
@@ -210,8 +240,8 @@ function aggregateSleep(samples) {
     if (stageMinutes[sample.stage] !== undefined) {
       stageMinutes[sample.stage] += minutes;
     }
-    if (sample.end > wakeDate) wakeDate = sample.end;
-    if (sample.start < startDate) startDate = sample.start;
+    if (!segmentWake || sample.end > segmentWake) segmentWake = sample.end;
+    if (!segmentStart || sample.start < segmentStart) segmentStart = sample.start;
     if (ASLEEP_STAGES.has(sample.stage) && (!asleepStartDate || sample.start < asleepStartDate)) {
       asleepStartDate = sample.start;
     }
@@ -221,26 +251,46 @@ function aggregateSleep(samples) {
     if (sample.stage === "awake") awakeCount += 1;
   }
 
-  // Sleep latency: from getting in bed to first falling asleep.
-  const latencyMinutes = inBedStartDate && asleepStartDate && asleepStartDate > inBedStartDate
-    ? (asleepStartDate.getTime() - inBedStartDate.getTime()) / 60000
-    : 0;
+  const pre = isPlainObject(session.preStages) ? session.preStages : null;
+  const stages = pre
+    ? {
+        deep: Math.round(secToMin(pre.deepSec)),
+        core: Math.round(secToMin(pre.coreSec)),
+        rem: Math.round(secToMin(pre.remSec)),
+        awake: Math.round(secToMin(pre.awakeSec))
+      }
+    : {
+        deep: Math.round(stageMinutes.deep),
+        core: Math.round(stageMinutes.core),
+        rem: Math.round(stageMinutes.rem),
+        awake: Math.round(stageMinutes.awake)
+      };
 
-  const asleepMinutes = stageMinutes.core + stageMinutes.deep + stageMinutes.rem + stageMinutes.asleep;
+  const asleepMinutes = positiveNumber(session.totalAsleepSec)
+    ? secToMin(session.totalAsleepSec)
+    : pre
+      ? secToMin((pre.coreSec || 0) + (pre.deepSec || 0) + (pre.remSec || 0) + (pre.unspecifiedSec || 0))
+      : stageMinutes.core + stageMinutes.deep + stageMinutes.rem + stageMinutes.asleep;
+  const inBedMinutes = positiveNumber(session.timeInBedSec) ? secToMin(session.timeInBedSec) : stageMinutes.inBed;
+
+  const wakeDate = toDate(session.sleepEnd) || segmentWake;
+  const bedDate = toDate(session.sleepStart) || asleepStartDate || segmentStart;
+  const latencyMinutes = inBedStartDate && bedDate && bedDate > inBedStartDate
+    ? (bedDate.getTime() - inBedStartDate.getTime()) / 60000
+    : 0;
+  const awakenings = Number.isInteger(session.awakenings) && session.awakenings >= 0
+    ? session.awakenings
+    : awakeCount;
+
   return {
-    startDate,
-    asleepStartDate,
+    startDate: segmentStart || bedDate,
+    asleepStartDate: bedDate,
     wakeDate,
     asleepMinutes,
-    inBedMinutes: stageMinutes.inBed,
+    inBedMinutes,
     latencyMinutes,
-    awakenings: awakeCount,
-    stages: {
-      deep: Math.round(stageMinutes.deep),
-      core: Math.round(stageMinutes.core),
-      rem: Math.round(stageMinutes.rem),
-      awake: Math.round(stageMinutes.awake)
-    }
+    awakenings,
+    stages
   };
 }
 
@@ -514,8 +564,41 @@ function isPresent(value) {
 
 function normalizeWorkoutList(value) {
   if (Array.isArray(value)) return value.slice(0, MAX_WORKOUTS);
-  if (value && typeof value === "object") return [value];
+  if (looksLikeWorkoutPayload(value)) return [value];
   return [];
+}
+
+function looksLikeSleepPayload(value) {
+  if (!isPlainObject(value)) return false;
+  return (
+    Array.isArray(value.segments) ||
+    Array.isArray(value.samples) ||
+    Array.isArray(value.sessions) ||
+    isPlainObject(value.stages) ||
+    value.sleepStart !== undefined ||
+    value.totalAsleepSec !== undefined
+  );
+}
+
+function looksLikeWorkoutPayload(value) {
+  if (!isPlainObject(value)) return false;
+  const hasStart = value.startDate !== undefined || value.start !== undefined || value.startTime !== undefined;
+  const hasType =
+    value.workoutActivityType !== undefined ||
+    value.activityType !== undefined ||
+    value.type !== undefined ||
+    value.exerciseType !== undefined ||
+    value.sport !== undefined;
+  return hasStart && hasType;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function secToMin(seconds) {
+  const number = Number(seconds);
+  return Number.isFinite(number) ? number / 60 : 0;
 }
 
 function resolveAverage(value) {

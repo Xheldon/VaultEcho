@@ -252,6 +252,41 @@ test("a custom content template renders placeholders and drops absent metrics", 
   assert.match(daily, /\[07:10\] 起床07:10，睡了7小时40分，最高心率70，手腕36\.4℃/);
 });
 
+test("accepts a bare top-level sleep body with segments, nested vitals, and pre-aggregated totals", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  // Shape produced by the companion app: posted directly (no { sleep } wrapper),
+  // stages under `segments`, vitals nested, plus pre-computed totals.
+  const result = await ingestHealth(config, {
+    id: "sleep-2026-06-17-0050-apple-watch-10",
+    segments: [
+      { stage: "core", start: "2026-06-16T16:50:13.249Z", end: "2026-06-16T23:06:55.111Z" },
+      { stage: "rem", start: "2026-06-16T23:06:55.111Z", end: "2026-06-16T23:21:20.935Z" },
+      { stage: "awake", start: "2026-06-16T23:21:20.935Z", end: "2026-06-16T23:52:12.017Z" },
+      { stage: "core", start: "2026-06-16T23:52:12.017Z", end: "2026-06-17T00:30:01.347Z" }
+    ],
+    sleepStart: "2026-06-16T16:50:13.249Z",
+    sleepEnd: "2026-06-17T00:30:01.347Z",
+    stages: { awakeSec: 2507.9, coreSec: 17078.4, deepSec: 1910.8, remSec: 6090.8, unspecifiedSec: 0 },
+    timeInBedSec: 27588.0,
+    totalAsleepSec: 25080.1,
+    vitals: { averageHeartRateBpm: 62.7, averageHRVms: 42.04, oxygenSaturation: 0.9346, respiratoryRate: 9.96, wristTemperatureDeltaC: 36.46 }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.sleep.length, 1);
+  assert.equal(result.sleep[0].ok, true);
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  // Wake at 00:30 UTC -> 08:30 Asia/Shanghai on the 17th; totals from the
+  // pre-aggregated fields, vitals read from the nested object.
+  assert.match(
+    daily,
+    /\[08:30\] 睡眠 6小时58分（卧床7小时40分）｜深睡32分·核心4小时45分·REM1小时42分·清醒42分｜平均心率63 bpm·HRV 42 ms/
+  );
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

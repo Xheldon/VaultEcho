@@ -180,6 +180,49 @@ test("ingest is rejected when Apple Health is disabled", async () => {
   assert.equal(result.ok, false);
 });
 
+test("creates the daily note from the configured template when it does not exist", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+  config.dailyNote.templatePath = "Templates/daily.md";
+  await fs.mkdir(path.join(root, "vault", "Templates"), { recursive: true });
+  await fs.writeFile(
+    path.join(root, "vault", "Templates", "daily.md"),
+    "---\ndate: {{YYYY}}-{{MM}}-{{DD}}\ntags: [daily]\n---\n\n## Morning\n\n## Afternoon\n\n## Evening\n",
+    "utf8"
+  );
+
+  const dailyPath = path.join(root, "vault", "Daily", "2026-06-17.md");
+  assert.equal(await fs.access(dailyPath).then(() => true).catch(() => false), false);
+
+  await ingestHealth(config, {
+    sleep: { samples: [{ value: "asleepCore", startDate: "2026-06-16T23:30:00+08:00", endDate: "2026-06-17T07:10:00+08:00" }] },
+    workouts: [{ uuid: "w1", type: "Running", startDate: "2026-06-17T18:05:00+08:00", duration: 1800 }]
+  });
+
+  const daily = await fs.readFile(dailyPath, "utf8");
+  // The note was created from the template (rendered frontmatter + headings)...
+  assert.match(daily, /^---\ndate: 2026-06-17\ntags: \[daily\]\n---/);
+  assert.match(daily, /## Evening/);
+  // ...and the health entries were inserted.
+  assert.match(daily, /## 今日睡眠/);
+  assert.match(daily, /\[07:10\] 睡眠/);
+  assert.match(daily, /\[18:05\] Running/);
+});
+
+test("does not create the daily note when createIfMissing is off", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+  config.dailyNote.createIfMissing = false;
+
+  await assert.rejects(
+    ingestHealth(config, {
+      workouts: [{ uuid: "w1", type: "Running", startDate: "2026-06-17T18:05:00+08:00", duration: 1800 }]
+    }),
+    /does not exist/i
+  );
+  assert.equal(await fs.access(path.join(root, "vault", "Daily", "2026-06-17.md")).then(() => true).catch(() => false), false);
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

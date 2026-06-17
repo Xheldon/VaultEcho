@@ -344,6 +344,22 @@ test("dedicated health/sleep and health/workouts endpoints accept a bare body", 
   assert.match(daily, /\[18:05\] 跑步/);
 });
 
+test("workout type placeholders offer localized, English, and raw variants", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+  config.appleHealth.workouts.output.contentTemplate = "[{{time}}] {{type}} / {{typeEn}} / {{typeRaw}}";
+
+  await ingestHealthWorkouts(config, {
+    uuid: "c1",
+    activityType: "cycling",
+    startDate: "2026-06-17T09:40:00+08:00",
+    duration: 1320
+  });
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  assert.match(daily, /\[09:40\] 骑行 \/ Cycling \/ cycling/);
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),

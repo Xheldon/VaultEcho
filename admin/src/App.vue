@@ -713,7 +713,7 @@ const translations = {
     appleHealthSleepPlaceholders:
       "睡眠占位符（有数据才显示）：\n{{wakeTime}} 起床  {{bedTime}} 入睡  {{date}} 日期\n{{asleep}} 总睡眠  {{inBed}} 卧床\n{{deep}}/{{core}}/{{rem}}/{{awake}} 各阶段时长\n{{latency}} 入睡延迟  {{awakenings}} 醒来次数\n{{avgHeartRate}}/{{minHeartRate}}/{{maxHeartRate}} 心率 bpm\n{{hrv}} HRV ms  {{respiratoryRate}} 呼吸率  {{wristTemperature}} 手腕温度  {{spo2}} 血氧%\n{{stages}} 分期合并  {{vitals}} 心率·HRV 合并\n条件段示例：{{#maxHeartRate}}，最高心率{{maxHeartRate}} bpm{{/maxHeartRate}}",
     appleHealthWorkoutPlaceholders:
-      "运动占位符（有数据才显示）：\n{{time}} 开始时间  {{date}} 日期  {{type}} 类型  {{name}} 名称\n{{duration}} 运动时长  {{totalDuration}} 总耗时\n{{distance}} 里程(km)  {{avgPace}} 配速  {{avgSpeed}}/{{maxSpeed}} 速度 km/h\n{{avgHeartRate}}/{{maxHeartRate}} 心率 bpm  {{calories}} 卡路里\n{{elevationGain}} 爬升 m  {{flightsClimbed}} 爬楼层数  {{steps}} 步数  {{device}} 设备\n条件段示例：{{#distance}}，总里程 {{distance}} km{{/distance}}",
+      "运动占位符（有数据才显示）：\n{{time}} 开始时间  {{date}} 日期  {{name}} 名称\n{{type}} 类型(中文)  {{typeEn}} 类型(英文)  {{typeRaw}} 类型(原始)\n{{duration}} 运动时长  {{totalDuration}} 总耗时\n{{distance}} 里程(km)  {{avgPace}} 配速  {{avgSpeed}}/{{maxSpeed}} 速度 km/h\n{{avgHeartRate}}/{{maxHeartRate}} 心率 bpm  {{calories}} 卡路里\n{{elevationGain}} 爬升 m  {{flightsClimbed}} 爬楼层数  {{steps}} 步数  {{device}} 设备\n条件段示例：{{#distance}}，总里程 {{distance}} km{{/distance}}",
     enableConnectorScheduler: "启用连接器轮询",
     connectorSchedulerEnabledHint: "保存后，VaultEcho 会按固定间隔轮询所有已启用的连接器来源。",
     connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步最近回看窗口内的内容。",
@@ -1055,7 +1055,7 @@ const englishText = {
   appleHealthSleepPlaceholders:
     "Sleep placeholders (shown only when present):\n{{wakeTime}} wake  {{bedTime}} fell asleep  {{date}} date\n{{asleep}} total sleep  {{inBed}} time in bed\n{{deep}}/{{core}}/{{rem}}/{{awake}} stage durations\n{{latency}} sleep latency  {{awakenings}} awakenings\n{{avgHeartRate}}/{{minHeartRate}}/{{maxHeartRate}} heart rate bpm\n{{hrv}} HRV ms  {{respiratoryRate}} respiratory  {{wristTemperature}} wrist temp  {{spo2}} SpO2%\n{{stages}} stages joined  {{vitals}} HR·HRV joined\nConditional example: {{#maxHeartRate}}, max HR {{maxHeartRate}} bpm{{/maxHeartRate}}",
   appleHealthWorkoutPlaceholders:
-    "Workout placeholders (shown only when present):\n{{time}} start  {{date}} date  {{type}} type  {{name}} name\n{{duration}} duration  {{totalDuration}} elapsed\n{{distance}} distance(km)  {{avgPace}} pace  {{avgSpeed}}/{{maxSpeed}} speed km/h\n{{avgHeartRate}}/{{maxHeartRate}} heart rate bpm  {{calories}} calories\n{{elevationGain}} elevation m  {{flightsClimbed}} flights  {{steps}} steps  {{device}} device\nConditional example: {{#distance}}, distance {{distance}} km{{/distance}}",
+    "Workout placeholders (shown only when present):\n{{time}} start  {{date}} date  {{name}} name\n{{type}} type (localized)  {{typeEn}} type (English)  {{typeRaw}} type (raw)\n{{duration}} duration  {{totalDuration}} elapsed\n{{distance}} distance(km)  {{avgPace}} pace  {{avgSpeed}}/{{maxSpeed}} speed km/h\n{{avgHeartRate}}/{{maxHeartRate}} heart rate bpm  {{calories}} calories\n{{elevationGain}} elevation m  {{flightsClimbed}} flights  {{steps}} steps  {{device}} device\nConditional example: {{#distance}}, distance {{distance}} km{{/distance}}",
   enableConnectorScheduler: "Enable connector polling",
   connectorSchedulerEnabledHint: "After saving, VaultEcho polls all enabled connector sources at the configured interval.",
   connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync the recent lookback window manually.",

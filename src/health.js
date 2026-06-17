@@ -467,9 +467,8 @@ function normalizeWorkout(raw, timeZone) {
   if (!start) return null;
 
   const parts = getDateTimeParts(start, timeZone);
-  const type = workoutTypeLabel(raw);
-  let name = cleanText(raw.name ?? raw.title ?? "");
-  if (name && name === type) name = "";
+  const typeRaw = workoutRawType(raw);
+  const name = cleanText(raw.name ?? raw.title ?? "");
   const movingTimeSeconds = positiveNumber(durationSeconds)
     ? durationSeconds
     : (end ? (end.getTime() - start.getTime()) / 1000 : null);
@@ -481,9 +480,9 @@ function normalizeWorkout(raw, timeZone) {
       : null);
 
   return {
-    id: workoutId(raw, start, type),
+    id: workoutId(raw, start, typeRaw),
     name,
-    type,
+    typeRaw,
     startDate: start,
     HH: parts.HH,
     mm: parts.mm,
@@ -510,8 +509,23 @@ function normalizeWorkout(raw, timeZone) {
 // Builds the placeholder variables for the workout template. Only meaningful
 // values are set; absent ones stay undefined so conditional sections drop them.
 function buildWorkoutVars(activity) {
-  const vars = { time: `${activity.HH}:${activity.mm}`, date: activity.date, type: activity.type };
-  if (activity.name) vars.name = activity.name;
+  const typeRaw = activity.typeRaw || "Workout";
+  const key = typeRaw.replace(/^HKWorkoutActivityType/i, "").toLowerCase();
+  const typeEn = humanizeType(typeRaw);
+  const type = WORKOUT_TYPE_LABELS.get(key) || typeEn;
+  const vars = {
+    time: `${activity.HH}:${activity.mm}`,
+    date: activity.date,
+    // {{type}} is the localized label (Chinese by default); {{typeEn}} is the
+    // humanized English name and {{typeRaw}} the original token, so a non-Chinese
+    // template can switch by choosing a different placeholder.
+    type,
+    typeEn,
+    typeRaw
+  };
+  if (activity.name && activity.name !== type && activity.name !== typeEn && activity.name !== typeRaw) {
+    vars.name = activity.name;
+  }
   if (positiveNumber(activity.movingTimeSeconds)) vars.duration = formatWorkoutDuration(activity.movingTimeSeconds);
   // Only surface elapsed time when it differs meaningfully from moving time
   // (a continuous workout has them ~equal, so showing both is noise).
@@ -544,7 +558,9 @@ function workoutDurationSeconds(activity) {
   return 0;
 }
 
-function workoutTypeLabel(raw) {
+// The raw activity-type token as sent (e.g. "cycling"), or the English label for
+// a numeric HKWorkoutActivityType, or "Workout".
+function workoutRawType(raw) {
   const explicit = firstString(
     raw.activityName,
     raw.workoutActivityTypeName,
@@ -553,13 +569,23 @@ function workoutTypeLabel(raw) {
     raw.type,
     raw.sport
   );
-  if (explicit && !/^\d+$/.test(explicit)) {
-    const key = explicit.replace(/^HKWorkoutActivityType/i, "").toLowerCase();
-    return WORKOUT_TYPE_LABELS.get(key) || cleanText(explicit);
-  }
+  if (explicit && !/^\d+$/.test(explicit)) return cleanText(explicit);
   const numeric = Number(raw.workoutActivityType ?? raw.activityType ?? raw.type);
   if (Number.isFinite(numeric) && HK_WORKOUT_TYPES.has(numeric)) return HK_WORKOUT_TYPES.get(numeric);
   return cleanText(explicit) || "Workout";
+}
+
+// Title-cased English name from a raw token: "cycling" -> "Cycling",
+// "highIntensityIntervalTraining" -> "High Intensity Interval Training".
+function humanizeType(value) {
+  const stripped = String(value || "").replace(/^HKWorkoutActivityType/i, "").trim();
+  if (!stripped) return "Workout";
+  const words = stripped
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .split(/\s+/);
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
 function workoutId(raw, start, type) {

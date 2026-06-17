@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ingestHealth } from "../src/health.js";
+import { ingestHealth, ingestHealthSleep, ingestHealthWorkouts } from "../src/health.js";
 
 test("sleep ingest writes one aggregated summary under the wake-day heading", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
@@ -132,7 +132,7 @@ test("workout ingest writes a Strava-style activity entry under the workout head
   assert.match(daily, /## 今日运动/);
   assert.match(
     daily,
-    /\[09:47\] Badminton，运动时间 30分钟，平均心率 120 bpm，最大心率 165 bpm，卡路里 250 kcal，\[\[Apple Watch Series 10\]\]。/
+    /\[09:47\] 羽毛球，运动时间 30分钟，平均心率 120 bpm，最大心率 165 bpm，卡路里 250 kcal，\[\[Apple Watch Series 10\]\]。/
   );
 });
 
@@ -150,7 +150,7 @@ test("re-pushing the same workout uuid does not duplicate", async () => {
   assert.equal(second.workouts[0].idempotent, true);
 
   const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
-  const runningLines = daily.split("\n").filter((line) => line.includes("Running"));
+  const runningLines = daily.split("\n").filter((line) => line.includes("跑步"));
   assert.equal(runningLines.length, 1);
 });
 
@@ -168,7 +168,7 @@ test("time-slot target routes the workout into the matching slot heading without
   const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
   assert.match(daily, /## Morning/);
   assert.doesNotMatch(daily, /## 今日运动/);
-  assert.match(daily, /\[09:47\] Running，运动时间 30分钟。/);
+  assert.match(daily, /\[09:47\] 跑步，运动时间 30分钟。/);
 });
 
 test("ingest is rejected when Apple Health is disabled", async () => {
@@ -206,7 +206,7 @@ test("creates the daily note from the configured template when it does not exist
   // ...and the health entries were inserted.
   assert.match(daily, /## 今日睡眠/);
   assert.match(daily, /\[07:10\] 睡眠/);
-  assert.match(daily, /\[18:05\] Running/);
+  assert.match(daily, /\[18:05\] 跑步/);
 });
 
 test("does not create the daily note when createIfMissing is off", async () => {
@@ -245,7 +245,7 @@ test("a custom content template renders placeholders and drops absent metrics", 
 
   const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
   // Full-metric workout renders everything.
-  assert.match(daily, /\[07:30\] Running｜30分钟｜5\.00km｜最高172bpm/);
+  assert.match(daily, /\[07:30\] 跑步｜30分钟｜5\.00km｜最高172bpm/);
   // Indoor workout has no distance/HR: those conditional sections drop cleanly.
   assert.match(daily, /\[19:00\] Strength Training｜40分钟$/m);
   // Sleep uses max heart rate from the sample array and wrist temperature.
@@ -280,11 +280,68 @@ test("accepts a bare top-level sleep body with segments, nested vitals, and pre-
 
   const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
   // Wake at 00:30 UTC -> 08:30 Asia/Shanghai on the 17th; totals from the
-  // pre-aggregated fields, vitals read from the nested object.
+  // pre-aggregated fields, vitals (incl. respiratory/SpO2/wrist temp) from the
+  // nested object.
   assert.match(
     daily,
-    /\[08:30\] 睡眠 6小时58分（卧床7小时40分）｜深睡32分·核心4小时45分·REM1小时42分·清醒42分｜平均心率63 bpm·HRV 42 ms/
+    /\[08:30\] 睡眠 6小时58分（卧床7小时40分）｜深睡32分·核心4小时45分·REM1小时42分·清醒42分｜平均心率63 bpm·HRV 42 ms·呼吸10次\/分·血氧93%·手腕温度36\.5℃/
   );
+});
+
+test("accepts a bare workout body without a top-level start time (GPS workout)", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  // Real cycling shape: no `start`, heartRate as an object, app field names,
+  // and a route array (ignored). Posted directly to the workouts handler.
+  const result = await ingestHealthWorkouts(config, {
+    id: "840D31FA",
+    activityType: "cycling",
+    end: "2026-06-17T02:02:45.645Z",
+    duration: 1326.91,
+    distanceMeters: 4500.38,
+    avgPaceSecPerKm: 294.84,
+    elevationGainMeters: 7.34,
+    activeEnergyKcal: 75.2,
+    heartRate: { averageBpm: 114.42, maxBpm: 143, minBpm: 83 },
+    route: [{ lat: 39.99, lon: 116.46, timestamp: "2026-06-17T01:40:38.538Z" }]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.workouts.length, 1);
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  assert.match(
+    daily,
+    /\[09:40\] 骑行，运动时间 22分07秒，平均心率 114 bpm，最大心率 143 bpm，总里程 4\.50 km，配速 4'55"，累计爬升 7 m，卡路里 75 kcal。/
+  );
+});
+
+test("dedicated health/sleep and health/workouts endpoints accept a bare body", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  const sleep = await ingestHealthSleep(config, {
+    id: "night-1",
+    segments: [{ stage: "core", start: "2026-06-16T23:30:00+08:00", end: "2026-06-17T07:10:00+08:00" }],
+    sleepStart: "2026-06-16T23:30:00+08:00",
+    sleepEnd: "2026-06-17T07:10:00+08:00"
+  });
+  assert.equal(sleep.operation, "health/sleep");
+  assert.equal(sleep.sleep[0].ok, true);
+
+  const workouts = await ingestHealthWorkouts(config, {
+    uuid: "run-1",
+    type: "Running",
+    startDate: "2026-06-17T18:05:00+08:00",
+    duration: 1800
+  });
+  assert.equal(workouts.operation, "health/workouts");
+  assert.equal(workouts.workouts.length, 1);
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  assert.match(daily, /## 今日睡眠/);
+  assert.match(daily, /## 今日运动/);
+  assert.match(daily, /\[18:05\] 跑步/);
 });
 
 function testConfig(root) {

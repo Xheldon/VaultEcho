@@ -585,7 +585,7 @@ export const API_ENDPOINTS = [
     ],
     params: [
       ["sleep", "Optional. One sleep session (or `{ sessions: [ {...}, {...} ] }` for several, e.g. a night plus a nap; each becomes its own entry). Stage segments go under `segments` (or `samples`), each with a `stage`/`value` (HKCategoryValueSleepAnalysis number or identifier such as `asleepDeep`/`core`/`deep`/`rem`/`awake`/`inBed`), `start`/`startDate`, and `end`/`endDate`. Pre-aggregated fields are used when present and preferred over recomputing: `stages` (object of `coreSec`/`deepSec`/`remSec`/`awakeSec`/`unspecifiedSec`), `totalAsleepSec`, `timeInBedSec`, `sleepStart`, `sleepEnd`, `awakenings`. Vitals may be nested under `vitals` (`averageHeartRateBpm`, `averageHRVms`, `respiratoryRate`, `wristTemperatureDeltaC`, `oxygenSaturation`) or given top-level (`heartRate`, `hrv`, ...), as a single number or an array of `{ value }` (heart rate also yields min/max). Provide a stable `id` per session for reliable de-duplication on re-push (otherwise the fall-asleep time is used). Template placeholders: `wakeTime`, `bedTime`, `date`, `asleep`, `inBed`, `deep`, `core`, `rem`, `awake`, `latency`, `awakenings`, `avgHeartRate`, `minHeartRate`, `maxHeartRate`, `hrv`, `respiratoryRate`, `wristTemperature`, `spo2`, plus convenience groups `stages` and `vitals`."],
-      ["workouts", "Optional. An array of HKWorkout objects (or a single object). Recognized fields: `uuid`/`id`, `startDate`, `endDate` or `duration` (seconds), `workoutActivityType`/`activityType`/`type` (number or label), `name`, `totalDistance`/`distanceMeters`/`distanceKm`, `totalEnergyBurned`/`calories`, `averageHeartRate`, `maxHeartRate`, `averageSpeed`, `maxSpeed`, `elevationGain`, `flightsClimbed`, `steps`, `deviceName`/`sourceName`. Available template placeholders: `time`, `date`, `type`, `name`, `duration`, `totalDuration`, `distance`, `avgPace`, `avgSpeed`, `maxSpeed`, `avgHeartRate`, `maxHeartRate`, `calories`, `elevationGain`, `flightsClimbed`, `steps`, `device`."]
+      ["workouts", "Optional. An array of HKWorkout objects (or a single object). Recognized fields: `uuid`/`id`, `startDate` (optional — derived from the `route` first point or `end` minus `duration` when absent), `endDate`/`end`, `duration` (seconds), `workoutActivityType`/`activityType`/`type` (a number, or a string such as `cycling`/`running` mapped to a readable label), `name`, `totalDistance`/`distanceMeters`/`distanceKm`, `totalEnergyBurned`/`activeEnergyKcal`/`calories`, heart rate as flat `averageHeartRate`/`maxHeartRate` or an object `heartRate: { averageBpm, maxBpm, minBpm }`, `averageSpeed`/`maxSpeed`, `avgPaceSecPerKm`, `elevationGain`/`elevationGainMeters`, `flightsClimbed`, `steps`, `deviceName`/`sourceName`. Any `route` GPS array is ignored (omit it to keep the payload under the body-size limit). Available template placeholders: `time`, `date`, `type`, `name`, `duration`, `totalDuration`, `distance`, `avgPace`, `avgSpeed`, `maxSpeed`, `avgHeartRate`, `maxHeartRate`, `minHeartRate`, `calories`, `elevationGain`, `flightsClimbed`, `steps`, `device`."]
     ],
     curl: `curl -X POST http://localhost:8787/v1/api/health/ingest \\
   -H "Authorization: Bearer change-me" \\
@@ -611,6 +611,56 @@ export const API_ENDPOINTS = [
         "deviceName": "Apple Watch Series 10"
       }
     ]
+  }'`
+  },
+  {
+    route: "health/sleep",
+    method: "POST",
+    title: "Ingest Apple Health Sleep",
+    summary: "Dedicated sleep endpoint: POST the sleep object directly as the request body (a `{ sleep: {...} }` wrapper is also accepted). Same parsing, wake-day attribution, per-session de-duplication, and configurable template as `health/ingest`.",
+    scenarios: [
+      "A companion iOS app POSTs the night's sleep session straight to a sleep-specific URL without wrapping it.",
+      "Backfilling several nights, one request each."
+    ],
+    params: [
+      ["(body)", "The sleep session object: stage `segments` (or `samples`), optional pre-aggregated `stages`/`totalAsleepSec`/`timeInBedSec`/`sleepStart`/`sleepEnd`/`awakenings`, nested `vitals`, and a stable `id`. Use `{ sessions: [ ... ] }` to send several at once. See `health/ingest` for the full field and placeholder list."]
+    ],
+    curl: `curl -X POST http://localhost:8787/v1/api/health/sleep \\
+  -H "Authorization: Bearer change-me" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "id": "sleep-2026-06-17",
+    "segments": [
+      { "stage": "core", "start": "2026-06-16T16:50:13Z", "end": "2026-06-17T00:30:01Z" }
+    ],
+    "sleepStart": "2026-06-16T16:50:13Z",
+    "sleepEnd": "2026-06-17T00:30:01Z",
+    "vitals": { "averageHeartRateBpm": 62.7, "averageHRVms": 42 }
+  }'`
+  },
+  {
+    route: "health/workouts",
+    method: "POST",
+    title: "Ingest Apple Health Workouts",
+    summary: "Dedicated workouts endpoint: POST a single HKWorkout object directly, or `{ workouts: [...] }` for several. Same formatting, per-UUID de-duplication, and configurable template as `health/ingest`.",
+    scenarios: [
+      "An iOS automation POSTs each finished workout to a workout-specific URL.",
+      "Syncing several workouts at once after a HealthKit export."
+    ],
+    params: [
+      ["(body)", "A single HKWorkout object, or `{ workouts: [ ... ] }`. See `health/ingest` for recognized fields and template placeholders."]
+    ],
+    curl: `curl -X POST http://localhost:8787/v1/api/health/workouts \\
+  -H "Authorization: Bearer change-me" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "uuid": "A1B2",
+    "type": "Running",
+    "startDate": "2026-06-17T18:05:00+08:00",
+    "duration": 1800,
+    "distanceMeters": 5200,
+    "averageHeartRate": 150,
+    "deviceName": "Apple Watch Series 10"
   }'`
   },
   {

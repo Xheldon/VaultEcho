@@ -79,7 +79,7 @@ VaultEcho 不会缓存 Strava 活动详情。`/data` 中只保存必要的 token
 
 ## Apple 健康
 
-这一节配置 `health/ingest` 端点。和连接器不同，Apple 健康是只接收的：由配套设备把 HealthKit 原始数据推送到 `POST /v1/api/health/ingest`（Bearer 鉴权），VaultEcho 在服务端聚合、格式化后写入每日笔记。VaultEcho 不会主动拉取设备数据。
+这一节配置 Apple 健康端点。和连接器不同，Apple 健康是只接收的：由配套设备推送 HealthKit 原始数据，VaultEcho 在服务端聚合、格式化后写入每日笔记，不会主动拉取。共有三个端点（都用 Bearer 鉴权）：`POST /v1/api/health/sleep` 和 `POST /v1/api/health/workouts` 直接接收原始对象（推荐，不用包 wrapper）；`POST /v1/api/health/ingest` 接收合并体 `{ "sleep": {...}, "workouts": [...] }`（或按形状识别的单个裸对象）。
 
 - `启用 Apple 健康接收端点`：总开关。关闭时 `health/ingest` 直接返回错误。
 - 睡眠和运动是两个独立子项，可以只开其中一个。

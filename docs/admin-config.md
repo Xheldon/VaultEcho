@@ -79,7 +79,7 @@ External callers usually should not send `at`; if they omit it, VaultEcho uses t
 
 ## Apple Health
 
-This section configures the `health/ingest` endpoint. Unlike connectors, Apple Health is receive-only: a companion device pushes raw HealthKit data to `POST /v1/api/health/ingest` (Bearer auth) and VaultEcho aggregates and formats it server-side, then writes it into the daily note. VaultEcho never pulls from a device.
+This section configures the Apple Health endpoints. Unlike connectors, Apple Health is receive-only: a companion device pushes raw HealthKit data and VaultEcho aggregates and formats it server-side, then writes it into the daily note. VaultEcho never pulls from a device. Three endpoints are available (all Bearer auth): `POST /v1/api/health/sleep` and `POST /v1/api/health/workouts` take the raw object directly (recommended — no wrapper needed), and `POST /v1/api/health/ingest` takes a combined `{ "sleep": {...}, "workouts": [...] }` (or a single bare object detected by shape).
 
 - `Enable Apple Health ingest endpoint`: master switch. When off, `health/ingest` returns an error.
 - Sleep and Workouts are two independent sub-sections; you can enable either one.

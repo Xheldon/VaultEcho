@@ -611,7 +611,7 @@ import ReviewTaskCard from "./components/ReviewTaskCard.vue";
 import SectionTitle from "./components/SectionTitle.vue";
 
 const DEFAULT_AH_WORKOUT_TEMPLATE =
-  "[{{time}}] {{#name}}{{name}}，{{/name}}{{type}}{{#duration}}，运动时间 {{duration}}{{/duration}}{{#totalDuration}}，总耗时 {{totalDuration}}{{/totalDuration}}{{#avgHeartRate}}，平均心率 {{avgHeartRate}} bpm{{/avgHeartRate}}{{#maxHeartRate}}，最大心率 {{maxHeartRate}} bpm{{/maxHeartRate}}{{#distance}}，总里程 {{distance}} km{{/distance}}{{#elevationGain}}，累计爬升 {{elevationGain}} m{{/elevationGain}}{{#avgSpeed}}，平均速度 {{avgSpeed}} km/h{{/avgSpeed}}{{#maxSpeed}}，最大速度 {{maxSpeed}} km/h{{/maxSpeed}}{{#calories}}，卡路里 {{calories}} kcal{{/calories}}{{#device}}，[[{{device}}]]{{/device}}。";
+  "[{{time}}] {{#name}}{{name}}，{{/name}}{{type}}{{#duration}}，运动时间 {{duration}}{{/duration}}{{#totalDuration}}，总耗时 {{totalDuration}}{{/totalDuration}}{{#avgHeartRate}}，平均心率 {{avgHeartRate}} bpm{{/avgHeartRate}}{{#maxHeartRate}}，最大心率 {{maxHeartRate}} bpm{{/maxHeartRate}}{{#distance}}，总里程 {{distance}} km{{/distance}}{{#avgPace}}，配速 {{avgPace}}{{/avgPace}}{{#elevationGain}}，累计爬升 {{elevationGain}} m{{/elevationGain}}{{#avgSpeed}}，平均速度 {{avgSpeed}} km/h{{/avgSpeed}}{{#maxSpeed}}，最大速度 {{maxSpeed}} km/h{{/maxSpeed}}{{#calories}}，卡路里 {{calories}} kcal{{/calories}}{{#device}}，[[{{device}}]]{{/device}}。";
 const DEFAULT_AH_SLEEP_TEMPLATE =
   "[{{wakeTime}}] 睡眠 {{asleep}}{{#inBed}}（卧床{{inBed}}）{{/inBed}}{{#stages}}｜{{stages}}{{/stages}}{{#vitals}}｜{{vitals}}{{/vitals}}";
 

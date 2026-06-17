@@ -488,6 +488,32 @@ const collection = {
             }
           ]
         }
+      }),
+      apiRequest("Sleep - Bare Body", "POST", "/v1/api/health/sleep", {
+        description: "Dedicated sleep endpoint: POST the sleep object directly (segments, optional pre-aggregated totals, nested vitals, stable id). No wrapper needed.",
+        body: {
+          id: "sleep-2026-06-17",
+          segments: [
+            { stage: "core", start: "2026-06-16T16:50:13Z", end: "2026-06-17T00:30:01Z" }
+          ],
+          sleepStart: "2026-06-16T16:50:13Z",
+          sleepEnd: "2026-06-17T00:30:01Z",
+          vitals: { averageHeartRateBpm: 62.7, averageHRVms: 42, respiratoryRate: 14, oxygenSaturation: 0.97, wristTemperatureDeltaC: 36.5 }
+        }
+      }),
+      apiRequest("Workouts - Bare Body", "POST", "/v1/api/health/workouts", {
+        description: "Dedicated workouts endpoint: POST a single HKWorkout object directly, or { workouts: [...] }. startDate may be omitted (derived from route/end-duration); heartRate may be an object.",
+        body: {
+          id: "840D31FA",
+          activityType: "cycling",
+          end: "2026-06-17T02:02:45Z",
+          duration: 1327,
+          distanceMeters: 4500,
+          avgPaceSecPerKm: 295,
+          elevationGainMeters: 7.3,
+          activeEnergyKcal: 75,
+          heartRate: { averageBpm: 114, maxBpm: 143, minBpm: 83 }
+        }
       })
     ])
   ]

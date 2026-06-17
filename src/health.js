@@ -42,6 +42,39 @@ const SLEEP_STAGE_BY_NUMBER = new Map([
 
 const ASLEEP_STAGES = new Set(["core", "deep", "rem", "asleep"]);
 
+// Readable labels for the common HKWorkoutActivityType string values the app
+// sends (lowercased, HKWorkoutActivityType prefix stripped). Unknown types fall
+// back to the raw string.
+const WORKOUT_TYPE_LABELS = new Map([
+  ["running", "跑步"],
+  ["walking", "步行"],
+  ["cycling", "骑行"],
+  ["hiking", "徒步"],
+  ["swimming", "游泳"],
+  ["yoga", "瑜伽"],
+  ["rowing", "划船"],
+  ["elliptical", "椭圆机"],
+  ["functionalstrengthtraining", "力量训练"],
+  ["traditionalstrengthtraining", "力量训练"],
+  ["highintensityintervaltraining", "高强度间歇"],
+  ["coretraining", "核心训练"],
+  ["pilates", "普拉提"],
+  ["dance", "舞蹈"],
+  ["cardiodance", "有氧舞蹈"],
+  ["stairclimbing", "爬楼"],
+  ["jumprope", "跳绳"],
+  ["badminton", "羽毛球"],
+  ["tabletennis", "乒乓球"],
+  ["basketball", "篮球"],
+  ["soccer", "足球"],
+  ["tennis", "网球"],
+  ["golf", "高尔夫"],
+  ["climbing", "攀岩"],
+  ["skatingsports", "滑冰"],
+  ["downhillskiing", "滑雪"],
+  ["cooldown", "放松"]
+]);
+
 export async function ingestHealth(config, params = {}) {
   const appleHealth = config.appleHealth || {};
   if (!appleHealth.enabled) {
@@ -82,6 +115,43 @@ export async function ingestHealth(config, params = {}) {
     workouts: workoutResults,
     results
   };
+}
+
+// Dedicated sleep endpoint: the request body is the sleep payload itself (one
+// session, or { sessions: [...] }); a { sleep: {...} } wrapper is also accepted.
+export async function ingestHealthSleep(config, params = {}) {
+  const appleHealth = config.appleHealth || {};
+  if (!appleHealth.enabled) {
+    return { ok: false, operation: "health/sleep", error: "Apple Health ingest is not enabled" };
+  }
+  if (!appleHealth.sleep?.enabled) {
+    return { ok: false, operation: "health/sleep", error: "Apple Health sleep ingest is disabled" };
+  }
+  const timeZone = config.dailyNote.timeZone;
+  const payload = params.sleep ?? params.sleepAnalysis ?? params;
+  const sleep = await ingestSleep(config, appleHealth.sleep, payload, timeZone);
+  return { ok: true, operation: "health/sleep", timeZone, sleep: sleep.summaries, results: sleep.writes };
+}
+
+// Dedicated workouts endpoint: the request body is the workout payload itself (a
+// single workout object, or { workouts: [...] }).
+export async function ingestHealthWorkouts(config, params = {}) {
+  const appleHealth = config.appleHealth || {};
+  if (!appleHealth.enabled) {
+    return { ok: false, operation: "health/workouts", error: "Apple Health ingest is not enabled" };
+  }
+  if (!appleHealth.workouts?.enabled) {
+    return { ok: false, operation: "health/workouts", error: "Apple Health workout ingest is disabled" };
+  }
+  const timeZone = config.dailyNote.timeZone;
+  // This endpoint is workout-specific, so a bare body is treated as one workout.
+  const list = Array.isArray(params.workouts)
+    ? params.workouts.slice(0, MAX_WORKOUTS)
+    : params.workout
+      ? [params.workout]
+      : [params];
+  const written = await ingestWorkouts(config, appleHealth.workouts, list, timeZone);
+  return { ok: true, operation: "health/workouts", timeZone, workouts: written.entries, results: written.writes };
 }
 
 // ----- Sleep -----
@@ -335,7 +405,10 @@ function buildSleepVars(aggregate, session, timeZone) {
   if (stageParts.length) vars.stages = stageParts.join("·");
   const vitalParts = [
     vars.avgHeartRate && `平均心率${vars.avgHeartRate} bpm`,
-    vars.hrv && `HRV ${vars.hrv} ms`
+    vars.hrv && `HRV ${vars.hrv} ms`,
+    vars.respiratoryRate && `呼吸${vars.respiratoryRate}次/分`,
+    vars.spo2 && `血氧${vars.spo2}%`,
+    vars.wristTemperature && `手腕温度${vars.wristTemperature}℃`
   ].filter(Boolean);
   if (vitalParts.length) vars.vitals = vitalParts.join("·");
 
@@ -379,20 +452,32 @@ async function ingestWorkouts(config, workoutsConfig, rawWorkouts, timeZone) {
 }
 
 function normalizeWorkout(raw, timeZone) {
-  if (!raw || typeof raw !== "object") return null;
-  const start = toDate(raw.startDate ?? raw.start ?? raw.startTime);
-  if (!start) return null;
+  if (!isPlainObject(raw)) return null;
   const end = toDate(raw.endDate ?? raw.end ?? raw.endTime);
+  const durationSeconds = numberOrNull(raw.duration ?? raw.movingTime ?? raw.durationSec);
+
+  // The payload may omit a start time; derive it from the route's first point or
+  // from end - duration so GPS workouts (which only carry `end`) still land.
+  let start = toDate(raw.startDate ?? raw.start ?? raw.startTime);
+  if (!start) {
+    const routeStart = Array.isArray(raw.route) && raw.route.length ? toDate(raw.route[0]?.timestamp) : null;
+    if (routeStart) start = routeStart;
+    else if (end && positiveNumber(durationSeconds)) start = new Date(end.getTime() - durationSeconds * 1000);
+  }
+  if (!start) return null;
+
   const parts = getDateTimeParts(start, timeZone);
   const type = workoutTypeLabel(raw);
   let name = cleanText(raw.name ?? raw.title ?? "");
   if (name && name === type) name = "";
-  const durationSeconds = numberOrNull(raw.duration ?? raw.movingTime)
-    ?? (end ? (end.getTime() - start.getTime()) / 1000 : null);
+  const movingTimeSeconds = positiveNumber(durationSeconds)
+    ? durationSeconds
+    : (end ? (end.getTime() - start.getTime()) / 1000 : null);
   const distanceMeters = resolveDistanceMeters(raw);
-  const avgPaceSecPerKm = numberOrNull(raw.averagePaceSecondsPerKm)
-    ?? (positiveNumber(distanceMeters) && positiveNumber(durationSeconds)
-      ? durationSeconds / (distanceMeters / 1000)
+  const heartRate = isPlainObject(raw.heartRate) ? raw.heartRate : {};
+  const avgPaceSecPerKm = numberOrNull(raw.avgPaceSecPerKm ?? raw.averagePaceSecPerKm ?? raw.averagePaceSecondsPerKm)
+    ?? (positiveNumber(distanceMeters) && positiveNumber(movingTimeSeconds)
+      ? movingTimeSeconds / (distanceMeters / 1000)
       : null);
 
   return {
@@ -403,13 +488,16 @@ function normalizeWorkout(raw, timeZone) {
     HH: parts.HH,
     mm: parts.mm,
     date: parts["yyyy-MM-dd"],
-    movingTimeSeconds: durationSeconds,
+    movingTimeSeconds,
     elapsedTimeSeconds: end ? (end.getTime() - start.getTime()) / 1000 : null,
-    averageHeartrate: numberOrNull(raw.averageHeartRate ?? raw.avgHeartRate ?? raw.averageHeartrate),
-    maxHeartrate: numberOrNull(raw.maxHeartRate ?? raw.maximumHeartRate ?? raw.maxHeartrate),
+    averageHeartrate: numberOrNull(raw.averageHeartRate ?? raw.avgHeartRate ?? raw.averageHeartrate
+      ?? heartRate.averageBpm ?? heartRate.avgBpm ?? heartRate.average),
+    maxHeartrate: numberOrNull(raw.maxHeartRate ?? raw.maximumHeartRate ?? raw.maxHeartrate
+      ?? heartRate.maxBpm ?? heartRate.max),
+    minHeartrate: numberOrNull(raw.minHeartRate ?? raw.minimumHeartRate ?? heartRate.minBpm ?? heartRate.min),
     distanceMeters,
-    elevationGainMeters: numberOrNull(raw.elevationGain ?? raw.totalElevationGain ?? raw.elevation),
-    averageSpeed: numberOrNull(raw.averageSpeed),
+    elevationGainMeters: numberOrNull(raw.elevationGain ?? raw.totalElevationGain ?? raw.elevation ?? raw.elevationGainMeters),
+    averageSpeed: numberOrNull(raw.averageSpeed ?? raw.avgSpeed),
     maxSpeed: numberOrNull(raw.maxSpeed),
     avgPaceSecPerKm,
     flightsClimbed: numberOrNull(raw.flightsClimbed ?? raw.flights),
@@ -425,9 +513,17 @@ function buildWorkoutVars(activity) {
   const vars = { time: `${activity.HH}:${activity.mm}`, date: activity.date, type: activity.type };
   if (activity.name) vars.name = activity.name;
   if (positiveNumber(activity.movingTimeSeconds)) vars.duration = formatWorkoutDuration(activity.movingTimeSeconds);
-  if (positiveNumber(activity.elapsedTimeSeconds)) vars.totalDuration = formatWorkoutDuration(activity.elapsedTimeSeconds);
+  // Only surface elapsed time when it differs meaningfully from moving time
+  // (a continuous workout has them ~equal, so showing both is noise).
+  if (
+    positiveNumber(activity.elapsedTimeSeconds) &&
+    Math.abs(activity.elapsedTimeSeconds - (activity.movingTimeSeconds || 0)) >= 60
+  ) {
+    vars.totalDuration = formatWorkoutDuration(activity.elapsedTimeSeconds);
+  }
   if (positiveNumber(activity.averageHeartrate)) vars.avgHeartRate = Math.round(activity.averageHeartrate);
   if (positiveNumber(activity.maxHeartrate)) vars.maxHeartRate = Math.round(activity.maxHeartrate);
+  if (positiveNumber(activity.minHeartrate)) vars.minHeartRate = Math.round(activity.minHeartrate);
   if (positiveNumber(activity.distanceMeters)) vars.distance = (activity.distanceMeters / 1000).toFixed(2);
   if (finiteNumber(activity.elevationGainMeters) && activity.elevationGainMeters !== 0) {
     vars.elevationGain = Math.round(activity.elevationGainMeters);
@@ -457,7 +553,10 @@ function workoutTypeLabel(raw) {
     raw.type,
     raw.sport
   );
-  if (explicit && !/^\d+$/.test(explicit)) return cleanText(explicit);
+  if (explicit && !/^\d+$/.test(explicit)) {
+    const key = explicit.replace(/^HKWorkoutActivityType/i, "").toLowerCase();
+    return WORKOUT_TYPE_LABELS.get(key) || cleanText(explicit);
+  }
   const numeric = Number(raw.workoutActivityType ?? raw.activityType ?? raw.type);
   if (Number.isFinite(numeric) && HK_WORKOUT_TYPES.has(numeric)) return HK_WORKOUT_TYPES.get(numeric);
   return cleanText(explicit) || "Workout";
@@ -480,7 +579,9 @@ function resolveDistanceMeters(raw) {
 }
 
 function resolveCalories(raw) {
-  return numberOrNull(raw.totalEnergyBurned ?? raw.activeEnergyBurned ?? raw.calories ?? raw.energyBurned);
+  return numberOrNull(
+    raw.totalEnergyBurned ?? raw.activeEnergyBurned ?? raw.activeEnergyKcal ?? raw.calories ?? raw.energyBurned
+  );
 }
 
 // ----- Shared write path -----
@@ -582,14 +683,17 @@ function looksLikeSleepPayload(value) {
 
 function looksLikeWorkoutPayload(value) {
   if (!isPlainObject(value)) return false;
-  const hasStart = value.startDate !== undefined || value.start !== undefined || value.startTime !== undefined;
+  const hasTime =
+    value.startDate !== undefined || value.start !== undefined || value.startTime !== undefined ||
+    value.endDate !== undefined || value.end !== undefined || value.endTime !== undefined ||
+    value.duration !== undefined;
   const hasType =
     value.workoutActivityType !== undefined ||
     value.activityType !== undefined ||
     value.type !== undefined ||
     value.exerciseType !== undefined ||
     value.sport !== undefined;
-  return hasStart && hasType;
+  return hasTime && hasType;
 }
 
 function isPlainObject(value) {
@@ -608,8 +712,16 @@ function resolveAverage(value) {
 // Returns { avg, min, max } from either a single number or an array of samples
 // ({ value }/{ bpm }/{ ms } or bare numbers).
 function resolveStats(value) {
-  if (positiveNumber(value)) return { avg: value, min: value, max: value };
-  if (typeof value === "number" && Number.isFinite(value)) return { avg: value, min: value, max: value };
+  // A single number is just an average; min/max are only known from samples or
+  // an explicit object so they are not fabricated from one value.
+  if (typeof value === "number" && Number.isFinite(value)) return { avg: value };
+  if (isPlainObject(value) && !Array.isArray(value.samples)) {
+    return {
+      avg: numberOrNull(value.averageBpm ?? value.avgBpm ?? value.average ?? value.avg),
+      min: numberOrNull(value.minBpm ?? value.min),
+      max: numberOrNull(value.maxBpm ?? value.max)
+    };
+  }
   const samples = Array.isArray(value) ? value : Array.isArray(value?.samples) ? value.samples : null;
   if (!samples || !samples.length) return {};
   const numbers = samples

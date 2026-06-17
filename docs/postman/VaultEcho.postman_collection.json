@@ -1119,6 +1119,52 @@
               }
             }
           }
+        },
+        {
+          "name": "Sleep - Bare Body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/health/sleep",
+            "description": "Dedicated sleep endpoint: POST the sleep object directly (segments, optional pre-aggregated totals, nested vitals, stable id). No wrapper needed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"sleep-2026-06-17\",\n  \"segments\": [\n    {\n      \"stage\": \"core\",\n      \"start\": \"2026-06-16T16:50:13Z\",\n      \"end\": \"2026-06-17T00:30:01Z\"\n    }\n  ],\n  \"sleepStart\": \"2026-06-16T16:50:13Z\",\n  \"sleepEnd\": \"2026-06-17T00:30:01Z\",\n  \"vitals\": {\n    \"averageHeartRateBpm\": 62.7,\n    \"averageHRVms\": 42,\n    \"respiratoryRate\": 14,\n    \"oxygenSaturation\": 0.97,\n    \"wristTemperatureDeltaC\": 36.5\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Workouts - Bare Body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/health/workouts",
+            "description": "Dedicated workouts endpoint: POST a single HKWorkout object directly, or { workouts: [...] }. startDate may be omitted (derived from route/end-duration); heartRate may be an object.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"840D31FA\",\n  \"activityType\": \"cycling\",\n  \"end\": \"2026-06-17T02:02:45Z\",\n  \"duration\": 1327,\n  \"distanceMeters\": 4500,\n  \"avgPaceSecPerKm\": 295,\n  \"elevationGainMeters\": 7.3,\n  \"activeEnergyKcal\": 75,\n  \"heartRate\": {\n    \"averageBpm\": 114,\n    \"maxBpm\": 143,\n    \"minBpm\": 83\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     }

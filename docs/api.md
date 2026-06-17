@@ -42,7 +42,7 @@ Authorization: Bearer <API_TOKEN>
 | `reviews/run` | POST | Runs one configured review task immediately, using period sources, semantic recall, the configured AI model, and the task output path. |
 | `connectors/status` | GET or POST | Shows configured connector source scheduling state, next run time, and the last connector run record for each source. |
 | `connectors/run` | POST | Runs one configured connector source immediately; supports X posts and Strava activities in the source's sliding lookback window. |
-| `health/ingest` | POST | Receives raw Apple Health sleep samples and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Routing, target headings (or time-slot insertion), and idempotency come from the Apple Health Web UI settings; sleep is attributed to the wake day and re-pushes overwrite that night's entry, while each workout is de-duplicated by its UUID. |
+| `health/ingest` | POST | Receives raw Apple Health sleep samples and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Routing and target headings (or time-slot insertion) come from the Apple Health Web UI settings. Each sleep session and each workout becomes one `[HH:mm]` entry that is merged and time-sorted under the configured heading, exactly like the Strava activity block (a night plus a nap are two sleep entries). Sleep sessions are attributed to the wake day and de-duplicated per session id (or fall-asleep time); workouts are de-duplicated by UUID. |
 | `tags/list` | GET | Counts Markdown hashtags under allowed directories. |
 | `batch` | POST | Executes multiple API operations in one request. |
 | `uri/execute` | POST | Parses an Obsidian URI and executes the parts that can be mapped to Vault filesystem operations. |
@@ -932,7 +932,7 @@ curl -X POST http://localhost:8787/v1/api/connectors/run \
 
 **Ingest Apple Health Data**
 
-Receives raw Apple Health sleep samples and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Routing, target headings (or time-slot insertion), and idempotency come from the Apple Health Web UI settings; sleep is attributed to the wake day and re-pushes overwrite that night's entry, while each workout is de-duplicated by its UUID.
+Receives raw Apple Health sleep samples and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Routing and target headings (or time-slot insertion) come from the Apple Health Web UI settings. Each sleep session and each workout becomes one `[HH:mm]` entry that is merged and time-sorted under the configured heading, exactly like the Strava activity block (a night plus a nap are two sleep entries). Sleep sessions are attributed to the wake day and de-duplicated per session id (or fall-asleep time); workouts are de-duplicated by UUID.
 
 Method: `POST`
 
@@ -946,7 +946,7 @@ Parameters:
 
 | Parameter | Description |
 |---|---|
-| `sleep` | Optional. Either an array of sleep-stage samples or an object `{ samples: [...], heartRate, hrv }`. Each sample needs `value` (HKCategoryValueSleepAnalysis number or identifier such as `asleepDeep`), `startDate`, and `endDate`. `heartRate`/`hrv` accept a single average number or an array of `{ value }` samples. |
+| `sleep` | Optional. One sleep session: an array of stage samples, or an object `{ samples: [...], heartRate, hrv, id }`. Send several sessions in one request (e.g. a night plus a nap) with `{ sessions: [ {...}, {...} ] }`; each becomes its own entry. Each sample needs `value` (HKCategoryValueSleepAnalysis number or identifier such as `asleepDeep`), `startDate`, and `endDate`. `heartRate`/`hrv` accept a single average number or an array of `{ value }` samples. Provide a stable `id` per session for reliable de-duplication on re-push (otherwise the fall-asleep time is used). |
 | `workouts` | Optional. An array of HKWorkout objects (or a single object). Recognized fields: `uuid`/`id`, `startDate`, `endDate` or `duration` (seconds), `workoutActivityType`/`activityType`/`type` (number or label), `totalDistance`/`distanceMeters`/`distanceKm`, `totalEnergyBurned`/`calories`, `averageHeartRate`, `maxHeartRate`, `deviceName`/`sourceName`. |
 
 Example:

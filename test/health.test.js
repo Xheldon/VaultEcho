@@ -33,33 +33,79 @@ test("sleep ingest writes one aggregated summary under the wake-day heading", as
   assert.match(daily, /## 今日睡眠/);
 });
 
-test("re-pushing a refined night overwrites the entry instead of duplicating", async () => {
+test("multiple sleep sessions (night plus nap) accumulate under 今日睡眠, sorted by time", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
   const config = testConfig(root);
 
-  const partial = {
-    sleep: {
-      samples: [
-        { value: "asleepCore", startDate: "2026-06-16T23:30:00+08:00", endDate: "2026-06-17T05:00:00+08:00" }
-      ]
-    }
-  };
-  await ingestHealth(config, partial);
-
+  // Night sleep, pushed on its own.
   await ingestHealth(config, {
     sleep: {
       samples: [
         { value: "asleepDeep", startDate: "2026-06-16T23:30:00+08:00", endDate: "2026-06-17T01:00:00+08:00" },
-        { value: "asleepCore", startDate: "2026-06-17T01:00:00+08:00", endDate: "2026-06-17T06:30:00+08:00" }
+        { value: "asleepCore", startDate: "2026-06-17T01:00:00+08:00", endDate: "2026-06-17T07:10:00+08:00" }
       ],
-      heartRate: 55
+      heartRate: 50
+    }
+  });
+
+  // Afternoon nap, pushed separately on the same day.
+  await ingestHealth(config, {
+    sleep: {
+      samples: [
+        { value: "asleepCore", startDate: "2026-06-17T14:00:00+08:00", endDate: "2026-06-17T14:35:00+08:00" }
+      ]
     }
   });
 
   const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
-  const sleepLines = daily.split("\n").filter((line) => line.includes("睡眠 "));
+  // One heading, two entries, the night before the nap.
+  assert.equal(daily.match(/## 今日睡眠/g).length, 1);
+  const sleepLines = daily.split("\n").filter((line) => /^\[\d{2}:\d{2}\] 睡眠/.test(line));
+  assert.equal(sleepLines.length, 2);
+  assert.match(sleepLines[0], /^\[07:10\]/);
+  assert.match(sleepLines[1], /^\[14:35\]/);
+  // One blank line between the two entries (same spacing as the workout block).
+  assert.match(daily, /\[07:10\] 睡眠[^\n]*\n\n\[14:35\] 睡眠/);
+});
+
+test("re-pushing the same sleep session is de-duplicated", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+  const payload = {
+    sleep: {
+      samples: [
+        { value: "asleepDeep", startDate: "2026-06-16T23:30:00+08:00", endDate: "2026-06-17T01:00:00+08:00" },
+        { value: "asleepCore", startDate: "2026-06-17T01:00:00+08:00", endDate: "2026-06-17T07:10:00+08:00" }
+      ],
+      heartRate: 50
+    }
+  };
+
+  await ingestHealth(config, payload);
+  const second = await ingestHealth(config, payload);
+  assert.equal(second.sleep[0].idempotent, true);
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  const sleepLines = daily.split("\n").filter((line) => /^\[\d{2}:\d{2}\] 睡眠/.test(line));
   assert.equal(sleepLines.length, 1);
-  assert.match(daily, /平均心率55 bpm/);
+});
+
+test("a single request can carry multiple sleep sessions via sleep.sessions", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  await ingestHealth(config, {
+    sleep: {
+      sessions: [
+        { samples: [{ value: "asleepCore", startDate: "2026-06-16T23:30:00+08:00", endDate: "2026-06-17T07:10:00+08:00" }], heartRate: 50 },
+        { samples: [{ value: "asleepCore", startDate: "2026-06-17T14:00:00+08:00", endDate: "2026-06-17T14:35:00+08:00" }] }
+      ]
+    }
+  });
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-17.md"), "utf8");
+  const sleepLines = daily.split("\n").filter((line) => /^\[\d{2}:\d{2}\] 睡眠/.test(line));
+  assert.equal(sleepLines.length, 2);
 });
 
 test("workout ingest writes a Strava-style activity entry under the workout heading", async () => {

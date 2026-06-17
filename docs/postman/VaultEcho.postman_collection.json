@@ -1108,7 +1108,7 @@
               }
             ],
             "url": "{{baseUrl}}/v1/api/health/ingest",
-            "description": "Receive-only endpoint for device-pushed Apple Health data. Sleep samples are aggregated into one nightly summary attributed to the wake day; HKWorkout sessions are formatted like the Strava activity entry. Requires Apple Health to be enabled in the Web UI.",
+            "description": "Receive-only endpoint for device-pushed Apple Health data. Each sleep session and each workout becomes one [HH:mm] entry merged and time-sorted under the configured heading (a night plus a nap are two sleep entries; send several at once via sleep.sessions). Sleep is attributed to the wake day and de-duplicated per session id or fall-asleep time; workouts by UUID. Requires Apple Health to be enabled in the Web UI.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"sleep\": {\n    \"samples\": [\n      {\n        \"value\": \"asleepDeep\",\n        \"startDate\": \"2026-06-16T23:30:00+08:00\",\n        \"endDate\": \"2026-06-17T00:42:00+08:00\"\n      },\n      {\n        \"value\": \"asleepCore\",\n        \"startDate\": \"2026-06-17T00:42:00+08:00\",\n        \"endDate\": \"2026-06-17T05:02:00+08:00\"\n      },\n      {\n        \"value\": \"asleepREM\",\n        \"startDate\": \"2026-06-17T05:02:00+08:00\",\n        \"endDate\": \"2026-06-17T07:15:00+08:00\"\n      }\n    ],\n    \"heartRate\": 52,\n    \"hrv\": 48\n  },\n  \"workouts\": [\n    {\n      \"uuid\": \"A1B2\",\n      \"type\": \"Running\",\n      \"startDate\": \"2026-06-17T18:05:00+08:00\",\n      \"duration\": 1800,\n      \"distanceMeters\": 5200,\n      \"averageHeartRate\": 150,\n      \"deviceName\": \"Apple Watch Series 10\"\n    }\n  ]\n}",

@@ -577,14 +577,14 @@ export const API_ENDPOINTS = [
     route: "health/ingest",
     method: "POST",
     title: "Ingest Apple Health Data",
-    summary: "Receives raw Apple Health sleep samples and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Routing, target headings (or time-slot insertion), and idempotency come from the Apple Health Web UI settings; sleep is attributed to the wake day and re-pushes overwrite that night's entry, while each workout is de-duplicated by its UUID.",
+    summary: "Receives raw Apple Health sleep samples and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Routing and target headings (or time-slot insertion) come from the Apple Health Web UI settings. Each sleep session and each workout becomes one `[HH:mm]` entry that is merged and time-sorted under the configured heading, exactly like the Strava activity block (a night plus a nap are two sleep entries). Sleep sessions are attributed to the wake day and de-duplicated per session id (or fall-asleep time); workouts are de-duplicated by UUID.",
     scenarios: [
       "A companion iOS app posts the night's sleep-stage samples after waking; VaultEcho aggregates total/in-bed time, per-stage durations, average heart rate, and HRV into one daily-note line.",
       "An iOS automation posts finished HKWorkout sessions; VaultEcho formats each one like the Strava activity entry and writes it under the configured workout heading.",
       "A device pushes both sleep and workouts in one request after a HealthKit sync."
     ],
     params: [
-      ["sleep", "Optional. Either an array of sleep-stage samples or an object `{ samples: [...], heartRate, hrv }`. Each sample needs `value` (HKCategoryValueSleepAnalysis number or identifier such as `asleepDeep`), `startDate`, and `endDate`. `heartRate`/`hrv` accept a single average number or an array of `{ value }` samples."],
+      ["sleep", "Optional. One sleep session: an array of stage samples, or an object `{ samples: [...], heartRate, hrv, id }`. Send several sessions in one request (e.g. a night plus a nap) with `{ sessions: [ {...}, {...} ] }`; each becomes its own entry. Each sample needs `value` (HKCategoryValueSleepAnalysis number or identifier such as `asleepDeep`), `startDate`, and `endDate`. `heartRate`/`hrv` accept a single average number or an array of `{ value }` samples. Provide a stable `id` per session for reliable de-duplication on re-push (otherwise the fall-asleep time is used)."],
       ["workouts", "Optional. An array of HKWorkout objects (or a single object). Recognized fields: `uuid`/`id`, `startDate`, `endDate` or `duration` (seconds), `workoutActivityType`/`activityType`/`type` (number or label), `totalDistance`/`distanceMeters`/`distanceKm`, `totalEnergyBurned`/`calories`, `averageHeartRate`, `maxHeartRate`, `deviceName`/`sourceName`."]
     ],
     curl: `curl -X POST http://localhost:8787/v1/api/health/ingest \\

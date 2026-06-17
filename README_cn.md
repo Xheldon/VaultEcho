@@ -230,7 +230,7 @@ curl -X POST http://localhost:8787/v1/api/daily/append-by-time \
 
 ### Apple 健康
 
-`health/ingest` 是一个只接收的端点，供配套设备推送 Apple 健康原始数据。VaultEcho 在服务端做聚合和格式化，省掉 iOS 端处理原始数据的麻烦。睡眠样本会聚合成一条当晚摘要（总睡眠/卧床时长、深睡/核心/REM/清醒分期、平均心率、HRV），按起床日归属；`HKWorkout` 会按与 Strava 运动一致的格式写入。目标 heading（或按时间段插入）在 Web UI 配置。
+`health/ingest` 是一个只接收的端点，供配套设备推送 Apple 健康原始数据。VaultEcho 在服务端做聚合和格式化，省掉 iOS 端处理原始数据的麻烦。每段睡眠聚合成一条记录（总睡眠/卧床时长、深睡/核心/REM/清醒分期、平均心率、HRV），按起床日归属；一天里夜间睡眠 + 午休会是两条，在 heading 下合并并按时间排序。`HKWorkout` 按与 Strava 运动一致的格式写入。两者复用同一套日记块布局，目标 heading（或按时间段插入）在 Web UI 配置。
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/health/ingest \
@@ -251,7 +251,7 @@ curl -X POST http://localhost:8787/v1/api/health/ingest \
   }'
 ```
 
-睡眠重复推送会覆盖当晚那条（Apple Watch 增量同步不会重复）；每条运动按 UUID 去重。
+也可以用 `"sleep": { "sessions": [ ... ] }` 在一个请求里发多段睡眠。每段睡眠按会话 `id`（没有则用入睡时间）去重，每条运动按 UUID 去重，重复推送不会重复写。
 
 ### Frontmatter
 

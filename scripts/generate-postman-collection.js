@@ -465,7 +465,7 @@ const collection = {
 
     folder("12 Apple Health", [
       apiRequest("Ingest - Sleep And Workouts", "POST", "/v1/api/health/ingest", {
-        description: "Receive-only endpoint for device-pushed Apple Health data. Sleep samples are aggregated into one nightly summary attributed to the wake day; HKWorkout sessions are formatted like the Strava activity entry. Requires Apple Health to be enabled in the Web UI.",
+        description: "Receive-only endpoint for device-pushed Apple Health data. Each sleep session and each workout becomes one [HH:mm] entry merged and time-sorted under the configured heading (a night plus a nap are two sleep entries; send several at once via sleep.sessions). Sleep is attributed to the wake day and de-duplicated per session id or fall-asleep time; workouts by UUID. Requires Apple Health to be enabled in the Web UI.",
         body: {
           sleep: {
             samples: [

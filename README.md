@@ -234,7 +234,7 @@ If `at` is omitted, VaultEcho uses the server's current clock and interprets it 
 
 ### Apple Health
 
-`health/ingest` is a receive-only endpoint for a companion device that pushes raw Apple Health data. VaultEcho aggregates and formats it server-side so the iOS client does not have to. Sleep samples become one nightly summary (total/in-bed time, deep/core/REM/awake stages, average heart rate, HRV) attributed to the wake day; `HKWorkout` sessions are formatted like the Strava activity entry. Target headings (or time-slot insertion) are configured in the Web UI.
+`health/ingest` is a receive-only endpoint for a companion device that pushes raw Apple Health data. VaultEcho aggregates and formats it server-side so the iOS client does not have to. Each sleep session becomes one entry (total/in-bed time, deep/core/REM/awake stages, average heart rate, HRV) attributed to the wake day; a night plus a nap are two entries merged and time-sorted under the heading. `HKWorkout` sessions are formatted like the Strava activity entry. Both reuse the same daily-note block layout, and target headings (or time-slot insertion) are configured in the Web UI.
 
 ```bash
 curl -X POST http://localhost:8787/v1/api/health/ingest \
@@ -255,7 +255,7 @@ curl -X POST http://localhost:8787/v1/api/health/ingest \
   }'
 ```
 
-Sleep re-pushes overwrite that night's entry (so incremental Apple Watch syncs do not duplicate); each workout is de-duplicated by its UUID.
+Multiple sleep sessions can also be sent in one request via `"sleep": { "sessions": [ ... ] }`. Each sleep session is de-duplicated per session `id` (or fall-asleep time) and each workout by its UUID, so re-pushes do not duplicate.
 
 ### Frontmatter
 

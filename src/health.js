@@ -36,6 +36,8 @@ const SLEEP_STAGE_BY_NUMBER = new Map([
   [5, "rem"]
 ]);
 
+const ASLEEP_STAGES = new Set(["core", "deep", "rem", "asleep"]);
+
 export async function ingestHealth(config, params = {}) {
   const appleHealth = config.appleHealth || {};
   if (!appleHealth.enabled) {
@@ -44,15 +46,14 @@ export async function ingestHealth(config, params = {}) {
 
   const timeZone = config.dailyNote.timeZone;
   const results = [];
-  let sleepResult = null;
+  let sleepSummaries = [];
   const workoutResults = [];
 
   const sleepPayload = params.sleep ?? params.sleepAnalysis;
   if (sleepPayload !== undefined && sleepPayload !== null && appleHealth.sleep?.enabled) {
-    sleepResult = await ingestSleep(config, appleHealth.sleep, sleepPayload, timeZone);
-    if (sleepResult?.write) {
-      results.push(sleepResult.write);
-    }
+    const sleep = await ingestSleep(config, appleHealth.sleep, sleepPayload, timeZone);
+    sleepSummaries = sleep.summaries;
+    results.push(...sleep.writes);
   }
 
   const workoutsPayload = normalizeWorkoutList(params.workouts ?? params.workout);
@@ -66,7 +67,7 @@ export async function ingestHealth(config, params = {}) {
     ok: true,
     operation: "health/ingest",
     timeZone,
-    sleep: sleepResult ? sleepResult.summary : null,
+    sleep: sleepSummaries,
     workouts: workoutResults,
     results
   };
@@ -74,39 +75,41 @@ export async function ingestHealth(config, params = {}) {
 
 // ----- Sleep -----
 
+// A day can hold several sleep sessions (a night plus a nap), so each session
+// becomes its own [HH:mm] entry that is merged and sorted under the sleep
+// heading, exactly like workout entries. A session is de-duplicated by its id
+// (or, lacking one, its bed time), so an unchanged re-push is not written twice.
 async function ingestSleep(config, sleepConfig, payload, timeZone) {
-  const samples = extractSleepSamples(payload);
-  if (!samples.length) {
-    return { summary: { ok: false, error: "No sleep samples provided" }, write: null };
-  }
+  const sessions = extractSleepSessions(payload);
+  const summaries = [];
+  const writes = [];
 
-  const aggregate = aggregateSleep(samples);
-  if (!aggregate.asleepMinutes && !aggregate.inBedMinutes) {
-    return { summary: { ok: false, error: "Sleep samples contained no in-bed or asleep time" }, write: null };
-  }
+  for (const session of sessions) {
+    if (!session.samples.length) {
+      summaries.push({ ok: false, error: "No sleep samples provided" });
+      continue;
+    }
+    const aggregate = aggregateSleep(session.samples);
+    if (!aggregate.asleepMinutes && !aggregate.inBedMinutes) {
+      summaries.push({ ok: false, error: "Sleep samples contained no in-bed or asleep time" });
+      continue;
+    }
 
-  const wakeDate = aggregate.wakeDate;
-  const parts = getDateTimeParts(wakeDate, timeZone);
-  const heartRate = resolveAverage(payload.heartRate ?? payload.heartRates ?? payload.avgHeartRate);
-  const hrv = resolveAverage(payload.hrv ?? payload.heartRateVariability ?? payload.hrvSdnn);
+    const parts = getDateTimeParts(aggregate.wakeDate, timeZone);
+    const heartRate = resolveAverage(session.heartRate);
+    const hrv = resolveAverage(session.hrv);
+    const body = formatSleepBody(aggregate, { heartRate, hrv });
+    const line = `[${parts.HH}:${parts.mm}] ${body}`;
 
-  const body = formatSleepBody(aggregate, { heartRate, hrv });
-  const line = `[${parts.HH}:${parts.mm}] ${body}`;
-  const idempotencyKey = `apple-sleep-${parts["yyyy-MM-dd"]}`;
+    const write = await writeDailyEntry(config, sleepConfig.output, {
+      at: aggregate.wakeDate.toISOString(),
+      line,
+      body,
+      idempotencyKey: sleepIdempotencyKey(session, aggregate),
+      replayIfResultMissing: true
+    });
 
-  const write = await writeDailyEntry(config, sleepConfig.output, {
-    at: wakeDate.toISOString(),
-    line,
-    body,
-    idempotencyKey,
-    // Sleep is a single refined summary per night: re-pushes overwrite the
-    // night's entry instead of appending a second line.
-    replaceExisting: true,
-    forceReplayIdempotent: sleepConfig.output.target === "heading"
-  });
-
-  return {
-    summary: {
+    summaries.push({
       ok: true,
       date: parts["yyyy-MM-dd"],
       wakeAt: parts.isoLike,
@@ -115,10 +118,39 @@ async function ingestSleep(config, sleepConfig, payload, timeZone) {
       stages: aggregate.stages,
       heartRate,
       hrv,
-      path: write.path
-    },
-    write
+      path: write.path,
+      idempotent: Boolean(write.idempotent)
+    });
+    writes.push(write);
+  }
+
+  return { summaries, writes };
+}
+
+function extractSleepSessions(payload) {
+  if (payload && Array.isArray(payload.sessions)) {
+    return payload.sessions.map((session) => buildSleepSession(session));
+  }
+  return [buildSleepSession(payload)];
+}
+
+function buildSleepSession(source) {
+  return {
+    samples: extractSleepSamples(source),
+    heartRate: source?.heartRate ?? source?.heartRates ?? source?.avgHeartRate,
+    hrv: source?.hrv ?? source?.heartRateVariability ?? source?.hrvSdnn,
+    id: firstString(source?.id, source?.uuid, source?.sessionId)
   };
+}
+
+function sleepIdempotencyKey(session, aggregate) {
+  if (session.id) return `apple-sleep-${session.id.replace(/[^a-z0-9_-]+/gi, "-")}`;
+  // Without an explicit id, anchor on the fall-asleep time. It identifies the
+  // session (a nap has a different one) and stays stable as later stages stream
+  // in, unlike the in-bed boundary which can shift between pushes.
+  const start = aggregate.asleepStartDate || aggregate.startDate || aggregate.wakeDate;
+  const minute = new Date(Math.floor(start.getTime() / 60000) * 60000);
+  return `apple-sleep-${minute.toISOString()}`;
 }
 
 function extractSleepSamples(payload) {
@@ -164,16 +196,24 @@ function aggregateSleep(samples) {
   // daily note is attributed to this wake day (a night starting before midnight
   // still lands on the morning you got up).
   let wakeDate = samples[0].end;
+  let startDate = samples[0].start;
+  let asleepStartDate = null;
   for (const sample of samples) {
     const minutes = (sample.end.getTime() - sample.start.getTime()) / 60000;
     if (stageMinutes[sample.stage] !== undefined) {
       stageMinutes[sample.stage] += minutes;
     }
     if (sample.end > wakeDate) wakeDate = sample.end;
+    if (sample.start < startDate) startDate = sample.start;
+    if (ASLEEP_STAGES.has(sample.stage) && (!asleepStartDate || sample.start < asleepStartDate)) {
+      asleepStartDate = sample.start;
+    }
   }
 
   const asleepMinutes = stageMinutes.core + stageMinutes.deep + stageMinutes.rem + stageMinutes.asleep;
   return {
+    startDate,
+    asleepStartDate,
     wakeDate,
     asleepMinutes,
     inBedMinutes: stageMinutes.inBed,
@@ -236,7 +276,6 @@ async function ingestWorkouts(config, workoutsConfig, rawWorkouts, timeZone) {
       line,
       body,
       idempotencyKey: `apple-workout-${activity.id}`,
-      replaceExisting: false,
       replayIfResultMissing: true
     });
     writes.push(write);
@@ -344,9 +383,7 @@ async function writeDailyEntry(config, output, entry) {
     insertAfterHeading: insertAfter.heading,
     insertAfterHeadingLevel: insertAfter.headingLevel,
     content: entry.line,
-    replaceExisting: Boolean(entry.replaceExisting),
     idempotencyKey: entry.idempotencyKey,
-    forceReplayIdempotent: Boolean(entry.forceReplayIdempotent),
     replayIfResultMissing: true
   });
 }

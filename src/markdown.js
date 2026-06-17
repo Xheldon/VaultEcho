@@ -154,8 +154,7 @@ export function upsertSeparatedHeadingEntries(markdown, options) {
     linePattern,
     separator = "---",
     insertAfterHeading = "",
-    insertAfterHeadingLevel = headingLevel,
-    replaceExisting = false
+    insertAfterHeadingLevel = headingLevel
   } = options;
   const contentEntries = Array.isArray(entries)
     ? entries.map((entry) => String(entry || "").trim()).filter(Boolean)
@@ -169,7 +168,7 @@ export function upsertSeparatedHeadingEntries(markdown, options) {
   const section = findDelimitedHeadingSection(lines, heading, headingLevel, separator);
 
   if (section) {
-    return rewriteSeparatedHeading(lines, section, contentEntries, regex, separator, replaceExisting);
+    return rewriteSeparatedHeading(lines, section, contentEntries, regex, separator);
   }
 
   const insertionIndex = findSeparatedHeadingInsertIndex(lines, {
@@ -373,12 +372,10 @@ function findDelimitedHeadingSection(lines, heading, headingLevel, separator) {
   };
 }
 
-function rewriteSeparatedHeading(lines, section, entries, regex, separator, replaceExisting = false) {
-  const existingEntries = replaceExisting
-    ? []
-    : lines
-        .slice(section.start + 1, section.contentEnd)
-        .filter((line) => regex.test(line.slice(0, 1000)));
+function rewriteSeparatedHeading(lines, section, entries, regex, separator) {
+  const existingEntries = lines
+    .slice(section.start + 1, section.contentEnd)
+    .filter((line) => regex.test(line.slice(0, 1000)));
   const allEntries = uniqueSortedEntries([...existingEntries, ...entries]);
   const replacement = buildSeparatedHeadingLines(allEntries, {
     separator,

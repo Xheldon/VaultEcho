@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ingestHealth, ingestHealthSleep, ingestHealthWorkouts } from "../src/health.js";
+import { ingestHealth, ingestHealthSleep, ingestHealthWorkouts, ingestHealthWeather } from "../src/health.js";
 
 test("sleep ingest writes one aggregated summary under the wake-day heading", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
@@ -382,6 +382,82 @@ test("workout type placeholders offer localized, English, and raw variants", asy
   assert.match(daily, /\[09:40\] 骑行 \/ Cycling \/ cycling/);
 });
 
+test("weather ingest writes a single timestamped line under 今日天气", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  const result = await ingestHealthWeather(config, {
+    asOf: "2026-06-18T09:30:00+08:00",
+    condition: "Cloudy",
+    temperature: 28,
+    apparentTemperature: 29,
+    humidity: 0.7,
+    windSpeed: 8,
+    uvIndex: 1
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.weather.length, 1);
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-18.md"), "utf8");
+  assert.match(daily, /## 今日天气/);
+  // Icon (\S+), then the single-line summary matching the widget layout.
+  assert.match(daily, /\[09:30\] \S+ 28° 多云，体感 29°，湿度 70%，风 8 km\/h，紫外线 1。/);
+});
+
+test("weather accepts a full WeatherKit response and uses the moon for clear nights", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  await ingestHealthWeather(config, {
+    currentWeather: {
+      asOf: "2026-06-18T22:00:00+08:00",
+      condition: "Clear",
+      daylight: false,
+      temperature: 18,
+      humidity: 0.55,
+      windSpeed: 3,
+      uvIndex: 0
+    },
+    forecastDaily: { days: [] }
+  });
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-18.md"), "utf8");
+  assert.match(daily, /\[22:00\] \S+ 18° 晴，湿度 55%，风 3 km\/h，紫外线 0。/);
+  assert.ok(daily.includes("🌙"), "clear night should use the moon icon");
+});
+
+test("weather keeps a localized condition, converts Fahrenheit, and drops calm wind", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  await ingestHealthWeather(config, {
+    asOf: "2026-06-18T07:00:00+08:00",
+    condition: "多云",
+    temperatureFahrenheit: 82.4, // = 28°C
+    humidity: 65, // already a percentage
+    windSpeed: 0, // calm -> dropped
+    uvIndex: 3
+  });
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-18.md"), "utf8");
+  assert.match(daily, /\[07:00\] 28° 多云，湿度 65%，紫外线 3。/);
+  assert.doesNotMatch(daily, /风 /);
+});
+
+test("re-pushing the same weather reading does not duplicate", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+  const payload = { id: "wx-1", asOf: "2026-06-18T09:30:00+08:00", condition: "Rain", temperature: 20, humidity: 0.9 };
+
+  await ingestHealthWeather(config, payload);
+  const second = await ingestHealthWeather(config, payload);
+  assert.equal(second.weather[0].idempotent, true);
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-18.md"), "utf8");
+  const rainLines = daily.split("\n").filter((line) => line.includes("雨"));
+  assert.equal(rainLines.length, 1);
+});
+
 function testConfig(root) {
   return {
     vaultRoot: path.join(root, "vault"),
@@ -397,6 +473,10 @@ function testConfig(root) {
         enabled: true,
         minDurationMinutes: 0,
         output: { target: "heading", headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "" }
+      },
+      weather: {
+        enabled: true,
+        output: { target: "heading", headingMarkdown: "## 今日天气", insertAfterHeadingMarkdown: "" }
       }
     },
     dailyNote: {

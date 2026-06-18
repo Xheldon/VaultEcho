@@ -1,7 +1,8 @@
 import { parseHeadingMarkdown } from "./connectors.js";
 import {
   DEFAULT_APPLE_HEALTH_SLEEP_TEMPLATE,
-  DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE
+  DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE,
+  DEFAULT_APPLE_HEALTH_WEATHER_TEMPLATE
 } from "./config.js";
 import { getDateTimeParts } from "./time.js";
 import { executeOperation } from "./vault.js";
@@ -10,6 +11,7 @@ import { executeOperation } from "./vault.js";
 // a pathological payload even when it fits under maxJsonBodyBytes.
 const MAX_SLEEP_SAMPLES = 5000;
 const MAX_WORKOUTS = 200;
+const MAX_WEATHER = 200;
 
 // A small subset of HKWorkoutActivityType raw values mapped to readable labels.
 // The push client should send a readable activity string; this only covers the
@@ -75,6 +77,101 @@ const WORKOUT_TYPE_LABELS = new Map([
   ["cooldown", "放松"]
 ]);
 
+// Chinese labels for Apple WeatherKit condition codes (normalized: lowercased,
+// non-alphanumerics removed). Unknown codes fall back to the humanized English
+// name, and an already-localized string (e.g. the app sent "多云") is kept as-is.
+const WEATHER_CONDITION_LABELS = new Map([
+  ["clear", "晴"],
+  ["sunny", "晴"],
+  ["mostlyclear", "大致晴朗"],
+  ["partlycloudy", "局部多云"],
+  ["mostlycloudy", "多云"],
+  ["cloudy", "多云"],
+  ["overcast", "阴"],
+  ["fog", "雾"],
+  ["foggy", "雾"],
+  ["haze", "霾"],
+  ["hazy", "霾"],
+  ["smoke", "烟雾"],
+  ["smoky", "烟雾"],
+  ["breezy", "微风"],
+  ["windy", "大风"],
+  ["blustery", "狂风"],
+  ["drizzle", "毛毛雨"],
+  ["rain", "雨"],
+  ["heavyrain", "大雨"],
+  ["showers", "阵雨"],
+  ["scatteredshowers", "零星阵雨"],
+  ["sunshowers", "太阳雨"],
+  ["freezingdrizzle", "冻毛毛雨"],
+  ["freezingrain", "冻雨"],
+  ["thunderstorms", "雷雨"],
+  ["isolatedthunderstorms", "局部雷雨"],
+  ["scatteredthunderstorms", "零星雷雨"],
+  ["strongstorms", "强风暴"],
+  ["flurries", "小雪"],
+  ["snow", "雪"],
+  ["heavysnow", "大雪"],
+  ["snowshowers", "阵雪"],
+  ["sunflurries", "晴时阵雪"],
+  ["sleet", "雨夹雪"],
+  ["wintrymix", "雨雪混合"],
+  ["hail", "冰雹"],
+  ["blizzard", "暴风雪"],
+  ["blowingsnow", "风吹雪"],
+  ["blowingdust", "浮尘"],
+  ["hot", "炎热"],
+  ["frigid", "严寒"],
+  ["hurricane", "飓风"],
+  ["tropicalstorm", "热带风暴"]
+]);
+
+const WEATHER_CONDITION_ICONS = new Map([
+  ["clear", "☀️"],
+  ["sunny", "☀️"],
+  ["mostlyclear", "🌤️"],
+  ["partlycloudy", "⛅"],
+  ["mostlycloudy", "🌥️"],
+  ["cloudy", "☁️"],
+  ["overcast", "☁️"],
+  ["fog", "🌫️"],
+  ["foggy", "🌫️"],
+  ["haze", "🌫️"],
+  ["hazy", "🌫️"],
+  ["smoke", "🌫️"],
+  ["smoky", "🌫️"],
+  ["blowingdust", "🌫️"],
+  ["breezy", "🌬️"],
+  ["windy", "💨"],
+  ["blustery", "💨"],
+  ["drizzle", "🌦️"],
+  ["showers", "🌦️"],
+  ["scatteredshowers", "🌦️"],
+  ["sunshowers", "🌦️"],
+  ["rain", "🌧️"],
+  ["heavyrain", "🌧️"],
+  ["freezingdrizzle", "🌧️"],
+  ["freezingrain", "🌧️"],
+  ["thunderstorms", "⛈️"],
+  ["isolatedthunderstorms", "⛈️"],
+  ["scatteredthunderstorms", "⛈️"],
+  ["strongstorms", "⛈️"],
+  ["flurries", "🌨️"],
+  ["snow", "🌨️"],
+  ["snowshowers", "🌨️"],
+  ["sunflurries", "🌨️"],
+  ["sleet", "🌨️"],
+  ["wintrymix", "🌨️"],
+  ["hail", "🌨️"],
+  ["heavysnow", "❄️"],
+  ["blizzard", "❄️"],
+  ["blowingsnow", "❄️"],
+  ["hot", "🌡️"],
+  ["frigid", "🥶"],
+  ["hurricane", "🌀"],
+  ["tropicalstorm", "🌀"]
+]);
+
 export async function ingestHealth(config, params = {}) {
   const appleHealth = config.appleHealth || {};
   if (!appleHealth.enabled) {
@@ -85,12 +182,15 @@ export async function ingestHealth(config, params = {}) {
   const results = [];
   let sleepSummaries = [];
   const workoutResults = [];
+  const weatherResults = [];
 
   let sleepPayload = params.sleep ?? params.sleepAnalysis;
   let workoutsPayload = normalizeWorkoutList(params.workouts ?? params.workout);
+  // A full WeatherKit response carries the reading under `currentWeather`.
+  const weatherPayload = params.weather ?? (isPlainObject(params.currentWeather) ? params.currentWeather : undefined);
   // Accept a bare top-level body without a sleep/workouts wrapper by inferring
   // its kind from the shape (the iOS app may POST a sleep object directly).
-  if (sleepPayload === undefined && !workoutsPayload.length) {
+  if (sleepPayload === undefined && !workoutsPayload.length && weatherPayload === undefined) {
     if (looksLikeSleepPayload(params)) sleepPayload = params;
     else if (looksLikeWorkoutPayload(params)) workoutsPayload = [params];
   }
@@ -107,12 +207,20 @@ export async function ingestHealth(config, params = {}) {
     results.push(...written.writes);
   }
 
+  if (weatherPayload !== undefined && weatherPayload !== null && appleHealth.weather?.enabled) {
+    const list = Array.isArray(weatherPayload) ? weatherPayload : [weatherPayload];
+    const written = await ingestWeather(config, appleHealth.weather, list, timeZone);
+    weatherResults.push(...written.entries);
+    results.push(...written.writes);
+  }
+
   return {
     ok: true,
     operation: "health/ingest",
     timeZone,
     sleep: sleepSummaries,
     workouts: workoutResults,
+    weather: weatherResults,
     results
   };
 }
@@ -152,6 +260,30 @@ export async function ingestHealthWorkouts(config, params = {}) {
       : [params];
   const written = await ingestWorkouts(config, appleHealth.workouts, list, timeZone);
   return { ok: true, operation: "health/workouts", timeZone, workouts: written.entries, results: written.writes };
+}
+
+// Dedicated weather endpoint: POST a single Apple WeatherKit reading directly,
+// the full WeatherKit response (its `currentWeather` is used), `{ weather: ... }`,
+// or `{ weather: [ ... ] }` / `{ readings: [ ... ] }` for several.
+export async function ingestHealthWeather(config, params = {}) {
+  const appleHealth = config.appleHealth || {};
+  if (!appleHealth.enabled) {
+    return { ok: false, operation: "health/weather", error: "Apple Health ingest is not enabled" };
+  }
+  if (!appleHealth.weather?.enabled) {
+    return { ok: false, operation: "health/weather", error: "Apple Health weather ingest is disabled" };
+  }
+  const timeZone = config.dailyNote.timeZone;
+  const written = await ingestWeather(config, appleHealth.weather, resolveWeatherList(params), timeZone);
+  return { ok: true, operation: "health/weather", timeZone, weather: written.entries, results: written.writes };
+}
+
+function resolveWeatherList(params) {
+  if (Array.isArray(params.weather)) return params.weather.slice(0, MAX_WEATHER);
+  if (isPlainObject(params.weather)) return [params.weather];
+  if (Array.isArray(params.readings)) return params.readings.slice(0, MAX_WEATHER);
+  if (isPlainObject(params.currentWeather)) return [params.currentWeather];
+  return [params];
 }
 
 // ----- Sleep -----
@@ -608,6 +740,148 @@ function resolveCalories(raw) {
   return numberOrNull(
     raw.totalEnergyBurned ?? raw.activeEnergyBurned ?? raw.activeEnergyKcal ?? raw.calories ?? raw.energyBurned
   );
+}
+
+// ----- Weather -----
+
+async function ingestWeather(config, weatherConfig, rawReadings, timeZone) {
+  const readings = rawReadings
+    .map((raw) => normalizeWeather(raw, timeZone))
+    .filter(Boolean)
+    .sort((left, right) => left.at - right.at)
+    .slice(0, MAX_WEATHER);
+
+  const entries = [];
+  const writes = [];
+  for (const reading of readings) {
+    const vars = buildWeatherVars(reading);
+    const entry = buildEntryFromTemplate(weatherConfig.output, DEFAULT_APPLE_HEALTH_WEATHER_TEMPLATE, vars, vars.time);
+    const write = await writeDailyEntry(config, weatherConfig.output, {
+      at: reading.at.toISOString(),
+      line: entry.line,
+      body: entry.body,
+      idempotencyKey: weatherIdempotencyKey(reading),
+      replayIfResultMissing: true
+    });
+    writes.push(write);
+    entries.push({ at: reading.at.toISOString(), date: reading.date, path: write.path, idempotent: Boolean(write.idempotent) });
+  }
+
+  return { entries, writes };
+}
+
+// Weather is point-in-time, so the reading id (or its minute) keys the entry: a
+// re-push of the same moment is idempotent, a later reading is a new line.
+function weatherIdempotencyKey(reading) {
+  if (reading.id) return `apple-weather-${reading.id.replace(/[^a-z0-9_-]+/gi, "-")}`;
+  const minute = new Date(Math.floor(reading.at.getTime() / 60000) * 60000);
+  return `apple-weather-${minute.toISOString()}`;
+}
+
+function normalizeWeather(raw, timeZone) {
+  if (!isPlainObject(raw)) return null;
+  // "Current" weather without an explicit time defaults to now.
+  const at = toDate(
+    raw.date ?? raw.asOf ?? raw.timestamp ?? raw.time ?? raw.readTime ?? raw.reportedTime
+    ?? raw.metadata?.readTime ?? raw.metadata?.asOf
+  ) ?? new Date();
+  const parts = getDateTimeParts(at, timeZone);
+  const daylight = typeof raw.daylight === "boolean"
+    ? raw.daylight
+    : (typeof raw.isDaylight === "boolean" ? raw.isDaylight : null);
+
+  return {
+    id: firstString(raw.id, raw.uuid),
+    at,
+    HH: parts.HH,
+    mm: parts.mm,
+    date: parts["yyyy-MM-dd"],
+    daylight,
+    condition: resolveWeatherCondition(
+      raw.conditionCode ?? raw.condition ?? raw.conditionName ?? raw.weatherCondition ?? raw.summary
+    ),
+    temperatureC: resolveTemperatureC(
+      raw.temperature ?? raw.temp ?? raw.temperatureCelsius ?? raw.temperatureC,
+      raw.temperatureFahrenheit ?? raw.tempF ?? raw.temperatureF
+    ),
+    apparentC: resolveTemperatureC(
+      raw.apparentTemperature ?? raw.temperatureApparent ?? raw.feelsLike ?? raw.feelsLikeTemperature ?? raw.apparentTemp,
+      raw.apparentTemperatureFahrenheit ?? raw.feelsLikeF
+    ),
+    humidityPct: resolveHumidityPct(raw.humidity ?? raw.humidityPct ?? raw.relativeHumidity),
+    windKmh: resolveWindKmh(raw),
+    uvIndex: numberOrNull(isPlainObject(raw.uvIndex) ? raw.uvIndex.value : raw.uvIndex)
+      ?? numberOrNull(raw.uv ?? raw.uvIndexValue),
+    pressureHpa: numberOrNull(raw.pressure ?? raw.pressureHpa),
+    visibilityM: numberOrNull(raw.visibility ?? raw.visibilityMeters),
+    dewPointC: resolveTemperatureC(raw.temperatureDewPoint ?? raw.dewPoint, null)
+  };
+}
+
+function buildWeatherVars(reading) {
+  const condition = reading.condition;
+  const vars = {
+    time: `${reading.HH}:${reading.mm}`,
+    date: reading.date
+  };
+  if (condition.label) vars.condition = condition.label;
+  if (condition.en) vars.conditionEn = condition.en;
+  if (condition.raw) vars.conditionRaw = condition.raw;
+  const icon = weatherIcon(condition.key, reading.daylight);
+  if (icon) vars.icon = icon;
+  // Temperatures and UV are strings so that 0° / negative / UV 0 still render
+  // ({{#key}} treats the number 0 as absent).
+  if (reading.temperatureC !== null) vars.temp = String(Math.round(reading.temperatureC));
+  if (reading.apparentC !== null) vars.feelsLike = String(Math.round(reading.apparentC));
+  if (reading.dewPointC !== null) vars.dewPoint = String(Math.round(reading.dewPointC));
+  if (reading.uvIndex !== null && reading.uvIndex >= 0) vars.uvIndex = String(Math.round(reading.uvIndex));
+  if (reading.humidityPct !== null && reading.humidityPct > 0) vars.humidity = Math.round(reading.humidityPct);
+  if (reading.windKmh !== null && reading.windKmh > 0) vars.windSpeed = Math.round(reading.windKmh);
+  if (reading.pressureHpa !== null) vars.pressure = Math.round(reading.pressureHpa);
+  if (reading.visibilityM !== null) vars.visibility = (reading.visibilityM / 1000).toFixed(1);
+  return vars;
+}
+
+// The condition can arrive as a WeatherKit code ("MostlyCloudy"), an already
+// localized string ("多云"), or be absent. Returns the Chinese label, English
+// name, raw text, and normalized key (for the icon lookup).
+function resolveWeatherCondition(value) {
+  const text = cleanText(typeof value === "string" ? value : "");
+  if (!text) return { raw: "", label: "", en: "", key: "" };
+  const key = text.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (/[^\x00-\x7F]/.test(text)) return { raw: text, label: text, en: "", key };
+  return { raw: text, label: WEATHER_CONDITION_LABELS.get(key) || humanizeType(text), en: humanizeType(text), key };
+}
+
+function weatherIcon(key, daylight) {
+  if (!key) return "";
+  if (daylight === false && (key === "clear" || key === "sunny" || key === "mostlyclear")) return "🌙";
+  return WEATHER_CONDITION_ICONS.get(key) || "";
+}
+
+function resolveTemperatureC(celsius, fahrenheit) {
+  const c = numberOrNull(celsius);
+  if (c !== null) return c;
+  const f = numberOrNull(fahrenheit);
+  return f === null ? null : (f - 32) * 5 / 9;
+}
+
+// WeatherKit reports humidity as a 0..1 fraction; a 0..100 percentage is also
+// accepted (anything above 1 is assumed to already be a percentage).
+function resolveHumidityPct(value) {
+  const n = numberOrNull(value);
+  if (n === null || n < 0) return null;
+  return n <= 1 ? n * 100 : n;
+}
+
+function resolveWindKmh(raw) {
+  const wind = isPlainObject(raw.wind) ? raw.wind : {};
+  const kmh = numberOrNull(
+    raw.windSpeed ?? raw.windSpeedKmh ?? raw.windKph ?? wind.speed ?? wind.speedKmh ?? wind.value
+  );
+  if (kmh !== null) return kmh;
+  const mps = numberOrNull(raw.windSpeedMps ?? raw.windMps ?? wind.speedMps);
+  return mps === null ? null : mps * 3.6;
 }
 
 // ----- Shared write path -----

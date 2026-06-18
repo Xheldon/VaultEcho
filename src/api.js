@@ -27,7 +27,7 @@ import {
   searchEmbeddingIndex
 } from "./embedding-index.js";
 import { getConnectorStatus, runConnector } from "./connectors.js";
-import { ingestHealth, ingestHealthSleep, ingestHealthWorkouts } from "./health.js";
+import { ingestHealth, ingestHealthSleep, ingestHealthWorkouts, ingestHealthWeather } from "./health.js";
 import { convertCoordinate, normalizeDatum, parseLatLng, roundCoordinate } from "./geo.js";
 import { buildDailyPath, getDateTimeParts, renderTemplate } from "./time.js";
 import { executeOperation, resolveVaultPath } from "./vault.js";
@@ -69,6 +69,7 @@ export const API_HANDLER_ROUTES = [
   "health/ingest",
   "health/sleep",
   "health/workouts",
+  "health/weather",
   "batch",
   "uri/execute",
   "unsupported/active",
@@ -172,6 +173,8 @@ async function executePrimary(config, route, params) {
       return ingestHealthSleep(config, params);
     case "health/workouts":
       return ingestHealthWorkouts(config, params);
+    case "health/weather":
+      return ingestHealthWeather(config, params);
     case "batch":
       return executeBatch(config, params);
     case "uri/execute":

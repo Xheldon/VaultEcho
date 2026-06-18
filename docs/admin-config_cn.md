@@ -79,16 +79,17 @@ VaultEcho 不会缓存 Strava 活动详情。`/data` 中只保存必要的 token
 
 ## Apple 健康
 
-这一节配置 Apple 健康端点。和连接器不同，Apple 健康是只接收的：由配套设备推送 HealthKit 原始数据，VaultEcho 在服务端聚合、格式化后写入每日笔记，不会主动拉取。共有三个端点（都用 Bearer 鉴权）：`POST /v1/api/health/sleep` 和 `POST /v1/api/health/workouts` 直接接收原始对象（推荐，不用包 wrapper）；`POST /v1/api/health/ingest` 接收合并体 `{ "sleep": {...}, "workouts": [...] }`（或按形状识别的单个裸对象）。
+这一节配置 Apple 健康端点。和连接器不同，Apple 健康是只接收的：由配套设备推送 HealthKit / WeatherKit 原始数据，VaultEcho 在服务端聚合、格式化后写入每日笔记，不会主动拉取。共有四个端点（都用 Bearer 鉴权）：`POST /v1/api/health/sleep`、`POST /v1/api/health/workouts` 和 `POST /v1/api/health/weather` 直接接收原始对象（推荐，不用包 wrapper）；`POST /v1/api/health/ingest` 接收合并体 `{ "sleep": {...}, "workouts": [...], "weather": {...} }`（或按形状识别的单个裸对象）。
 
 - `启用 Apple 健康接收端点`：总开关。关闭时 `health/ingest` 直接返回错误。
-- 睡眠和运动是两个独立子项，可以只开其中一个。
+- 睡眠、运动和天气是三个独立子项，可以任意开启。
 - `睡眠`：VaultEcho 把一段睡眠的原始 `HKCategoryValueSleepAnalysis` 样本聚合成一条摘要——总睡眠时长、卧床时长、各阶段时长（深睡 / 核心 / REM / 清醒），以及可选的平均心率和 HRV。一段睡眠按起床日归属（16 号午夜前入睡、17 号早上起床的睡眠会写入 17 号日记）。一天可以有多段：夜间睡眠和午休会变成两条 `[HH:mm]` 记录，在睡眠 heading 下合并并按时间排序，和运动块完全一样。每段按 `id`（没有则用入睡时间）去重，重复推送同一段不会重复。可以一次只发一段，也可以用 `{ "sleep": { "sessions": [ ... ] } }` 一次发多段。
 - `运动`：每个 `HKWorkout` 使用与 Strava 运动连接器完全一致的条目格式（类型、时长、平均/最大心率、里程、卡路里、设备链接）。每条运动按 UUID 去重，重复推送同一条不会重复写。`最短时长（分钟）` 会跳过短于阈值的运动。
+- `天气`：每次 Apple WeatherKit 读数变成一条单行记录——天气图标、温度、本地化天气描述，然后是体感、湿度、风速、紫外线。可以直接发单条读数、整段 WeatherKit 响应（取其中的 `currentWeather`），或用 `{ "weather": [ ... ] }` 一次发多条；湿度支持 0–1 小数或 0–100 百分比，温度默认按摄氏度。天气描述支持 WeatherKit 代码（如 `MostlyCloudy`）或已经本地化的字符串。每条按 `id`（没有则用读数所在分钟）去重，所以晚一点的读数是新的一行，同一时刻的重复推送不会重复写。
 - `插入位置`（每个子项各自配置）：可选 `单独 Heading` 或 `日记时间块`。`单独 Heading` 写入固定标题，例如 `## 今日睡眠` 或 `## 今日运动`，不存在时会创建一个带 `---` 的分隔块；`日记时间块` 按时间戳（运动开始时间、或睡眠起床时间）落入对应时间段 heading。
 - `目标 Heading Markdown`：完整的 Markdown 标题，仅在 `插入位置` 为 `单独 Heading` 时使用。
 - `在该 Heading 之后插入`：可选。留空则插入到配置的最后一个日记时间段 heading 之后；只有需要覆盖默认位置时才填写。
-- `写入模板`：每条记录的格式，用占位符 + 文本编写。条件段 `{{#字段}}...{{/字段}}` 只在该指标有数据时渲染，所以缺失的指标（室内运动没距离、老手表没手腕温度）会连同标签和分隔符一起省略，不会留下悬空空白。模板请以 `[{{time}}]`（运动）或 `[{{wakeTime}}]`（睡眠）开头，以便按时间排序。留空恢复默认。鼠标悬停信息图标查看完整占位符列表。睡眠占位符包括 `wakeTime`、`bedTime`、`asleep`、`inBed`、`deep`/`core`/`rem`/`awake`、`latency`、`awakenings`、`avgHeartRate`/`minHeartRate`/`maxHeartRate`、`hrv`、`respiratoryRate`、`wristTemperature`、`spo2`，以及便捷分组 `stages` 和 `vitals`。运动占位符包括 `time`、`type`、`name`、`duration`、`totalDuration`、`distance`、`avgPace`、`avgSpeed`/`maxSpeed`、`avgHeartRate`/`maxHeartRate`、`calories`、`elevationGain`、`flightsClimbed`、`steps`、`device`。占位符只有在 iOS App 实际发来该字段时才会渲染——VaultEcho 自己读不了 HealthKit。运动类型有三个占位符：`{{type}}` 是本地化标签（默认中文，如 `骑行`），`{{typeEn}}` 是英文名（如 `Cycling`），`{{typeRaw}}` 是原始值（如 `cycling`）；非中文用户把运动模板里的 `{{type}}` 换成 `{{typeEn}}` 即可。
+- `写入模板`：每条记录的格式，用占位符 + 文本编写。条件段 `{{#字段}}...{{/字段}}` 只在该指标有数据时渲染，所以缺失的指标（室内运动没距离、老手表没手腕温度）会连同标签和分隔符一起省略，不会留下悬空空白。模板请以 `[{{time}}]`（运动）或 `[{{wakeTime}}]`（睡眠）开头，以便按时间排序。留空恢复默认。鼠标悬停信息图标查看完整占位符列表。睡眠占位符包括 `wakeTime`、`bedTime`、`asleep`、`inBed`、`deep`/`core`/`rem`/`awake`、`latency`、`awakenings`、`avgHeartRate`/`minHeartRate`/`maxHeartRate`、`hrv`、`respiratoryRate`、`wristTemperature`、`spo2`，以及便捷分组 `stages` 和 `vitals`。运动占位符包括 `time`、`type`、`name`、`duration`、`totalDuration`、`distance`、`avgPace`、`avgSpeed`/`maxSpeed`、`avgHeartRate`/`maxHeartRate`、`calories`、`elevationGain`、`flightsClimbed`、`steps`、`device`。占位符只有在 iOS App 实际发来该字段时才会渲染——VaultEcho 自己读不了 HealthKit。运动类型有三个占位符：`{{type}}` 是本地化标签（默认中文，如 `骑行`），`{{typeEn}}` 是英文名（如 `Cycling`），`{{typeRaw}}` 是原始值（如 `cycling`）；非中文用户把运动模板里的 `{{type}}` 换成 `{{typeEn}}` 即可。天气占位符包括 `time`、`icon`（天气表情，如 ☁️；发了 `daylight` 时晴朗夜晚会用月亮）、`condition`/`conditionEn`/`conditionRaw`（与运动类型一样的本地化/英文/原始三选项）、`temp`、`feelsLike`、`dewPoint`、`humidity`、`windSpeed`、`uvIndex`、`pressure`、`visibility`。
 
 Apple 健康的写入复用 `每日时间戳插入规则` 里的日记路径、heading 层级、行匹配、空行间隔和模板设置，并复用相同的幂等记录一周保留策略。`Daily` 顶级目录必须在允许写入的顶级目录白名单中。
 

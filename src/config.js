@@ -210,6 +210,9 @@ export const DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE =
 export const DEFAULT_APPLE_HEALTH_SLEEP_TEMPLATE =
   "[{{wakeTime}}] 睡眠 {{asleep}}{{#inBed}}（卧床{{inBed}}）{{/inBed}}{{#stages}}｜{{stages}}{{/stages}}{{#vitals}}｜{{vitals}}{{/vitals}}";
 
+export const DEFAULT_APPLE_HEALTH_WEATHER_TEMPLATE =
+  "[{{time}}]{{#icon}} {{icon}}{{/icon}}{{#temp}} {{temp}}°{{/temp}}{{#condition}} {{condition}}{{/condition}}{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}{{#humidity}}，湿度 {{humidity}}%{{/humidity}}{{#windSpeed}}，风 {{windSpeed}} km/h{{/windSpeed}}{{#uvIndex}}，紫外线 {{uvIndex}}{{/uvIndex}}。";
+
 const DEFAULT_APPLE_HEALTH = {
   enabled: false,
   sleep: {
@@ -229,6 +232,15 @@ const DEFAULT_APPLE_HEALTH = {
       headingMarkdown: "## 今日运动",
       insertAfterHeadingMarkdown: "",
       contentTemplate: DEFAULT_APPLE_HEALTH_WORKOUT_TEMPLATE
+    }
+  },
+  weather: {
+    enabled: true,
+    output: {
+      target: "heading",
+      headingMarkdown: "## 今日天气",
+      insertAfterHeadingMarkdown: "",
+      contentTemplate: DEFAULT_APPLE_HEALTH_WEATHER_TEMPLATE
     }
   }
 };
@@ -660,6 +672,7 @@ function normalizeAppleHealthConfig(input = {}) {
   const source = isPlainObject(input) ? input : {};
   const sleep = isPlainObject(source.sleep) ? source.sleep : {};
   const workouts = isPlainObject(source.workouts) ? source.workouts : {};
+  const weather = isPlainObject(source.weather) ? source.weather : {};
   return {
     enabled: normalizeBoolean(source.enabled, DEFAULT_APPLE_HEALTH.enabled),
     sleep: {
@@ -675,6 +688,10 @@ function normalizeAppleHealthConfig(input = {}) {
         DEFAULT_APPLE_HEALTH.workouts.minDurationMinutes
       ),
       output: normalizeAppleHealthOutput(workouts.output, DEFAULT_APPLE_HEALTH.workouts.output)
+    },
+    weather: {
+      enabled: normalizeBoolean(weather.enabled, DEFAULT_APPLE_HEALTH.weather.enabled),
+      output: normalizeAppleHealthOutput(weather.output, DEFAULT_APPLE_HEALTH.weather.output)
     }
   };
 }

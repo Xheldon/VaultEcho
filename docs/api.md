@@ -45,6 +45,7 @@ Authorization: Bearer <API_TOKEN>
 | `health/ingest` | POST | Receives raw Apple Health sleep sessions and HKWorkout sessions pushed from a device, aggregates them server-side, and writes formatted entries into the daily note. Receive-only; VaultEcho never pulls from a device. Send `{ "sleep": {...}, "workouts": [...] }`, or post a single sleep or workout object directly as the request body (it is detected by shape). Routing, target headings (or time-slot insertion), and the per-type line format come from the Apple Health Web UI settings; the format is a template with placeholders and conditional sections (`{{#field}}...{{/field}}`) that drop absent metrics. Each sleep session and each workout becomes one `[HH:mm]` entry that is merged and time-sorted under the configured heading (a night plus a nap are two sleep entries). Sleep sessions are attributed to the wake day and de-duplicated per session id (or fall-asleep time); workouts are de-duplicated by UUID. |
 | `health/sleep` | POST | Dedicated sleep endpoint: POST the sleep object directly as the request body (a `{ sleep: {...} }` wrapper is also accepted). Same parsing, wake-day attribution, per-session de-duplication, and configurable template as `health/ingest`. |
 | `health/workouts` | POST | Dedicated workouts endpoint: POST a single HKWorkout object directly, or `{ workouts: [...] }` for several. Same formatting, per-UUID de-duplication, and configurable template as `health/ingest`. |
+| `health/weather` | POST | Dedicated weather endpoint: POST a single Apple WeatherKit reading directly, the full WeatherKit response (its `currentWeather` is used), or `{ weather: [ ... ] }` for several. Each reading becomes a single timestamped line under the weather heading, deduped by reading id (or its minute). |
 | `tags/list` | GET | Counts Markdown hashtags under allowed directories. |
 | `batch` | POST | Executes multiple API operations in one request. |
 | `uri/execute` | POST | Parses an Obsidian URI and executes the parts that can be mapped to Vault filesystem operations. |
@@ -1050,6 +1051,42 @@ curl -X POST http://localhost:8787/v1/api/health/workouts \
     "distanceMeters": 5200,
     "averageHeartRate": 150,
     "deviceName": "Apple Watch Series 10"
+  }'
+```
+
+## health/weather
+
+**Ingest Apple Weather**
+
+Dedicated weather endpoint: POST a single Apple WeatherKit reading directly, the full WeatherKit response (its `currentWeather` is used), or `{ weather: [ ... ] }` for several. Each reading becomes a single timestamped line under the weather heading, deduped by reading id (or its minute).
+
+Method: `POST`
+
+Use cases:
+
+- An iOS app forwards the current WeatherKit reading after each refresh.
+- Logging the morning weather alongside the day's sleep and workouts.
+
+Parameters:
+
+| Parameter | Description |
+|---|---|
+| `(body)` | A WeatherKit reading. Recognized fields: `condition`/`conditionCode` (a WeatherKit code like `MostlyCloudy`, or an already-localized string), `temperature` (°C; `temperatureFahrenheit` also accepted), `apparentTemperature`/`temperatureApparent` (feels-like), `humidity` (0..1 fraction or 0..100), `windSpeed` (km/h), `uvIndex`, optional `pressure`/`visibility`/`dewPoint`, `daylight`, a timestamp (`date`/`asOf`/`timestamp`), and an optional `id`. Placeholders: `{{time}}`, `{{date}}`, `{{icon}}`, `{{condition}}`/`{{conditionEn}}`/`{{conditionRaw}}`, `{{temp}}`, `{{feelsLike}}`, `{{humidity}}`, `{{windSpeed}}`, `{{uvIndex}}`, `{{pressure}}`, `{{visibility}}`, `{{dewPoint}}`. |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8787/v1/api/health/weather \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asOf": "2026-06-18T09:30:00+08:00",
+    "condition": "MostlyCloudy",
+    "temperature": 28,
+    "apparentTemperature": 29,
+    "humidity": 0.7,
+    "windSpeed": 8,
+    "uvIndex": 1
   }'
 ```
 

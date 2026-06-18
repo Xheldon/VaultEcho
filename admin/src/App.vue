@@ -525,6 +525,43 @@
                     </el-form-item>
                   </el-col>
                 </el-row>
+
+                <div class="subsection-title">{{ t("appleHealthWeather") }}</div>
+                <el-checkbox v-model="form.appleHealth.weather.enabled">{{ t("appleHealthWeatherEnable") }}</el-checkbox>
+                <el-row v-if="form.appleHealth.weather.enabled" :gutter="18">
+                  <el-col :xs="24" :md="12">
+                    <el-form-item :label="t('connectorOutputTarget')">
+                      <el-segmented v-model="form.appleHealth.weather.output.target" :options="connectorOutputTargetOptions" class="full-width" />
+                      <div class="form-hint">{{ form.appleHealth.weather.output.target === 'time-slot' ? t("connectorTimeSlotTargetHint") : t("connectorHeadingTargetHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col v-if="form.appleHealth.weather.output.target === 'heading'" :xs="24" :md="12">
+                    <el-form-item :label="t('connectorHeadingMarkdown')">
+                      <el-input v-model="form.appleHealth.weather.output.headingMarkdown" placeholder="## 今日天气" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col v-if="form.appleHealth.weather.output.target === 'heading'" :xs="24" :md="12">
+                    <el-form-item :label="t('stravaInsertAfterHeadingMarkdown')">
+                      <el-input v-model="form.appleHealth.weather.output.insertAfterHeadingMarkdown" :placeholder="t('stravaInsertAfterHeadingPlaceholder')" />
+                      <div class="form-hint">{{ t("stravaInsertAfterHeadingHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24">
+                    <el-form-item>
+                      <template #label>
+                        {{ t("appleHealthTemplate") }}
+                        <el-tooltip placement="top" effect="dark">
+                          <template #content>
+                            <div class="placeholder-help">{{ t("appleHealthWeatherPlaceholders") }}</div>
+                          </template>
+                          <el-icon class="placeholder-help-icon"><InfoFilled /></el-icon>
+                        </el-tooltip>
+                      </template>
+                      <el-input v-model="form.appleHealth.weather.output.contentTemplate" type="textarea" :rows="3" />
+                      <div class="form-hint">{{ t("appleHealthTemplateHint") }}</div>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
               </el-form>
             </template>
           </div>
@@ -614,6 +651,8 @@ const DEFAULT_AH_WORKOUT_TEMPLATE =
   "[{{time}}] {{#name}}{{name}}，{{/name}}{{type}}{{#duration}}，运动时间 {{duration}}{{/duration}}{{#totalDuration}}，总耗时 {{totalDuration}}{{/totalDuration}}{{#avgHeartRate}}，平均心率 {{avgHeartRate}} bpm{{/avgHeartRate}}{{#maxHeartRate}}，最大心率 {{maxHeartRate}} bpm{{/maxHeartRate}}{{#distance}}，总里程 {{distance}} km{{/distance}}{{#avgPace}}，配速 {{avgPace}}{{/avgPace}}{{#elevationGain}}，累计爬升 {{elevationGain}} m{{/elevationGain}}{{#avgSpeed}}，平均速度 {{avgSpeed}} km/h{{/avgSpeed}}{{#maxSpeed}}，最大速度 {{maxSpeed}} km/h{{/maxSpeed}}{{#calories}}，卡路里 {{calories}} kcal{{/calories}}{{#device}}，[[{{device}}]]{{/device}}。";
 const DEFAULT_AH_SLEEP_TEMPLATE =
   "[{{wakeTime}}] 睡眠 {{asleep}}{{#inBed}}（卧床{{inBed}}）{{/inBed}}{{#stages}}｜{{stages}}{{/stages}}{{#vitals}}｜{{vitals}}{{/vitals}}";
+const DEFAULT_AH_WEATHER_TEMPLATE =
+  "[{{time}}]{{#icon}} {{icon}}{{/icon}}{{#temp}} {{temp}}°{{/temp}}{{#condition}} {{condition}}{{/condition}}{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}{{#humidity}}，湿度 {{humidity}}%{{/humidity}}{{#windSpeed}}，风 {{windSpeed}} km/h{{/windSpeed}}{{#uvIndex}}，紫外线 {{uvIndex}}{{/uvIndex}}。";
 
 const legacyAllowedDirs = ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Reviews", "Templates", "Attachments", "Archive"];
 const legacyTaskDirs = ["Daily", "Inbox", "Notes", "Ideas", "Projects"];
@@ -702,7 +741,7 @@ const translations = {
     appleHealthEnable: "启用 Apple 健康接收端点",
     appleHealthEnabledHint: "设备向 POST /v1/api/health/ingest 推送数据后，VaultEcho 负责聚合和格式化。这是只接收端点，不会主动拉取设备。",
     appleHealthDisabledHint: "已关闭。开启后才会处理 /v1/api/health/ingest 的推送。",
-    appleHealthEndpointHint: "端点：POST /v1/api/health/ingest（Bearer 鉴权）。请求体可包含 sleep（一段睡眠，或 sleep.sessions 多段）和 workouts（HKWorkout 数组）。每段睡眠、每条运动各是一条 [HH:mm] 记录，在 heading 下合并并按时间排序（夜间睡眠和午休是两条）。睡眠按起床日归属、按会话 id（或入睡时间）去重，运动按 UUID 去重。",
+    appleHealthEndpointHint: "端点：POST /v1/api/health/ingest（Bearer 鉴权），也可分别 POST 到 /v1/api/health/sleep、/v1/api/health/workouts、/v1/api/health/weather（裸 body 即可）。请求体可包含 sleep（一段睡眠，或 sleep.sessions 多段）、workouts（HKWorkout 数组）和 weather（WeatherKit 读数，或整段响应里的 currentWeather）。每段睡眠、每条运动、每次天气各是一条 [HH:mm] 记录，在 heading 下合并并按时间排序（夜间睡眠和午休是两条）。睡眠按起床日归属、按会话 id（或入睡时间）去重，运动按 UUID 去重，天气按读数 id（或所在分钟）去重。",
     appleHealthSleep: "睡眠",
     appleHealthSleepEnable: "处理睡眠数据",
     appleHealthWorkouts: "运动（HKWorkout）",
@@ -714,6 +753,10 @@ const translations = {
       "睡眠占位符（有数据才显示）：\n{{wakeTime}} 起床  {{bedTime}} 入睡  {{date}} 日期\n{{asleep}} 总睡眠  {{inBed}} 卧床\n{{deep}}/{{core}}/{{rem}}/{{awake}} 各阶段时长\n{{latency}} 入睡延迟  {{awakenings}} 醒来次数\n{{avgHeartRate}}/{{minHeartRate}}/{{maxHeartRate}} 心率 bpm\n{{hrv}} HRV ms  {{respiratoryRate}} 呼吸率  {{wristTemperature}} 手腕温度  {{spo2}} 血氧%\n{{stages}} 分期合并  {{vitals}} 心率·HRV 合并\n条件段示例：{{#maxHeartRate}}，最高心率{{maxHeartRate}} bpm{{/maxHeartRate}}",
     appleHealthWorkoutPlaceholders:
       "运动占位符（有数据才显示）：\n{{time}} 开始时间  {{date}} 日期  {{name}} 名称\n{{type}} 类型(中文)  {{typeEn}} 类型(英文)  {{typeRaw}} 类型(原始)\n{{duration}} 运动时长  {{totalDuration}} 总耗时\n{{distance}} 里程(km)  {{avgPace}} 配速  {{avgSpeed}}/{{maxSpeed}} 速度 km/h\n{{avgHeartRate}}/{{maxHeartRate}} 心率 bpm  {{calories}} 卡路里\n{{elevationGain}} 爬升 m  {{flightsClimbed}} 爬楼层数  {{steps}} 步数  {{device}} 设备\n条件段示例：{{#distance}}，总里程 {{distance}} km{{/distance}}",
+    appleHealthWeather: "天气（WeatherKit）",
+    appleHealthWeatherEnable: "处理天气数据",
+    appleHealthWeatherPlaceholders:
+      "天气占位符（有数据才显示）：\n{{time}} 时间  {{date}} 日期  {{icon}} 天气图标\n{{condition}} 天气(中文)  {{conditionEn}} 天气(英文)  {{conditionRaw}} 天气(原始)\n{{temp}} 温度  {{feelsLike}} 体感  {{dewPoint}} 露点\n{{humidity}} 湿度%  {{windSpeed}} 风速 km/h  {{uvIndex}} 紫外线\n{{pressure}} 气压 hPa  {{visibility}} 能见度 km\n条件段示例：{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}",
     enableConnectorScheduler: "启用连接器轮询",
     connectorSchedulerEnabledHint: "保存后，VaultEcho 会按固定间隔轮询所有已启用的连接器来源。",
     connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步最近回看窗口内的内容。",
@@ -1044,7 +1087,7 @@ const englishText = {
   appleHealthEnable: "Enable Apple Health ingest endpoint",
   appleHealthEnabledHint: "After a device pushes to POST /v1/api/health/ingest, VaultEcho aggregates and formats it. Receive-only; VaultEcho never pulls from a device.",
   appleHealthDisabledHint: "Disabled. Turn this on to process pushes to /v1/api/health/ingest.",
-  appleHealthEndpointHint: "Endpoint: POST /v1/api/health/ingest (Bearer auth). The body may include sleep (one session, or sleep.sessions for several) and workouts (HKWorkout array). Each sleep session and each workout becomes one [HH:mm] entry merged and time-sorted under the heading (a night and a nap are two entries). Sleep is attributed to the wake day and de-duplicated per session id (or fall-asleep time); workouts by UUID.",
+  appleHealthEndpointHint: "Endpoint: POST /v1/api/health/ingest (Bearer auth), or POST directly to /v1/api/health/sleep, /v1/api/health/workouts, /v1/api/health/weather (a bare body works). The body may include sleep (one session, or sleep.sessions for several), workouts (HKWorkout array), and weather (a WeatherKit reading, or the currentWeather of a full response). Each sleep session, workout, and weather reading becomes one [HH:mm] entry merged and time-sorted under the heading (a night and a nap are two entries). Sleep is attributed to the wake day and de-duplicated per session id (or fall-asleep time); workouts by UUID; weather by reading id (or its minute).",
   appleHealthSleep: "Sleep",
   appleHealthSleepEnable: "Process sleep data",
   appleHealthWorkouts: "Workouts (HKWorkout)",
@@ -1056,6 +1099,10 @@ const englishText = {
     "Sleep placeholders (shown only when present):\n{{wakeTime}} wake  {{bedTime}} fell asleep  {{date}} date\n{{asleep}} total sleep  {{inBed}} time in bed\n{{deep}}/{{core}}/{{rem}}/{{awake}} stage durations\n{{latency}} sleep latency  {{awakenings}} awakenings\n{{avgHeartRate}}/{{minHeartRate}}/{{maxHeartRate}} heart rate bpm\n{{hrv}} HRV ms  {{respiratoryRate}} respiratory  {{wristTemperature}} wrist temp  {{spo2}} SpO2%\n{{stages}} stages joined  {{vitals}} HR·HRV joined\nConditional example: {{#maxHeartRate}}, max HR {{maxHeartRate}} bpm{{/maxHeartRate}}",
   appleHealthWorkoutPlaceholders:
     "Workout placeholders (shown only when present):\n{{time}} start  {{date}} date  {{name}} name\n{{type}} type (localized)  {{typeEn}} type (English)  {{typeRaw}} type (raw)\n{{duration}} duration  {{totalDuration}} elapsed\n{{distance}} distance(km)  {{avgPace}} pace  {{avgSpeed}}/{{maxSpeed}} speed km/h\n{{avgHeartRate}}/{{maxHeartRate}} heart rate bpm  {{calories}} calories\n{{elevationGain}} elevation m  {{flightsClimbed}} flights  {{steps}} steps  {{device}} device\nConditional example: {{#distance}}, distance {{distance}} km{{/distance}}",
+  appleHealthWeather: "Weather (WeatherKit)",
+  appleHealthWeatherEnable: "Process weather data",
+  appleHealthWeatherPlaceholders:
+    "Weather placeholders (shown only when present):\n{{time}} time  {{date}} date  {{icon}} condition icon\n{{condition}} condition (localized)  {{conditionEn}} condition (English)  {{conditionRaw}} condition (raw)\n{{temp}} temperature  {{feelsLike}} feels-like  {{dewPoint}} dew point\n{{humidity}} humidity%  {{windSpeed}} wind km/h  {{uvIndex}} UV index\n{{pressure}} pressure hPa  {{visibility}} visibility km\nConditional example: {{#feelsLike}}, feels like {{feelsLike}}°{{/feelsLike}}",
   enableConnectorScheduler: "Enable connector polling",
   connectorSchedulerEnabledHint: "After saving, VaultEcho polls all enabled connector sources at the configured interval.",
   connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync the recent lookback window manually.",
@@ -1213,7 +1260,8 @@ function defaultForm() {
     appleHealth: {
       enabled: false,
       sleep: { enabled: true, output: { target: "heading", headingMarkdown: "## 今日睡眠", insertAfterHeadingMarkdown: "", contentTemplate: DEFAULT_AH_SLEEP_TEMPLATE } },
-      workouts: { enabled: true, minDurationMinutes: 0, output: { target: "heading", headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "", contentTemplate: DEFAULT_AH_WORKOUT_TEMPLATE } }
+      workouts: { enabled: true, minDurationMinutes: 0, output: { target: "heading", headingMarkdown: "## 今日运动", insertAfterHeadingMarkdown: "", contentTemplate: DEFAULT_AH_WORKOUT_TEMPLATE } },
+      weather: { enabled: true, output: { target: "heading", headingMarkdown: "## 今日天气", insertAfterHeadingMarkdown: "", contentTemplate: DEFAULT_AH_WEATHER_TEMPLATE } }
     },
     dailyNote: { pathTemplate: "Daily/{{YYYY}}-{{MM}}-{{DD}}.md", templatePath: "", createIfMissing: true, headingLevel: 2, linePattern: "^\\[\\d{2}:\\d{2}\\]", lineFormat: "[{{HH:mm}}] {{content}}", blankLineBetweenEntries: true, sortEntriesByTime: true, slots: [] },
     reviews: { enabled: false, maxSourceChars: 60000, maxRecallChars: 16000, tasks: [] }
@@ -1224,6 +1272,7 @@ function normalizeAppleHealthForForm(source = {}) {
   const defaults = defaultForm().appleHealth;
   const sleep = source.sleep || {};
   const workouts = source.workouts || {};
+  const weather = source.weather || {};
   return {
     enabled: Boolean(source.enabled),
     sleep: {
@@ -1236,6 +1285,10 @@ function normalizeAppleHealthForForm(source = {}) {
         ? Number(workouts.minDurationMinutes)
         : defaults.workouts.minDurationMinutes,
       output: { ...defaults.workouts.output, ...(workouts.output || {}) }
+    },
+    weather: {
+      enabled: weather.enabled !== undefined ? Boolean(weather.enabled) : defaults.weather.enabled,
+      output: { ...defaults.weather.output, ...(weather.output || {}) }
     }
   };
 }

@@ -820,11 +820,15 @@ function weatherIdempotencyKey(reading) {
 
 function normalizeWeather(raw, timeZone) {
   if (!isPlainObject(raw)) return null;
-  // "Current" weather without an explicit time defaults to now.
-  const at = toDate(
-    raw.capturedAt ?? raw.date ?? raw.asOf ?? raw.timestamp ?? raw.time ?? raw.readTime ?? raw.reportedTime
-    ?? raw.metadata?.readTime ?? raw.metadata?.asOf
-  ) ?? new Date();
+  // `weatherDate` (when sent) decides which daily note the entry lands in and its
+  // [HH:mm], overriding the capture time — useful when back-filling a past day
+  // from today. Otherwise the capture time is used, defaulting to now.
+  const at = toDate(raw.weatherDate ?? raw.entryDate ?? raw.noteDate ?? raw.forDate ?? raw.targetDate)
+    ?? toDate(
+      raw.capturedAt ?? raw.date ?? raw.asOf ?? raw.timestamp ?? raw.time ?? raw.readTime ?? raw.reportedTime
+      ?? raw.metadata?.readTime ?? raw.metadata?.asOf
+    )
+    ?? new Date();
   const parts = getDateTimeParts(at, timeZone);
   const daylight = typeof raw.daylight === "boolean"
     ? raw.daylight

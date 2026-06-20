@@ -484,6 +484,26 @@ test("weather shows precipitation chance when above zero", async () => {
   assert.match(daily, /\[01:00\] 🌧️ 19° 小雨，降水概率 60%。/);
 });
 
+test("weatherDate overrides the target day when back-filling a past day from today", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  await ingestHealthWeather(config, {
+    // Sent on the 20th, but the reading is for the 18th.
+    weatherDate: "2026-06-18T14:30:00+08:00",
+    capturedAt: "2026-06-20T10:00:00+08:00",
+    conditionText: "多云",
+    symbolName: "cloud.fill",
+    temperatureC: 26,
+    humidityPct: 50
+  });
+
+  // Lands in the 18th note with [14:30] from weatherDate, not the 20th note.
+  const daily18 = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-18.md"), "utf8");
+  assert.match(daily18, /\[14:30\] \S+ 26° 多云，湿度 50%。/);
+  await assert.rejects(fs.readFile(path.join(root, "vault", "Daily", "2026-06-20.md"), "utf8"));
+});
+
 test("re-pushing the same weather reading does not duplicate", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
   const config = testConfig(root);

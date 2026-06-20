@@ -211,7 +211,7 @@ export const DEFAULT_APPLE_HEALTH_SLEEP_TEMPLATE =
   "[{{wakeTime}}] 睡眠 {{asleep}}{{#inBed}}（卧床{{inBed}}）{{/inBed}}{{#stages}}｜{{stages}}{{/stages}}{{#vitals}}｜{{vitals}}{{/vitals}}";
 
 export const DEFAULT_APPLE_HEALTH_WEATHER_TEMPLATE =
-  "[{{time}}]{{#icon}} {{icon}}{{/icon}}{{#temp}} {{temp}}°{{/temp}}{{#condition}} {{condition}}{{/condition}}{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}{{#humidity}}，湿度 {{humidity}}%{{/humidity}}{{#windSpeed}}，风 {{windSpeed}} km/h{{/windSpeed}}{{#uvIndex}}，紫外线 {{uvIndex}}{{/uvIndex}}。";
+  "[{{time}}]{{#icon}} {{icon}}{{/icon}}{{#temp}} {{temp}}°{{/temp}}{{#condition}} {{condition}}{{/condition}}{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}{{#humidity}}，湿度 {{humidity}}%{{/humidity}}{{#windSpeed}}，风 {{windSpeed}} km/h{{/windSpeed}}{{#uvIndex}}，紫外线 {{uvIndex}}{{/uvIndex}}{{#precip}}，降水概率 {{precip}}%{{/precip}}。";
 
 const DEFAULT_APPLE_HEALTH = {
   enabled: false,

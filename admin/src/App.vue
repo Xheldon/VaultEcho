@@ -652,7 +652,7 @@ const DEFAULT_AH_WORKOUT_TEMPLATE =
 const DEFAULT_AH_SLEEP_TEMPLATE =
   "[{{wakeTime}}] 睡眠 {{asleep}}{{#inBed}}（卧床{{inBed}}）{{/inBed}}{{#stages}}｜{{stages}}{{/stages}}{{#vitals}}｜{{vitals}}{{/vitals}}";
 const DEFAULT_AH_WEATHER_TEMPLATE =
-  "[{{time}}]{{#icon}} {{icon}}{{/icon}}{{#temp}} {{temp}}°{{/temp}}{{#condition}} {{condition}}{{/condition}}{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}{{#humidity}}，湿度 {{humidity}}%{{/humidity}}{{#windSpeed}}，风 {{windSpeed}} km/h{{/windSpeed}}{{#uvIndex}}，紫外线 {{uvIndex}}{{/uvIndex}}。";
+  "[{{time}}]{{#icon}} {{icon}}{{/icon}}{{#temp}} {{temp}}°{{/temp}}{{#condition}} {{condition}}{{/condition}}{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}{{#humidity}}，湿度 {{humidity}}%{{/humidity}}{{#windSpeed}}，风 {{windSpeed}} km/h{{/windSpeed}}{{#uvIndex}}，紫外线 {{uvIndex}}{{/uvIndex}}{{#precip}}，降水概率 {{precip}}%{{/precip}}。";
 
 const legacyAllowedDirs = ["Inbox", "Notes", "Ideas", "Projects", "Daily", "Reviews", "Templates", "Attachments", "Archive"];
 const legacyTaskDirs = ["Daily", "Inbox", "Notes", "Ideas", "Projects"];
@@ -756,7 +756,7 @@ const translations = {
     appleHealthWeather: "天气（WeatherKit）",
     appleHealthWeatherEnable: "处理天气数据",
     appleHealthWeatherPlaceholders:
-      "天气占位符（有数据才显示）：\n{{time}} 时间  {{date}} 日期  {{icon}} 天气图标\n{{condition}} 天气(中文)  {{conditionEn}} 天气(英文)  {{conditionRaw}} 天气(原始)\n{{temp}} 温度  {{feelsLike}} 体感  {{dewPoint}} 露点\n{{humidity}} 湿度%  {{windSpeed}} 风速 km/h  {{uvIndex}} 紫外线\n{{pressure}} 气压 hPa  {{visibility}} 能见度 km\n条件段示例：{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}",
+      "天气占位符（有数据才显示）：\n{{time}} 时间  {{date}} 日期  {{icon}} 天气图标\n{{condition}} 天气(中文)  {{conditionEn}} 天气(英文)  {{conditionRaw}} 天气(原始)\n{{temp}} 温度  {{feelsLike}} 体感  {{dewPoint}} 露点\n{{humidity}} 湿度%  {{precip}} 降水概率%  {{windSpeed}} 风速 km/h  {{uvIndex}} 紫外线\n{{pressure}} 气压 hPa  {{visibility}} 能见度 km\n条件段示例：{{#feelsLike}}，体感 {{feelsLike}}°{{/feelsLike}}",
     enableConnectorScheduler: "启用连接器轮询",
     connectorSchedulerEnabledHint: "保存后，VaultEcho 会按固定间隔轮询所有已启用的连接器来源。",
     connectorSchedulerDisabledHint: "关闭后不会自动轮询；仍可用立即查找手动同步最近回看窗口内的内容。",
@@ -1102,7 +1102,7 @@ const englishText = {
   appleHealthWeather: "Weather (WeatherKit)",
   appleHealthWeatherEnable: "Process weather data",
   appleHealthWeatherPlaceholders:
-    "Weather placeholders (shown only when present):\n{{time}} time  {{date}} date  {{icon}} condition icon\n{{condition}} condition (localized)  {{conditionEn}} condition (English)  {{conditionRaw}} condition (raw)\n{{temp}} temperature  {{feelsLike}} feels-like  {{dewPoint}} dew point\n{{humidity}} humidity%  {{windSpeed}} wind km/h  {{uvIndex}} UV index\n{{pressure}} pressure hPa  {{visibility}} visibility km\nConditional example: {{#feelsLike}}, feels like {{feelsLike}}°{{/feelsLike}}",
+    "Weather placeholders (shown only when present):\n{{time}} time  {{date}} date  {{icon}} condition icon\n{{condition}} condition (localized)  {{conditionEn}} condition (English)  {{conditionRaw}} condition (raw)\n{{temp}} temperature  {{feelsLike}} feels-like  {{dewPoint}} dew point\n{{humidity}} humidity%  {{precip}} precip chance%  {{windSpeed}} wind km/h  {{uvIndex}} UV index\n{{pressure}} pressure hPa  {{visibility}} visibility km\nConditional example: {{#feelsLike}}, feels like {{feelsLike}}°{{/feelsLike}}",
   enableConnectorScheduler: "Enable connector polling",
   connectorSchedulerEnabledHint: "After saving, VaultEcho polls all enabled connector sources at the configured interval.",
   connectorSchedulerDisabledHint: "Automatic polling is off. Run Now can still sync the recent lookback window manually.",

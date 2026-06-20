@@ -172,6 +172,46 @@ const WEATHER_CONDITION_ICONS = new Map([
   ["tropicalstorm", "🌀"]
 ]);
 
+// Apple WeatherKit's `symbolName` (an SF Symbol like "sun.max" or
+// "cloud.sun.rain") mapped to an emoji. Looked up with a progressive fallback
+// (trailing qualifiers and ".fill"/".circle" are dropped), so variants resolve.
+const SF_SYMBOL_ICONS = new Map([
+  ["sun.max", "☀️"],
+  ["sun.min", "☀️"],
+  ["sun.haze", "🌫️"],
+  ["sun.dust", "🌫️"],
+  ["sunrise", "🌅"],
+  ["sunset", "🌇"],
+  ["moon", "🌙"],
+  ["moon.stars", "🌙"],
+  ["cloud", "☁️"],
+  ["cloud.sun", "⛅"],
+  ["cloud.moon", "☁️"],
+  ["cloud.fog", "🌫️"],
+  ["cloud.drizzle", "🌦️"],
+  ["cloud.sun.rain", "🌦️"],
+  ["cloud.moon.rain", "🌧️"],
+  ["cloud.rain", "🌧️"],
+  ["cloud.heavyrain", "🌧️"],
+  ["cloud.bolt", "⛈️"],
+  ["cloud.bolt.rain", "⛈️"],
+  ["cloud.sun.bolt", "⛈️"],
+  ["cloud.snow", "🌨️"],
+  ["cloud.sleet", "🌨️"],
+  ["cloud.hail", "🌨️"],
+  ["snowflake", "❄️"],
+  ["wind", "💨"],
+  ["wind.snow", "❄️"],
+  ["tornado", "🌪️"],
+  ["hurricane", "🌀"],
+  ["tropicalstorm", "🌀"],
+  ["smoke", "🌫️"],
+  ["thermometer.sun", "🌡️"],
+  ["thermometer.high", "🌡️"],
+  ["thermometer.snowflake", "🥶"],
+  ["thermometer.low", "🥶"]
+]);
+
 export async function ingestHealth(config, params = {}) {
   const appleHealth = config.appleHealth || {};
   if (!appleHealth.enabled) {
@@ -782,7 +822,7 @@ function normalizeWeather(raw, timeZone) {
   if (!isPlainObject(raw)) return null;
   // "Current" weather without an explicit time defaults to now.
   const at = toDate(
-    raw.date ?? raw.asOf ?? raw.timestamp ?? raw.time ?? raw.readTime ?? raw.reportedTime
+    raw.capturedAt ?? raw.date ?? raw.asOf ?? raw.timestamp ?? raw.time ?? raw.readTime ?? raw.reportedTime
     ?? raw.metadata?.readTime ?? raw.metadata?.asOf
   ) ?? new Date();
   const parts = getDateTimeParts(at, timeZone);
@@ -797,24 +837,31 @@ function normalizeWeather(raw, timeZone) {
     mm: parts.mm,
     date: parts["yyyy-MM-dd"],
     daylight,
+    symbolName: firstString(raw.symbolName, raw.symbol, raw.sfSymbolName, raw.icon),
     condition: resolveWeatherCondition(
-      raw.conditionCode ?? raw.condition ?? raw.conditionName ?? raw.weatherCondition ?? raw.summary
+      raw.conditionText ?? raw.conditionCode ?? raw.condition ?? raw.conditionName
+      ?? raw.conditionDescription ?? raw.weatherCondition ?? raw.summary
     ),
     temperatureC: resolveTemperatureC(
       raw.temperature ?? raw.temp ?? raw.temperatureCelsius ?? raw.temperatureC,
       raw.temperatureFahrenheit ?? raw.tempF ?? raw.temperatureF
     ),
     apparentC: resolveTemperatureC(
-      raw.apparentTemperature ?? raw.temperatureApparent ?? raw.feelsLike ?? raw.feelsLikeTemperature ?? raw.apparentTemp,
+      raw.apparentTemperatureC ?? raw.apparentTemperature ?? raw.temperatureApparent
+      ?? raw.feelsLikeC ?? raw.feelsLike ?? raw.feelsLikeTemperature ?? raw.apparentTemp,
       raw.apparentTemperatureFahrenheit ?? raw.feelsLikeF
     ),
-    humidityPct: resolveHumidityPct(raw.humidity ?? raw.humidityPct ?? raw.relativeHumidity),
+    humidityPct: resolvePercent(raw.humidityPct, raw.humidity ?? raw.relativeHumidity),
+    precipPct: resolvePercent(
+      raw.precipitationChancePct ?? raw.precipChancePct,
+      raw.precipitationChance ?? raw.chanceOfPrecipitation ?? raw.precipChance
+    ),
     windKmh: resolveWindKmh(raw),
     uvIndex: numberOrNull(isPlainObject(raw.uvIndex) ? raw.uvIndex.value : raw.uvIndex)
       ?? numberOrNull(raw.uv ?? raw.uvIndexValue),
     pressureHpa: numberOrNull(raw.pressure ?? raw.pressureHpa),
     visibilityM: numberOrNull(raw.visibility ?? raw.visibilityMeters),
-    dewPointC: resolveTemperatureC(raw.temperatureDewPoint ?? raw.dewPoint, null)
+    dewPointC: resolveTemperatureC(raw.temperatureDewPoint ?? raw.dewPointC ?? raw.dewPoint, null)
   };
 }
 
@@ -827,7 +874,7 @@ function buildWeatherVars(reading) {
   if (condition.label) vars.condition = condition.label;
   if (condition.en) vars.conditionEn = condition.en;
   if (condition.raw) vars.conditionRaw = condition.raw;
-  const icon = weatherIcon(condition.key, reading.daylight);
+  const icon = weatherIcon(reading.symbolName, condition.key, reading.daylight);
   if (icon) vars.icon = icon;
   // Temperatures and UV are strings so that 0° / negative / UV 0 still render
   // ({{#key}} treats the number 0 as absent).
@@ -836,6 +883,7 @@ function buildWeatherVars(reading) {
   if (reading.dewPointC !== null) vars.dewPoint = String(Math.round(reading.dewPointC));
   if (reading.uvIndex !== null && reading.uvIndex >= 0) vars.uvIndex = String(Math.round(reading.uvIndex));
   if (reading.humidityPct !== null && reading.humidityPct > 0) vars.humidity = Math.round(reading.humidityPct);
+  if (reading.precipPct !== null && reading.precipPct > 0) vars.precip = Math.round(reading.precipPct);
   if (reading.windKmh !== null && reading.windKmh > 0) vars.windSpeed = Math.round(reading.windKmh);
   if (reading.pressureHpa !== null) vars.pressure = Math.round(reading.pressureHpa);
   if (reading.visibilityM !== null) vars.visibility = (reading.visibilityM / 1000).toFixed(1);
@@ -853,10 +901,31 @@ function resolveWeatherCondition(value) {
   return { raw: text, label: WEATHER_CONDITION_LABELS.get(key) || humanizeType(text), en: humanizeType(text), key };
 }
 
-function weatherIcon(key, daylight) {
+// The SF Symbol the app sends (e.g. "sun.max", "cloud.sun.rain.fill") is the
+// most reliable icon source — Apple already chose it and it encodes day/night —
+// so it wins over the condition-derived icon.
+function weatherIcon(symbolName, conditionKey, daylight) {
+  const fromSymbol = iconFromSymbol(symbolName);
+  if (fromSymbol) return fromSymbol;
+  if (!conditionKey) return "";
+  if (daylight === false && (conditionKey === "clear" || conditionKey === "sunny" || conditionKey === "mostlyclear")) {
+    return "🌙";
+  }
+  return WEATHER_CONDITION_ICONS.get(conditionKey) || "";
+}
+
+function iconFromSymbol(symbolName) {
+  let key = String(symbolName || "").toLowerCase().replace(/\.(fill|circle|square)\b/g, "").trim();
   if (!key) return "";
-  if (daylight === false && (key === "clear" || key === "sunny" || key === "mostlyclear")) return "🌙";
-  return WEATHER_CONDITION_ICONS.get(key) || "";
+  if (SF_SYMBOL_ICONS.has(key)) return SF_SYMBOL_ICONS.get(key);
+  // Fall back by dropping trailing qualifiers: "cloud.sun.rain" -> "cloud.sun" -> "cloud".
+  const parts = key.split(".");
+  while (parts.length > 1) {
+    parts.pop();
+    const candidate = parts.join(".");
+    if (SF_SYMBOL_ICONS.has(candidate)) return SF_SYMBOL_ICONS.get(candidate);
+  }
+  return "";
 }
 
 function resolveTemperatureC(celsius, fahrenheit) {
@@ -866,18 +935,21 @@ function resolveTemperatureC(celsius, fahrenheit) {
   return f === null ? null : (f - 32) * 5 / 9;
 }
 
-// WeatherKit reports humidity as a 0..1 fraction; a 0..100 percentage is also
-// accepted (anything above 1 is assumed to already be a percentage).
-function resolveHumidityPct(value) {
-  const n = numberOrNull(value);
-  if (n === null || n < 0) return null;
-  return n <= 1 ? n * 100 : n;
+// A field explicitly named `...Pct` is already a percentage and used as-is;
+// otherwise WeatherKit's 0..1 fraction is scaled (anything above 1 is assumed
+// to already be a percentage). Keeps a 1% value from being read as 100%.
+function resolvePercent(pctValue, fractionValue) {
+  const pct = numberOrNull(pctValue);
+  if (pct !== null) return pct < 0 ? null : pct;
+  const fraction = numberOrNull(fractionValue);
+  if (fraction === null || fraction < 0) return null;
+  return fraction <= 1 ? fraction * 100 : fraction;
 }
 
 function resolveWindKmh(raw) {
   const wind = isPlainObject(raw.wind) ? raw.wind : {};
   const kmh = numberOrNull(
-    raw.windSpeed ?? raw.windSpeedKmh ?? raw.windKph ?? wind.speed ?? wind.speedKmh ?? wind.value
+    raw.windSpeed ?? raw.windKmh ?? raw.windSpeedKmh ?? raw.windKph ?? wind.speed ?? wind.speedKmh ?? wind.value
   );
   if (kmh !== null) return kmh;
   const mps = numberOrNull(raw.windSpeedMps ?? raw.windMps ?? wind.speedMps);

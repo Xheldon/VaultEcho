@@ -444,6 +444,46 @@ test("weather keeps a localized condition, converts Fahrenheit, and drops calm w
   assert.doesNotMatch(daily, /风 /);
 });
 
+test("weather parses the real WeatherKit-export shape (capturedAt/conditionText/symbolName/...C/Kmh)", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  await ingestHealthWeather(config, {
+    apparentTemperatureC: 28.2,
+    capturedAt: "2026-06-20T09:27:01.422Z",
+    conditionText: "晴朗无云",
+    humidityPct: 29,
+    id: "sleep-2026-06-20-0132-apple-watch-10:weather",
+    precipitationChancePct: 0,
+    symbolName: "sun.max",
+    temperatureC: 27.75,
+    uvIndex: 2,
+    windKmh: 14.17
+  });
+
+  // 09:27Z -> 17:27 Asia/Shanghai; sun.max -> ☀️; conditionText kept as-is;
+  // precip 0 dropped; all of feels-like/humidity/wind/UV now present.
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-20.md"), "utf8");
+  assert.match(daily, /\[17:27\] ☀️ 28° 晴朗无云，体感 28°，湿度 29%，风 14 km\/h，紫外线 2。/);
+  assert.doesNotMatch(daily, /降水概率/);
+});
+
+test("weather shows precipitation chance when above zero", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
+  const config = testConfig(root);
+
+  await ingestHealthWeather(config, {
+    capturedAt: "2026-06-20T01:00:00+08:00",
+    conditionText: "小雨",
+    symbolName: "cloud.rain.fill",
+    temperatureC: 19,
+    precipitationChancePct: 60
+  });
+
+  const daily = await fs.readFile(path.join(root, "vault", "Daily", "2026-06-20.md"), "utf8");
+  assert.match(daily, /\[01:00\] 🌧️ 19° 小雨，降水概率 60%。/);
+});
+
 test("re-pushing the same weather reading does not duplicate", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "vaultecho-health-"));
   const config = testConfig(root);

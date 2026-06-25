@@ -514,6 +514,20 @@ const collection = {
           activeEnergyKcal: 75,
           heartRate: { averageBpm: 114, maxBpm: 143, minBpm: 83 }
         }
+      }),
+      apiRequest("Weather - Bare Body", "POST", "/v1/api/health/weather", {
+        description: "Dedicated weather endpoint: POST a single Apple WeatherKit reading directly, the full WeatherKit response (its currentWeather is used), or { weather: [...] }. Each reading becomes one [HH:mm] line under the weather heading. Common export aliases are accepted (conditionText, apparentTemperatureC, windKmh, symbolName for the icon, precipitationChancePct, humidityPct). The target day comes from capturedAt; add weatherDate (same ISO format) to back-fill a past day from today.",
+        body: {
+          capturedAt: "2026-06-20T09:27:01Z",
+          conditionText: "晴朗无云",
+          symbolName: "sun.max",
+          temperatureC: 27.8,
+          apparentTemperatureC: 28.2,
+          humidityPct: 29,
+          windKmh: 14.2,
+          uvIndex: 2,
+          precipitationChancePct: 0
+        }
       })
     ])
   ]

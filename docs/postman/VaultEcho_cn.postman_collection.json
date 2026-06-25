@@ -1165,6 +1165,29 @@
               }
             }
           }
+        },
+        {
+          "name": "Weather - Bare Body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/api/health/weather",
+            "description": "Dedicated weather endpoint: POST a single Apple WeatherKit reading directly, the full WeatherKit response (its currentWeather is used), or { weather: [...] }. Each reading becomes one [HH:mm] line under the weather heading. Common export aliases are accepted (conditionText, apparentTemperatureC, windKmh, symbolName for the icon, precipitationChancePct, humidityPct). The target day comes from capturedAt; add weatherDate (same ISO format) to back-fill a past day from today.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capturedAt\": \"2026-06-20T09:27:01Z\",\n  \"conditionText\": \"晴朗无云\",\n  \"symbolName\": \"sun.max\",\n  \"temperatureC\": 27.8,\n  \"apparentTemperatureC\": 28.2,\n  \"humidityPct\": 29,\n  \"windKmh\": 14.2,\n  \"uvIndex\": 2,\n  \"precipitationChancePct\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     }

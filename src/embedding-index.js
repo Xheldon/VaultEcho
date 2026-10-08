@@ -4,291 +4,301 @@ import path from "node:path";
 import { decryptSecret } from "./secrets.js";
 import { MAX_MARKDOWN_SCAN_BYTES } from "./limits.js";
 
-const INDEX_VERSION = 1;
-const INDEX_FILE = "embeddings.json";
+const INDEX_VERSION = 2;
+const META_FILE = "meta.json";
+const LEGACY_INDEX_FILE = "embeddings.json";
 const DEFAULT_BATCH_SIZE = 16;
 const DEFAULT_MAX_CHUNK_CHARS = 1600;
 const DEFAULT_SEARCH_LIMIT = 8;
 const MAX_SEARCH_LIMIT = 50;
-const queuedFiles = new Map();
-let rebuildQueue = Promise.resolve();
+const AUTO_INDEX_DEBOUNCE_MS = 3000;
+
+let cache = null;
+let lock = Promise.resolve();
+let pending = new Map();
+let pendingTimer = null;
+
+function withIndexLock(fn) {
+  const run = lock.then(() => fn());
+  lock = run.catch(() => {});
+  return run;
+}
 
 export function isEmbeddingReady(config) {
   try {
-    return Boolean(
-      config.embedding?.enabled &&
-      config.embedding?.model &&
-      config.embedding?.baseUrl &&
-      readEmbeddingApiKey(config)
-    );
+    return Boolean(config.embedding?.enabled && config.embedding?.model && config.embedding?.baseUrl && readEmbeddingApiKey(config));
   } catch {
     return false;
   }
 }
 
 export async function getEmbeddingIndexStatus(config) {
-  const store = await readIndexStore(config);
+  const index = await withIndexLock(() => loadIndex(config));
   const errors = await readIndexErrors(config);
+  let chunks = 0;
+  for (const list of index.chunksByPath.values()) chunks += list.length;
   return {
-    ok: true,
-    operation: "index/status",
-    enabled: Boolean(config.embedding?.enabled),
-    ready: isEmbeddingReady(config),
-    provider: config.embedding?.provider || "openai-compatible",
-    model: config.embedding?.model || "",
-    baseUrl: config.embedding?.baseUrl || "",
-    files: Object.keys(store.files).length,
-    chunks: store.chunks.length,
-    updatedAt: store.updatedAt || "",
-    lastError: errors[0] || null,
-    signatureMatches: store.signature === embeddingSignature(config)
+    ok: true, operation: "index/status",
+    enabled: Boolean(config.embedding?.enabled), ready: isEmbeddingReady(config),
+    provider: config.embedding?.provider || "openai-compatible", model: config.embedding?.model || "",
+    baseUrl: config.embedding?.baseUrl || "", files: index.files.size, chunks,
+    updatedAt: index.updatedAt || "", lastError: errors[0] || null,
+    signatureMatches: index.signature === embeddingSignature(config)
   };
 }
 
 export async function clearEmbeddingIndexErrors(config) {
-  try {
-    await fs.unlink(indexErrorsPath(config));
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
-
+  try { await fs.unlink(indexErrorsPath(config)); } catch (error) { if (error.code !== "ENOENT") throw error; }
   return { ok: true, operation: "index/errors/clear" };
 }
 
-export async function rebuildEmbeddingIndex(config, options = {}) {
-  const previous = rebuildQueue.catch(() => {});
-  const current = previous.then(() => rebuildEmbeddingIndexNow(config, options));
-  rebuildQueue = current.catch(() => {});
-  return current;
+export function rebuildEmbeddingIndex(config, options = {}) {
+  return withIndexLock(() => rebuildEmbeddingIndexNow(config, options));
 }
 
 async function rebuildEmbeddingIndexNow(config, options = {}) {
   ensureEmbeddingReady(config);
-  const existing = await readIndexStore(config);
+  const index = await loadIndex(config);
   const signature = embeddingSignature(config);
-  const force = Boolean(options.force) || existing.signature !== signature;
+  const force = Boolean(options.force) || index.signature !== signature;
   const files = await listMarkdownFiles(config);
-  const nextFiles = {};
-  const nextChunks = [];
-  let reusedFiles = 0;
-  let indexedFiles = 0;
+  const seen = new Set();
+  let reusedFiles = 0, indexedFiles = 0, dirty = force;
 
   for (const filePath of files) {
     const relativePath = toVaultRelativePath(config, filePath);
-    if (!(await canReadMarkdownForIndex(filePath))) {
-      continue;
-    }
+    const stat = await statIfExists(filePath);
+    if (!stat?.isFile() || stat.size > MAX_MARKDOWN_SCAN_BYTES) continue;
+    seen.add(relativePath);
+    const previous = index.files.get(relativePath);
+    if (!force && previous && previous.size === stat.size && previous.mtimeMs === stat.mtimeMs) { reusedFiles += 1; continue; }
     const content = await fs.readFile(filePath, "utf8");
     const hash = sha256(content);
-    const previous = existing.files[relativePath];
-
     if (!force && previous?.hash === hash) {
       reusedFiles += 1;
-      nextFiles[relativePath] = previous;
-      nextChunks.push(...existing.chunks.filter((chunk) => chunk.path === relativePath));
+      index.files.set(relativePath, { ...previous, size: stat.size, mtimeMs: stat.mtimeMs });
+      dirty = true;
       continue;
     }
-
-    const chunks = chunkMarkdown(relativePath, content, config.embedding?.maxChunkChars || DEFAULT_MAX_CHUNK_CHARS);
-    const embeddedChunks = await embedChunks(config, chunks);
-    indexedFiles += 1;
-    nextFiles[relativePath] = {
-      path: relativePath,
-      hash,
-      chunkCount: embeddedChunks.length,
-      indexedAt: new Date().toISOString()
-    };
-    nextChunks.push(...embeddedChunks);
+    await putFile(config, index, relativePath, content, hash, stat);
+    indexedFiles += 1; dirty = true;
   }
-
-  const store = normalizeIndexStore({
-    version: INDEX_VERSION,
-    signature,
-    updatedAt: new Date().toISOString(),
-    files: nextFiles,
-    chunks: nextChunks
-  });
-  await writeIndexStore(config, store);
-
-  return {
-    ok: true,
-    operation: "index/rebuild",
-    files: Object.keys(store.files).length,
-    chunks: store.chunks.length,
-    indexedFiles,
-    reusedFiles,
-    force
-  };
+  for (const relativePath of [...index.files.keys()]) {
+    if (!seen.has(relativePath)) { index.files.delete(relativePath); index.chunksByPath.delete(relativePath); dirty = true; }
+  }
+  index.signature = signature;
+  if (dirty) await saveIndex(config, index);
+  let chunks = 0; for (const l of index.chunksByPath.values()) chunks += l.length;
+  return { ok: true, operation: "index/rebuild", files: index.files.size, chunks, indexedFiles, reusedFiles, force, written: dirty };
 }
 
-export async function indexEmbeddingFile(config, relativePath) {
-  if (!isEmbeddingReady(config)) {
-    return { ok: false, operation: "index/file", skipped: true, reason: "Embedding is not configured" };
-  }
+async function putFile(config, index, relativePath, content, hash, stat) {
+  const chunks = chunkMarkdown(relativePath, content, config.embedding?.maxChunkChars || DEFAULT_MAX_CHUNK_CHARS);
+  const embedded = await embedChunks(config, chunks);
+  index.chunksByPath.set(relativePath, embedded.map(toStoredChunk));
+  index.files.set(relativePath, { path: relativePath, hash, chunkCount: embedded.length, indexedAt: new Date().toISOString(), size: stat?.size ?? -1, mtimeMs: stat?.mtimeMs ?? -1 });
+  if (embedded[0]) index.dims = embedded[0].embedding.length;
+}
 
+function toStoredChunk(chunk) {
+  const vector = chunk.embedding instanceof Float32Array ? chunk.embedding : Float32Array.from(chunk.embedding);
+  let n = 0; for (let i = 0; i < vector.length; i += 1) n += vector[i] * vector[i];
+  return { id: chunk.id, path: chunk.path, heading: chunk.heading, lineStart: chunk.lineStart, lineEnd: chunk.lineEnd, text: chunk.text, vector, norm: Math.sqrt(n) };
+}
+
+export function indexEmbeddingFile(config, relativePath) {
+  if (!isEmbeddingReady(config)) return Promise.resolve({ ok: false, operation: "index/file", skipped: true, reason: "Embedding is not configured" });
   const normalizedPath = normalizeVaultRelativePath(relativePath);
-  if (!normalizedPath.toLowerCase().endsWith(".md")) {
-    return { ok: false, operation: "index/file", skipped: true, reason: "Only Markdown files are indexed" };
-  }
+  if (!normalizedPath.toLowerCase().endsWith(".md")) return Promise.resolve({ ok: false, operation: "index/file", skipped: true, reason: "Only Markdown files are indexed" });
+  return withIndexLock(async () => (await indexFilesNow(config, [normalizedPath]))[0]);
+}
 
-  const absolutePath = path.resolve(config.vaultRoot, normalizedPath);
-  const store = await readIndexStore(config);
+async function indexFilesNow(config, paths) {
+  const index = await loadIndex(config);
   const signature = embeddingSignature(config);
-  const exists = await fileExists(absolutePath);
-  const chunksWithoutFile = store.chunks.filter((chunk) => chunk.path !== normalizedPath);
-  const nextFiles = { ...store.files };
-
-  if (isExcludedPath(normalizedPath, config.excludePaths)) {
-    delete nextFiles[normalizedPath];
-    await writeIndexStore(config, normalizeIndexStore({
-      ...store,
-      signature,
-      updatedAt: new Date().toISOString(),
-      files: nextFiles,
-      chunks: chunksWithoutFile
-    }));
-    return { ok: true, operation: "index/file", path: normalizedPath, skipped: true, reason: "Path is excluded" };
+  const results = []; let dirty = false;
+  for (const normalizedPath of paths) {
+    try {
+      const absolutePath = path.resolve(config.vaultRoot, normalizedPath);
+      const stat = await statIfExists(absolutePath);
+      const drop = (reason, extra) => {
+        if (index.files.delete(normalizedPath) | index.chunksByPath.delete(normalizedPath)) dirty = true;
+        results.push({ ok: true, operation: "index/file", path: normalizedPath, ...extra, ...(reason ? { skipped: true, reason } : {}) });
+      };
+      if (isExcludedPath(normalizedPath, config.excludePaths)) { drop("Path is excluded"); continue; }
+      if (!stat) { drop(null, { removed: true }); continue; }
+      if (!stat.isFile() || stat.size > MAX_MARKDOWN_SCAN_BYTES) { drop("File is too large"); continue; }
+      const content = await fs.readFile(absolutePath, "utf8");
+      const hash = sha256(content);
+      const previous = index.signature === signature ? index.files.get(normalizedPath) : null;
+      if (previous?.hash === hash) { results.push({ ok: true, operation: "index/file", path: normalizedPath, skipped: true, reason: "File is unchanged" }); continue; }
+      await putFile(config, index, normalizedPath, content, hash, stat);
+      dirty = true;
+      results.push({ ok: true, operation: "index/file", path: normalizedPath, chunks: index.chunksByPath.get(normalizedPath).length });
+    } catch (error) {
+      results.push({ ok: false, operation: "index/file", path: normalizedPath, error: error.message });
+      await writeIndexError(config, { path: normalizedPath, error: error.message, at: new Date().toISOString() }).catch(() => {});
+    }
   }
-
-  if (!exists) {
-    delete nextFiles[normalizedPath];
-    await writeIndexStore(config, normalizeIndexStore({
-      ...store,
-      signature,
-      updatedAt: new Date().toISOString(),
-      files: nextFiles,
-      chunks: chunksWithoutFile
-    }));
-    return { ok: true, operation: "index/file", path: normalizedPath, removed: true };
-  }
-  if (!(await canReadMarkdownForIndex(absolutePath))) {
-    delete nextFiles[normalizedPath];
-    await writeIndexStore(config, normalizeIndexStore({
-      ...store,
-      signature,
-      updatedAt: new Date().toISOString(),
-      files: nextFiles,
-      chunks: chunksWithoutFile
-    }));
-    return { ok: true, operation: "index/file", path: normalizedPath, skipped: true, reason: "File is too large" };
-  }
-
-  const content = await fs.readFile(absolutePath, "utf8");
-  const hash = sha256(content);
-  const previous = store.signature === signature ? store.files[normalizedPath] : null;
-  if (previous?.hash === hash) {
-    return { ok: true, operation: "index/file", path: normalizedPath, skipped: true, reason: "File is unchanged" };
-  }
-
-  const chunks = chunkMarkdown(normalizedPath, content, config.embedding?.maxChunkChars || DEFAULT_MAX_CHUNK_CHARS);
-  const embeddedChunks = await embedChunks(config, chunks);
-  nextFiles[normalizedPath] = {
-    path: normalizedPath,
-    hash,
-    chunkCount: embeddedChunks.length,
-    indexedAt: new Date().toISOString()
-  };
-
-  await writeIndexStore(config, normalizeIndexStore({
-    ...store,
-    signature,
-    updatedAt: new Date().toISOString(),
-    files: nextFiles,
-    chunks: [...chunksWithoutFile, ...embeddedChunks]
-  }));
-
-  return { ok: true, operation: "index/file", path: normalizedPath, chunks: embeddedChunks.length };
+  if (index.files.size && !index.signature) index.signature = signature;
+  if (dirty) await saveIndex(config, index);
+  return results;
 }
 
 export function enqueueEmbeddingIndex(config, relativePath) {
   if (!config.embedding?.autoIndexAfterWrite || !isEmbeddingReady(config)) return;
-
-  const normalizedPath = normalizeVaultRelativePath(relativePath);
-  const previous = queuedFiles.get(normalizedPath) || Promise.resolve();
-  const current = previous
-    .catch(() => {})
-    .then(() => indexEmbeddingFile(config, normalizedPath))
-    .catch((error) => {
-      console.warn(`Embedding index failed for ${normalizedPath}: ${error.message}`);
-      return writeIndexError(config, {
-        path: normalizedPath,
-        error: error.message,
-        at: new Date().toISOString()
-      });
-    });
-  queuedFiles.set(normalizedPath, current);
-  current.finally(() => {
-    if (queuedFiles.get(normalizedPath) === current) {
-      queuedFiles.delete(normalizedPath);
-    }
-  });
+  pending.set(normalizeVaultRelativePath(relativePath), config);
+  if (pendingTimer) return;
+  pendingTimer = setTimeout(() => {
+    pendingTimer = null;
+    const batch = pending; pending = new Map();
+    const cfg = [...batch.values()].at(-1);
+    withIndexLock(() => indexFilesNow(cfg, [...batch.keys()].filter((p) => p.toLowerCase().endsWith(".md"))))
+      .catch((error) => console.warn(`Embedding auto-index failed: ${error.message}`));
+  }, AUTO_INDEX_DEBOUNCE_MS);
+  pendingTimer.unref?.();
 }
 
 export async function searchEmbeddingIndex(config, params = {}) {
   ensureEmbeddingReady(config);
   const query = params.query || params.content || params.text || "";
-  if (!query || typeof query !== "string") {
-    throw new Error("query is required");
+  if (!query || typeof query !== "string") throw new Error("query is required");
+  const index = await withIndexLock(() => loadIndex(config));
+  if (index.signature !== embeddingSignature(config)) {
+    return { ok: false, operation: "index/search", error: "Embedding index was built with a different model/config. Rebuild the index first." };
   }
-
-  const store = await readIndexStore(config);
-  if (store.signature !== embeddingSignature(config)) {
-    return {
-      ok: false,
-      operation: "index/search",
-      error: "Embedding index was built with a different model/config. Rebuild the index first."
-    };
-  }
-
-  const limit = Math.min(
-    normalizePositiveInteger(params.limit, config.embedding?.searchLimit || DEFAULT_SEARCH_LIMIT),
-    MAX_SEARCH_LIMIT
-  );
+  const limit = Math.min(normalizePositiveInteger(params.limit, config.embedding?.searchLimit || DEFAULT_SEARCH_LIMIT), MAX_SEARCH_LIMIT);
   const [queryEmbedding] = await embedTexts(config, [query]);
-  const results = store.chunks
-    .map((chunk) => ({
-      path: chunk.path,
-      heading: chunk.heading,
-      lineStart: chunk.lineStart,
-      lineEnd: chunk.lineEnd,
-      text: chunk.text,
-      score: cosineSimilarity(queryEmbedding, chunk.embedding)
-    }))
-    .filter((result) => Number.isFinite(result.score))
-    .sort((left, right) => right.score - left.score)
-    .slice(0, limit);
-
+  const q = Float32Array.from(queryEmbedding);
+  let qn = 0; for (let i = 0; i < q.length; i += 1) qn += q[i] * q[i]; qn = Math.sqrt(qn);
+  const top = [];
+  for (const list of index.chunksByPath.values()) {
+    for (const chunk of list) {
+      const v = chunk.vector;
+      if (v.length !== q.length || !chunk.norm || !qn) continue;
+      let dot = 0; for (let i = 0; i < v.length; i += 1) dot += v[i] * q[i];
+      const score = dot / (chunk.norm * qn);
+      if (top.length < limit || score > top[top.length - 1].score) {
+        top.push({ chunk, score }); top.sort((a, b) => b.score - a.score); if (top.length > limit) top.pop();
+      }
+    }
+  }
+  const results = top.map(({ chunk, score }) => ({ path: chunk.path, heading: chunk.heading, lineStart: chunk.lineStart, lineEnd: chunk.lineEnd, text: chunk.text, score }));
   return { ok: true, operation: "index/search", query, results };
 }
 
 export function startEmbeddingAutoScan(loadConfig) {
-  let running = false;
   let nextRunAt = 0;
-
   const tick = async () => {
-    if (running) return;
     const config = await loadConfig();
     const intervalMinutes = config.embedding?.autoScanIntervalMinutes || 0;
     if (!isEmbeddingReady(config) || intervalMinutes <= 0) return;
-
     const now = Date.now();
     if (now < nextRunAt) return;
-    running = true;
     nextRunAt = now + intervalMinutes * 60 * 1000;
-    try {
-      await rebuildEmbeddingIndex(config, { force: false });
-    } catch (error) {
-      console.warn(`Embedding auto scan failed: ${error.message}`);
-    } finally {
-      running = false;
-    }
+    try { await rebuildEmbeddingIndex(config, { force: false }); } catch (error) { console.warn(`Embedding auto scan failed: ${error.message}`); }
   };
+  setInterval(() => { tick().catch((e) => console.warn(`Embedding auto scan failed: ${e.message}`)); }, 60 * 1000).unref();
+  tick().catch((e) => console.warn(`Embedding auto scan failed: ${e.message}`));
+}
 
-  setInterval(() => {
-    tick().catch((error) => console.warn(`Embedding auto scan failed: ${error.message}`));
-  }, 60 * 1000).unref();
+function indexDir(config) { return path.join(config.dataDir, "index"); }
 
-  tick().catch((error) => console.warn(`Embedding auto scan failed: ${error.message}`));
+async function loadIndex(config) {
+  const metaPath = path.join(indexDir(config), META_FILE);
+  const st = await statIfExists(metaPath);
+  if (cache && cache.key === config.dataDir && (cache.metaMtimeMs === (st?.mtimeMs ?? 0))) return cache;
+  if (!st) {
+    const legacy = await migrateLegacyIndex(config);
+    cache = legacy || emptyIndex(config);
+    return cache;
+  }
+  const meta = JSON.parse(await fs.readFile(metaPath, "utf8"));
+  const buf = await fs.readFile(path.join(indexDir(config), meta.vectorsFile));
+  const all = buf.byteOffset % 4 === 0 ? new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4) : new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+  const dims = meta.dims;
+  const chunksByPath = new Map();
+  meta.chunks.forEach((c, row) => {
+    const [id, p, heading, lineStart, lineEnd, text, norm] = c;
+    const vector = all.subarray(row * dims, (row + 1) * dims);
+    let list = chunksByPath.get(p); if (!list) chunksByPath.set(p, (list = []));
+    list.push({ id, path: p, heading, lineStart, lineEnd, text, vector, norm });
+  });
+  cache = { key: config.dataDir, metaMtimeMs: st.mtimeMs, signature: meta.signature, updatedAt: meta.updatedAt, dims,
+    files: new Map(Object.entries(meta.files)), chunksByPath, vectorsFile: meta.vectorsFile };
+  return cache;
+}
+
+function emptyIndex(config) {
+  return { key: config.dataDir, metaMtimeMs: 0, signature: "", updatedAt: "", dims: 0, files: new Map(), chunksByPath: new Map(), vectorsFile: "" };
+}
+
+async function saveIndex(config, index) {
+  const dir = indexDir(config);
+  await fs.mkdir(dir, { recursive: true });
+  let rows = 0, dims = index.dims || 0;
+  for (const list of index.chunksByPath.values()) { rows += list.length; if (!dims && list[0]) dims = list[0].vector.length; }
+  const vectors = new Float32Array(rows * dims);
+  const metaChunks = new Array(rows);
+  let row = 0;
+  for (const list of index.chunksByPath.values()) {
+    for (const c of list) {
+      vectors.set(c.vector, row * dims);
+      metaChunks[row] = [c.id, c.path, c.heading, c.lineStart, c.lineEnd, c.text, c.norm];
+      c.vector = vectors.subarray(row * dims, (row + 1) * dims);
+      row += 1;
+    }
+  }
+  const gen = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+  const vectorsFile = `vectors.${gen}.f32`;
+  await fs.writeFile(path.join(dir, `${vectorsFile}.tmp`), Buffer.from(vectors.buffer, vectors.byteOffset, vectors.byteLength));
+  await fs.rename(path.join(dir, `${vectorsFile}.tmp`), path.join(dir, vectorsFile));
+  index.updatedAt = new Date().toISOString(); index.dims = dims;
+  const meta = { version: INDEX_VERSION, signature: index.signature, updatedAt: index.updatedAt, dims, vectorsFile,
+    files: Object.fromEntries(index.files), chunks: metaChunks };
+  const metaPath = path.join(dir, META_FILE);
+  await fs.writeFile(`${metaPath}.${gen}.tmp`, JSON.stringify(meta));
+  await fs.rename(`${metaPath}.${gen}.tmp`, metaPath);
+  const old = index.vectorsFile; index.vectorsFile = vectorsFile;
+  if (old && old !== vectorsFile) await fs.unlink(path.join(dir, old)).catch(() => {});
+  index.metaMtimeMs = (await fs.stat(metaPath)).mtimeMs;
+  cache = index;
+  await cleanupStaleTempFiles(dir);
+}
+
+async function cleanupStaleTempFiles(dir) {
+  try {
+    const entries = await fs.readdir(dir);
+    const now = Date.now();
+    for (const entry of entries) {
+      if (entry.endsWith(".tmp")) {
+        const filePath = path.join(dir, entry);
+        try {
+          const stat = await fs.stat(filePath);
+          if (now - stat.mtimeMs > 3600 * 1000) {
+            await fs.unlink(filePath);
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+}
+
+async function migrateLegacyIndex(config) {
+  const legacyPath = path.join(indexDir(config), LEGACY_INDEX_FILE);
+  let raw;
+  try { raw = await fs.readFile(legacyPath, "utf8"); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  const legacy = JSON.parse(raw); raw = null;
+  const index = emptyIndex(config);
+  index.signature = legacy.signature || "";
+  for (const [p, f] of Object.entries(legacy.files || {})) index.files.set(p, { ...f, size: -1, mtimeMs: -1 });
+  for (const c of legacy.chunks || []) {
+    let list = index.chunksByPath.get(c.path); if (!list) index.chunksByPath.set(c.path, (list = []));
+    list.push(toStoredChunk(c)); c.embedding = null;
+  }
+  await saveIndex(config, index);
+  await fs.rename(legacyPath, `${legacyPath}.migrated`);
+  return index;
 }
 
 function ensureEmbeddingReady(config) {
@@ -524,37 +534,6 @@ async function* walkMarkdown(root) {
   }
 }
 
-async function readIndexStore(config) {
-  try {
-    return normalizeIndexStore(JSON.parse(await fs.readFile(indexStorePath(config), "utf8")));
-  } catch (error) {
-    if (error.code === "ENOENT") return normalizeIndexStore({});
-    throw error;
-  }
-}
-
-async function writeIndexStore(config, store) {
-  const filePath = indexStorePath(config);
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tempPath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
-  await fs.rename(tempPath, filePath);
-}
-
-function normalizeIndexStore(store) {
-  return {
-    version: INDEX_VERSION,
-    signature: typeof store.signature === "string" ? store.signature : "",
-    updatedAt: typeof store.updatedAt === "string" ? store.updatedAt : "",
-    files: store.files && typeof store.files === "object" && !Array.isArray(store.files) ? store.files : {},
-    chunks: Array.isArray(store.chunks) ? store.chunks : []
-  };
-}
-
-function indexStorePath(config) {
-  return path.join(config.dataDir, "index", INDEX_FILE);
-}
-
 async function readIndexErrors(config) {
   try {
     const payload = JSON.parse(await fs.readFile(indexErrorsPath(config), "utf8"));
@@ -594,35 +573,6 @@ function normalizeVaultRelativePath(inputPath) {
 
 function toVaultRelativePath(config, filePath) {
   return path.relative(config.vaultRoot, filePath).replaceAll(path.sep, "/");
-}
-
-function cosineSimilarity(left, right) {
-  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return Number.NaN;
-  let dot = 0;
-  let leftNorm = 0;
-  let rightNorm = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    dot += left[index] * right[index];
-    leftNorm += left[index] * left[index];
-    rightNorm += right[index] * right[index];
-  }
-  if (leftNorm === 0 || rightNorm === 0) return Number.NaN;
-  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
-}
-
-async function fileExists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch (error) {
-    if (error.code === "ENOENT") return false;
-    throw error;
-  }
-}
-
-async function canReadMarkdownForIndex(filePath) {
-  const stat = await statIfExists(filePath);
-  return Boolean(stat?.isFile() && stat.size <= MAX_MARKDOWN_SCAN_BYTES);
 }
 
 async function statIfExists(filePath) {

@@ -31,7 +31,7 @@ const DEFAULT_EMBEDDING = {
   maxChunkChars: 1600,
   searchLimit: 8,
   autoIndexAfterWrite: true,
-  autoScanIntervalMinutes: 0
+  autoScanIntervalMinutes: 720
 };
 
 const DEFAULT_ATTACHMENTS = {
